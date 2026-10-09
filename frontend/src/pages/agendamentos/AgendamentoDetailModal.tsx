@@ -1,0 +1,292 @@
+import { useState } from "react";
+import { IconCheck, IconExternalLink, IconX } from "@tabler/icons-react";
+import Modal from "@/components/common/Modal";
+import ConfirmDialog from "@/components/common/ConfirmDialog";
+import FormActions from "@/components/common/FormActions";
+import Pill from "@/components/common/Pill";
+import { SelectField, TextAreaField } from "@/components/common/fields";
+import { Button } from "@/components/ui/button";
+import { agendamentosApi } from "@/api/agendamentos";
+import type { ApiError } from "@/api/client";
+import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
+import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
+import { formatarData, formatarHora } from "@/utils/format";
+import type { Agendamento, Participante } from "@/types";
+
+interface AgendamentoDetailModalProps {
+  agendamento: Agendamento | null;
+  onFechar: () => void;
+  onAlterado: () => void;
+}
+
+export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado }: AgendamentoDetailModalProps) {
+  const toast = useToast();
+  const { pode } = useAuth();
+  const [participanteRecusando, setParticipanteRecusando] = useState<Participante | null>(null);
+  const [motivoRecusa, setMotivoRecusa] = useState("");
+  const [respondendo, setRespondendo] = useState(false);
+
+  const [modalCancelar, setModalCancelar] = useState(false);
+  const [idQuemCancela, setIdQuemCancela] = useState("");
+  const [motivoCancelamento, setMotivoCancelamento] = useState("");
+  const [cancelando, setCancelando] = useState(false);
+
+  const [modalRemover, setModalRemover] = useState(false);
+  const [removendo, setRemovendo] = useState(false);
+
+  if (!agendamento) return null;
+  const a = agendamento;
+  // Além do estado do agendamento, cada ação depende da permissão do perfil.
+  const podeCancelar =
+    a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && pode("agendamentos.cancelar");
+  // A remoção definitiva não consta nos casos de uso: fica restrita à administração.
+  const podeRemover =
+    (a.status === "PENDENTE" || a.status === "CANCELADO") && pode("agendamentos.remover");
+  // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador).
+  const podeResponder = pode("agendamentos.responder");
+
+  async function responder(participante: Participante, aceitar: boolean, motivo?: string) {
+    setRespondendo(true);
+    try {
+      await agendamentosApi.responder(a.id, { idUsuario: participante.idUsuario, aceitar, motivo: motivo || null });
+      toast.sucesso(aceitar ? `${participante.nomeUsuario} aceitou o convite.` : `${participante.nomeUsuario} recusou o convite.`);
+      setParticipanteRecusando(null);
+      setMotivoRecusa("");
+      onAlterado();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    } finally {
+      setRespondendo(false);
+    }
+  }
+
+  async function confirmarCancelamento() {
+    if (!idQuemCancela) return toast.erro("Selecione quem está cancelando.");
+    if (!motivoCancelamento.trim()) return toast.erro("Informe o motivo do cancelamento.");
+    setCancelando(true);
+    try {
+      await agendamentosApi.cancelar(a.id, {
+        idUsuario: Number(idQuemCancela),
+        motivo: motivoCancelamento,
+        confirmar: true,
+      });
+      toast.sucesso("Agendamento cancelado.");
+      setModalCancelar(false);
+      onAlterado();
+      onFechar();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    } finally {
+      setCancelando(false);
+    }
+  }
+
+  async function confirmarRemocao() {
+    setRemovendo(true);
+    try {
+      await agendamentosApi.remover(a.id);
+      toast.sucesso("Agendamento removido.");
+      onAlterado();
+      onFechar();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    } finally {
+      setRemovendo(false);
+    }
+  }
+
+  return (
+    <>
+      <Modal aberto={!!agendamento} onFechar={onFechar} titulo={a.topico} subtitulo={`Agendamento #${a.id}`} largura="max-w-2xl">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-wrap items-center gap-2">
+            <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+            <Pill className="bg-ink-100 text-ink-800">{rotularEnum(a.formato)}</Pill>
+            <Pill className="bg-ink-100 text-ink-800">{a.duracaoMinutos} min</Pill>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 rounded-lg border bg-muted/50 p-4 text-sm sm:grid-cols-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Data</p>
+              <p className="font-medium">{formatarData(a.dataReuniao)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Horário</p>
+              <p className="font-medium">
+                {formatarHora(a.horarioInicio)} – {formatarHora(a.horarioFim)}
+              </p>
+            </div>
+            <div className="col-span-2">
+              <p className="text-xs text-muted-foreground">Organizador</p>
+              <p className="font-medium">{a.nomeOrganizador}</p>
+            </div>
+          </div>
+
+          {a.resumo && (
+            <div className="flex flex-col gap-1.5">
+              <p className="text-sm font-medium">Resumo</p>
+              <p className="text-sm text-muted-foreground">{a.resumo}</p>
+            </div>
+          )}
+
+          {a.salaVirtual && (
+            <div className="rounded-lg border p-3.5">
+              <p className="text-xs text-muted-foreground">Sala virtual</p>
+              <a
+                href={a.salaVirtual.linkTeams}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-1 flex items-center gap-1.5 truncate text-sm font-medium underline-offset-4 hover:underline"
+              >
+                <IconExternalLink className="size-4 shrink-0" />
+                <span className="truncate">{a.salaVirtual.linkTeams}</span>
+              </a>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <p className="text-sm font-medium">Participantes</p>
+            <ul className="divide-y rounded-lg border">
+              {a.participantes.map((p) => (
+                <li key={p.idUsuario} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{p.nomeUsuario}</p>
+                    <p className="text-xs text-muted-foreground">{rotularEnum(p.papel)}</p>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    {p.statusResposta === "PENDENTE" && a.status !== "CANCELADO" && podeResponder ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-sage-700"
+                          disabled={respondendo}
+                          onClick={() => responder(p, true)}
+                        >
+                          <IconCheck />
+                          Aceitar
+                        </Button>
+                        <Button
+                          variant="destructive"
+                          size="sm"
+                          disabled={respondendo}
+                          onClick={() => setParticipanteRecusando(p)}
+                        >
+                          <IconX />
+                          Recusar
+                        </Button>
+                      </>
+                    ) : (
+                      <Pill
+                        className={
+                          p.statusResposta === "ACEITO"
+                            ? "bg-sage-100 text-sage-700"
+                            : p.statusResposta === "RECUSADO"
+                            ? "bg-brick-100 text-brick-700"
+                            : "bg-ink-100 text-ink-800"
+                        }
+                      >
+                        {rotularEnum(p.statusResposta)}
+                      </Pill>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+
+          {participanteRecusando && (
+            <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
+              <p className="text-sm font-medium text-destructive">
+                Motivo da recusa de {participanteRecusando.nomeUsuario}
+              </p>
+              <TextAreaField
+                label="Justificativa"
+                required
+                value={motivoRecusa}
+                onChange={(e) => setMotivoRecusa(e.target.value)}
+                placeholder="Ex.: Conflito de horário"
+              />
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => setParticipanteRecusando(null)}>
+                  Cancelar
+                </Button>
+                <Button
+                  size="sm"
+                  className="bg-destructive text-white hover:bg-destructive/90"
+                  disabled={!motivoRecusa.trim() || respondendo}
+                  onClick={() => responder(participanteRecusando, false, motivoRecusa)}
+                >
+                  Confirmar recusa
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <FormActions>
+            {podeRemover && (
+              <Button variant="destructive" onClick={() => setModalRemover(true)}>
+                Remover definitivamente
+              </Button>
+            )}
+            {podeCancelar && (
+              <Button className="bg-destructive text-white hover:bg-destructive/90" onClick={() => setModalCancelar(true)}>
+                Cancelar agendamento
+              </Button>
+            )}
+            <Button variant="outline" onClick={onFechar}>
+              Fechar
+            </Button>
+          </FormActions>
+        </div>
+      </Modal>
+
+      <Modal aberto={modalCancelar} onFechar={() => setModalCancelar(false)} titulo="Cancelar agendamento" largura="max-w-md">
+        <div className="flex flex-col gap-4">
+          <SelectField
+            label="Quem está cancelando?"
+            required
+            placeholder="Selecione um participante…"
+            options={a.participantes.map((p) => ({ valor: p.idUsuario, rotulo: p.nomeUsuario }))}
+            value={idQuemCancela}
+            onChange={(e) => setIdQuemCancela(e.target.value)}
+          />
+          <TextAreaField
+            label="Motivo do cancelamento"
+            required
+            value={motivoCancelamento}
+            onChange={(e) => setMotivoCancelamento(e.target.value)}
+            placeholder="Ex.: Imprevisto pessoal"
+          />
+          <p className="text-sm text-muted-foreground">
+            O cancelamento exige confirmação e no mínimo 1 hora de antecedência em relação ao horário da reunião (RN 05).
+          </p>
+          <FormActions>
+            <Button variant="outline" onClick={() => setModalCancelar(false)}>
+              Voltar
+            </Button>
+            <Button
+              className="bg-destructive text-white hover:bg-destructive/90"
+              disabled={cancelando}
+              onClick={confirmarCancelamento}
+            >
+              {cancelando ? "Cancelando…" : "Confirmar cancelamento"}
+            </Button>
+          </FormActions>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        aberto={modalRemover}
+        titulo="Remover agendamento"
+        descricao="Essa ação remove definitivamente o agendamento (permitido apenas para PENDENTE ou CANCELADO)."
+        confirmarRotulo="Remover"
+        tom="danger"
+        carregando={removendo}
+        onConfirmar={confirmarRemocao}
+        onCancelar={() => setModalRemover(false)}
+      />
+    </>
+  );
+}
