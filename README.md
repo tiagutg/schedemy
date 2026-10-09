@@ -1,60 +1,143 @@
 # 🚀 Schedemy
 
-Guia de configuração, compilação e execução do projeto **Schedemy** em ambiente local.
+Sistema de agendamentos acadêmicos que organiza reuniões entre alunos, professores, coordenação e recepção.
+
+O projeto tem duas partes:
+
+- **Back-end:** API REST em Spring Boot, com banco MySQL.
+- **Front-end:** painel web em React, com TypeScript e shadcn/ui.
+
+---
+
+## 🧱 Tecnologias
+
+| Camada | Tecnologias |
+| :--- | :--- |
+| **Back-end** | Java 21, Spring Boot 4, Spring Data JPA, Spring Security (Basic Auth), Springdoc OpenAPI (Swagger) |
+| **Banco de dados** | MySQL 8 |
+| **Front-end** | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, React Router |
+
+---
+
+## 📁 Estrutura do repositório
+
+```text
+.
+├── backend/          # API REST (Spring Boot + Maven Wrapper)
+├── frontend/         # Painel web (React + Vite)
+├── db/
+│   └── db_schedemy.sql   # Script de criação do banco
+└── Documentacao/     # Coleção de requisições da API
+```
 
 ---
 
 ## 🛠️ Pré-requisitos
 
-Certifique-se de ter as seguintes ferramentas instaladas e configuradas em sua máquina:
+Instale e configure estas ferramentas na sua máquina:
 
-- **Java JDK**
-- **Apache Maven**
-- **MySQL Server** (rodando na porta `3306`)
+- **Java JDK 21**
+- **MySQL Server 8**, rodando na porta `3306`
+- **Node.js 20** ou superior (com o npm)
+
+> O Maven não precisa ser instalado: o back-end usa o **Maven Wrapper** (`mvnw`).
 
 ---
 
-## ⚙️ Passo a Passo para Instalação e Execução
+## ⚙️ Como executar
 
-### 1. Configuração do Banco de Dados
-1. Certifique-se de que o serviço do **MySQL** está iniciado na porta `3306`.
-2. Execute o script de criação do banco de dados localizado no caminho:
-   ```text
-   ./schedemy-main/schedemy/db/db_schedemy.sql
+### 1. Banco de dados
+
+1. Inicie o serviço do **MySQL** na porta `3306`.
+2. Rode o script de criação do banco:
+
+   ```bash
+   mysql -u root < db/db_schedemy.sql
    ```
 
-> ⚠️ **Nota:** A configuração padrão do projeto espera um usuário do MySQL **sem senha**.
+> ⚠️ **Nota:** por padrão, a API usa o usuário `root` **sem senha**. Para usar outras credenciais, veja a seção [Variáveis de ambiente](#-variáveis-de-ambiente).
 
----
-
-### 2. Compilação do Projeto
-Navegue até o diretório do projeto e execute o comando do Maven para instalar as dependências e compilar a aplicação:
+### 2. Back-end (API)
 
 ```bash
-cd ./schedemy-main/schedemy
-mvn clean install
+cd backend
+./mvnw spring-boot:run
 ```
 
----
+No Windows, use `mvnw.cmd spring-boot:run`.
 
-### 3. Execução da Aplicação
-No mesmo diretório (`./schedemy-main/schedemy`), execute o seguinte comando para iniciar o servidor Spring Boot:
+A API fica disponível em **http://localhost:8080**.
+
+### 3. Front-end (painel web)
+
+Em outro terminal:
 
 ```bash
-mvn spring-boot:run
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
 ```
+
+No Windows, troque `cp` por `copy`.
+
+O painel fica disponível em **http://localhost:5173**.
 
 ---
 
-## 🌐 Acesso e Testes da API
+## 🔧 Variáveis de ambiente
 
-Acesse a interface interativa do Swagger no seu navegador para visualizar e testar os endpoints disponíveis:
+### Back-end
 
-- **URL do Swagger UI:** [http://localhost:8080/swagger-ui/index.html#/](http://localhost:8080/swagger-ui/index.html#/)
+Todas são opcionais. Sem elas, a API usa os valores padrão.
 
-### 🔑 Credenciais de Acesso (Login)
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `SERVER_PORT` | `8080` | Porta da API |
+| `DB_HOST` | `localhost` | Host do MySQL |
+| `DB_PORT` | `3306` | Porta do MySQL |
+| `DB_NAME` | `schedemy_db` | Nome do banco |
+| `DB_USER` | `root` | Usuário do MySQL |
+| `DB_PASSWORD` | *(vazio)* | Senha do MySQL |
+| `SHOW_SQL` | `false` | Exibe no log o SQL gerado pelo Hibernate |
 
-| Parâmetro | Valor |
+### Front-end (`frontend/.env`)
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `VITE_API_BASE_URL` | `http://localhost:8080` | Endereço da API |
+
+---
+
+## 📜 Scripts do front-end
+
+| Comando | Descrição |
 | :--- | :--- |
-| **Usuário** | `admin` |
-| **Senha** | `admin123` |
+| `npm run dev` | Inicia o servidor de desenvolvimento |
+| `npm run build` | Checa os tipos e gera a versão de produção em `dist/` |
+| `npm run preview` | Serve localmente a versão de produção |
+| `npm run lint` | Analisa o código com o oxlint |
+
+---
+
+## 🌐 Documentação da API
+
+A interface interativa do Swagger lista e permite testar todos os endpoints:
+
+- **Swagger UI:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+
+A coleção de requisições também está em [`Documentacao/`](Documentacao/).
+
+---
+
+## 🔑 Contas de acesso
+
+Estas contas vêm pré-cadastradas na API. Na tela de login, elas aparecem como atalhos em "Contas de teste".
+
+| Usuário | Senha | Perfil |
+| :--- | :--- | :--- |
+| `admin` | `admin123` | Administrador (acesso total) |
+| `coordenador` | `coordenador123` | Coordenador |
+| `professor` | `professor123` | Professor |
+| `recepcionista` | `recepcionista123` | Recepcionista |
+| `aluno` | `aluno123` | Aluno |
