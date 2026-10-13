@@ -31,8 +31,8 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
               <Link to="/">
-                <img src="/schedemy-logo.png" alt="" aria-hidden="true" className="size-6 shrink-0 object-contain" />
-                <span className="text-base font-semibold">Schedemy</span>
+                <img src="/schedemy-logo.png" alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
+                <span className="text-lg font-semibold tracking-tight">Schedemy</span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>

@@ -34,7 +34,7 @@ export function NavMain({ itens, rotulo, criarAgendamento = false }: NavMainProp
               <SidebarMenuButton
                 asChild
                 tooltip="Novo agendamento"
-                className="min-w-8 bg-primary text-primary-foreground duration-200 ease-linear hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground"
+                className="min-w-8 bg-sidebar-primary font-medium text-sidebar-primary-foreground shadow-sm duration-200 ease-linear hover:bg-sidebar-primary/90 hover:text-sidebar-primary-foreground active:bg-sidebar-primary/90 active:text-sidebar-primary-foreground"
               >
                 <Link to="/agendamentos?novo=1" onClick={() => setOpenMobile(false)}>
                   <IconCirclePlusFilled />
@@ -49,7 +49,12 @@ export function NavMain({ itens, rotulo, criarAgendamento = false }: NavMainProp
             const ativo = item.fim ? pathname === item.to : pathname.startsWith(item.to);
             return (
               <SidebarMenuItem key={item.to}>
-                <SidebarMenuButton asChild tooltip={item.rotulo} isActive={ativo}>
+                <SidebarMenuButton
+                  asChild
+                  tooltip={item.rotulo}
+                  isActive={ativo}
+                  className="data-active:shadow-[inset_3px_0_0_var(--color-brand-300)]"
+                >
                   <NavLink to={item.to} end={item.fim} onClick={() => setOpenMobile(false)}>
                     <item.icone />
                     <span>{item.rotulo}</span>

@@ -33,7 +33,7 @@ export default function LoginForm({ className = "" }: { className?: string }) {
   return (
     <form onSubmit={aoSubmeter} className={cn("flex flex-col gap-6", className)}>
       <div className="flex flex-col items-center gap-1 text-center">
-        <h1 className="text-2xl font-bold">Entre na sua conta</h1>
+        <h1 className="text-2xl font-bold text-brand-900">Entre na sua conta</h1>
         <p className="text-sm text-balance text-muted-foreground">
           Informe seu e-mail institucional para acessar o Schedemy
         </p>
@@ -61,7 +61,7 @@ export default function LoginForm({ className = "" }: { className?: string }) {
             <button
               type="button"
               onClick={() => toast.info("Procure a coordenação para redefinir sua senha institucional.")}
-              className="ml-auto text-sm underline-offset-4 hover:underline"
+              className="ml-auto text-sm text-brand-600 underline-offset-4 hover:underline"
             >
               Esqueceu sua senha?
             </button>
@@ -100,7 +100,7 @@ export default function LoginForm({ className = "" }: { className?: string }) {
 
         <p className="text-center text-sm text-muted-foreground">
           Não tem uma conta?{" "}
-          <Link to="/cadastro" className="text-foreground underline underline-offset-4">
+          <Link to="/cadastro" className="font-medium text-brand-600 underline underline-offset-4">
             Cadastre-se
           </Link>
         </p>

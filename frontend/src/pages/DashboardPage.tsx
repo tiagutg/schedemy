@@ -14,7 +14,6 @@ import {
 import { agendamentosApi } from "@/api/agendamentos";
 import { usuariosApi } from "@/api/usuarios";
 import { useAuth } from "@/context/AuthContext";
-import PageHeader from "@/components/common/PageHeader";
 import Spinner from "@/components/common/Spinner";
 import Pill from "@/components/common/Pill";
 import { Badge } from "@/components/ui/badge";
@@ -84,10 +83,21 @@ export default function DashboardPage() {
 
   return (
     <>
-      <PageHeader
-        titulo={`Olá${perfilVinculado?.nome ? ", " + perfilVinculado.nome.split(" ")[0] : ""}!`}
-        subtitulo="Visão geral dos agendamentos e cadastros do Schedemy."
-      />
+      {/* Faixa de boas-vindas com o azul da marca */}
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-brand-900 via-brand-700 to-brand-500 px-5 py-6 text-white shadow-sm sm:px-8 sm:py-8">
+        <img
+          src="/schedemy-logo.png"
+          alt=""
+          aria-hidden="true"
+          className="pointer-events-none absolute -right-4 -bottom-8 hidden w-40 rotate-6 opacity-25 sm:block"
+        />
+        <div className="relative flex flex-col gap-1">
+          <h2 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">
+            {`Olá${perfilVinculado?.nome ? ", " + perfilVinculado.nome.split(" ")[0] : ""}!`}
+          </h2>
+          <p className="max-w-2xl text-sm text-white/85">Visão geral dos agendamentos e cadastros do Schedemy.</p>
+        </div>
+      </div>
 
       {carregando ? (
         <div className="flex justify-center py-16 text-muted-foreground">
@@ -100,15 +110,15 @@ export default function DashboardPage() {
             {STATUS_RESUMO.map((status) => {
               const { icone: Icone, legenda } = VISUAL_STATUS[status];
               return (
-                <Card key={status} className="@container/card last:col-span-2 @5xl/main:last:col-span-1">
+                <Card key={status} className="@container/card border-t-2 border-t-brand-600 last:col-span-2 @5xl/main:last:col-span-1">
                   {/* Sem o rodapé (cartão estreito), o espaçamento inferior fica no cabeçalho */}
                   <CardHeader className="grid-cols-1! pb-(--card-spacing) @[220px]/card:grid-cols-[1fr_auto]! @[220px]/card:pb-0">
                     <CardDescription>{rotularEnum(status)}</CardDescription>
-                    <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+                    <CardTitle className="text-2xl font-semibold text-brand-700 tabular-nums @[250px]/card:text-3xl">
                       {contagens?.[status] ?? "—"}
                     </CardTitle>
                     <CardAction className="hidden @[220px]/card:block">
-                      <Badge variant="outline">
+                      <Badge variant="outline" className="border-brand-200 bg-brand-100 text-brand-700">
                         <Icone />
                         Status
                       </Badge>
@@ -167,9 +177,9 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="flex flex-col gap-4">
                 {pode("usuarios.gerenciar") && (
-                  <div className="flex items-center justify-between rounded-lg border px-3 py-2.5 text-sm">
-                    <span className="text-muted-foreground">Usuários cadastrados</span>
-                    <span className="text-lg font-semibold tabular-nums">{totalUsuarios ?? "—"}</span>
+                  <div className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm">
+                    <span className="text-brand-900">Usuários cadastrados</span>
+                    <span className="text-lg font-semibold text-brand-700 tabular-nums">{totalUsuarios ?? "—"}</span>
                   </div>
                 )}
                 <div className="flex flex-wrap gap-2">
