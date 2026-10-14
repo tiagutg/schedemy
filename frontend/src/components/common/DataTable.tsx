@@ -45,7 +45,7 @@ export default function DataTable<T>({ colunas, linhas, carregando, chaveLinha, 
       {/* Tabela: áreas de conteúdo a partir de 48rem */}
       <div className="hidden overflow-hidden rounded-lg border @3xl/main:block">
         <Table>
-          <TableHeader className="sticky top-0 z-10 bg-muted">
+          <TableHeader className="sticky top-0 z-10 bg-brand-100 [&_th]:font-semibold [&_th]:text-brand-900">
             <TableRow>
               {colunas.map((coluna) => (
                 <TableHead key={coluna.chave}>{coluna.titulo}</TableHead>

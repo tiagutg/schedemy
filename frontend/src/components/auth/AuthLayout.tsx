@@ -13,7 +13,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       <div className="flex flex-col gap-4 p-6 pt-[max(2.5rem,env(safe-area-inset-top))] md:p-10">
         {/* Marca no canto: só no desktop (no celular ela fica acima do formulário) */}
         <div className="hidden justify-start gap-2 lg:flex">
-          <Link to="/login" className="flex items-center gap-2 font-medium">
+          <Link to="/login" className="flex items-center gap-2 font-semibold text-brand-700">
             <img
               src="/schedemy-logo.png"
               alt=""
@@ -34,7 +34,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 aria-hidden="true"
                 className="size-16 object-contain drop-shadow-sm"
               />
-              <span className="text-lg font-semibold tracking-tight">Schedemy</span>
+              <span className="text-lg font-semibold tracking-tight text-brand-700">Schedemy</span>
             </Link>
             {children}
           </div>

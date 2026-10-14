@@ -96,7 +96,7 @@ export default function CadastroForm({ className = "" }: { className?: string })
   return (
     <form onSubmit={aoSubmeter} noValidate className={cn("flex flex-col gap-6", className)}>
       <div className="flex flex-col items-center gap-1 text-center">
-        <h1 className="text-2xl font-bold">Crie sua conta</h1>
+        <h1 className="text-2xl font-bold text-brand-900">Crie sua conta</h1>
         <p className="hidden text-sm text-balance text-muted-foreground [@media(min-height:700px)]:block">
           Preencha os dados abaixo para criar sua conta no Schedemy
         </p>
@@ -199,7 +199,7 @@ export default function CadastroForm({ className = "" }: { className?: string })
 
         <p className="text-center text-sm text-muted-foreground">
           Já tem uma conta?{" "}
-          <Link to="/login" className="text-foreground underline underline-offset-4">
+          <Link to="/login" className="font-medium text-brand-600 underline underline-offset-4">
             Entrar
           </Link>
         </p>

@@ -38,7 +38,7 @@ export const CORES_STATUS_AGENDAMENTO: Record<string, string> = {
   AGUARDANDO_RESPOSTA: "bg-brand-100 text-brand-700",
   CONFIRMADO: "bg-sage-100 text-sage-700",
   EM_ANDAMENTO: "bg-sage-100 text-sage-700",
-  CONCLUIDO: "bg-ink-900 text-white",
+  CONCLUIDO: "bg-brand-700 text-white",
   CANCELADO: "bg-brick-100 text-brick-700",
 };
 
