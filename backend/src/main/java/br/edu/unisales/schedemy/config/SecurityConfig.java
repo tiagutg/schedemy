@@ -85,7 +85,7 @@ public class SecurityConfig {
                         // --- Agendamentos ---
                         // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/agendamentos/*/resposta")
-                                .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
                         // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21.
@@ -95,7 +95,7 @@ public class SecurityConfig {
                         // Somente o aluno avalia; a docencia acompanha (RNF 11).
                         .requestMatchers(HttpMethod.POST, "/api/v1/avaliacoes").hasAnyRole(ALUNO, ADMIN)
                         .requestMatchers(HttpMethod.GET, "/api/v1/avaliacoes", "/api/v1/avaliacoes/**")
-                                .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         .requestMatchers("/api/v1/avaliacoes", "/api/v1/avaliacoes/**").hasRole(ADMIN)
 
                         // --- Notificacoes (RF 23) ---
