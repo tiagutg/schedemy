@@ -2,7 +2,6 @@ package br.edu.unisales.schedemy.dto.request;
 
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
 import java.time.LocalDate;

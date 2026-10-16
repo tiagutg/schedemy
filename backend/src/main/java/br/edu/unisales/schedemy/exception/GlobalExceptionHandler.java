@@ -27,7 +27,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(RegraDeNegocioException.class)
     public ResponseEntity<ErrorResponseDTO> tratarRegraDeNegocio(RegraDeNegocioException ex, HttpServletRequest request) {
-        return construirResposta(HttpStatus.UNPROCESSABLE_ENTITY, "Regra de negocio violada", ex.getMessage(), request);
+        return construirResposta(HttpStatus.UNPROCESSABLE_CONTENT, "Regra de negocio violada", ex.getMessage(), request);
     }
 
     @ExceptionHandler(RecursoDuplicadoException.class)

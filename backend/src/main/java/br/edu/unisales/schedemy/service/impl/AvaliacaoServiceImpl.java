@@ -1,7 +1,6 @@
 package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
-import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.AvaliacaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -104,8 +103,7 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     /** O aluno so avalia reuniao da qual participou (RNF 15). */
     private void validarParticipacao(Agendamento agendamento, Usuario aluno) {
         boolean participou = agendamento.getParticipantes().stream()
-                .map(AgendamentoParticipante::getUsuario)
-                .anyMatch(u -> u.getId().equals(aluno.getId()));
+                .anyMatch(p -> p.getUsuario().getId().equals(aluno.getId()));
         if (!participou) {
             throw new RegraDeNegocioException("O aluno informado nao participou desta reuniao.");
         }

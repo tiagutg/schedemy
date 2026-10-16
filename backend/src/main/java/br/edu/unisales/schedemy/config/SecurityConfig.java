@@ -50,27 +50,27 @@ public class SecurityConfig {
     public InMemoryUserDetailsManager userDetailsService(PasswordEncoder encoder) {
         UserDetails admin = User.withUsername("admin")
                 .password(encoder.encode("admin123"))
-                .roles("ADMIN", "COORDENADOR", "RECEPCIONISTA")
+                .roles(ADMIN, COORDENADOR, RECEPCIONISTA)
                 .build();
 
         UserDetails recepcionista = User.withUsername("recepcionista")
                 .password(encoder.encode("recepcionista123"))
-                .roles("RECEPCIONISTA")
+                .roles(RECEPCIONISTA)
                 .build();
 
         UserDetails coordenador = User.withUsername("coordenador")
                 .password(encoder.encode("coordenador123"))
-                .roles("COORDENADOR")
+                .roles(COORDENADOR)
                 .build();
 
         UserDetails professor = User.withUsername("professor")
                 .password(encoder.encode("professor123"))
-                .roles("PROFESSOR")
+                .roles(PROFESSOR)
                 .build();
 
         UserDetails aluno = User.withUsername("aluno")
                 .password(encoder.encode("aluno123"))
-                .roles("ALUNO")
+                .roles(ALUNO)
                 .build();
 
         return new InMemoryUserDetailsManager(admin, recepcionista, coordenador, professor, aluno);
