@@ -1,0 +1,143 @@
+# 🚀 Schedemy
+
+Sistema de agendamentos acadêmicos que organiza reuniões entre alunos, professores, coordenação e recepção.
+
+O projeto tem duas partes:
+
+- **Back-end:** API REST em Spring Boot, com banco MySQL.
+- **Front-end:** painel web em React, com TypeScript e shadcn/ui.
+
+---
+
+## 🧱 Tecnologias
+
+| Camada | Tecnologias |
+| :--- | :--- |
+| **Back-end** | Java 21, Spring Boot 4, Spring Data JPA, Spring Security (Basic Auth), Springdoc OpenAPI (Swagger) |
+| **Banco de dados** | MySQL 8 |
+| **Front-end** | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, React Router |
+
+---
+
+## 📁 Estrutura do repositório
+
+```text
+.
+├── backend/          # API REST (Spring Boot + Maven Wrapper)
+├── frontend/         # Painel web (React + Vite)
+├── db/
+│   └── db_schedemy.sql   # Script de criação do banco
+└── Documentacao/     # Coleção de requisições da API
+```
+
+---
+
+## 🛠️ Pré-requisitos
+
+Instale e configure estas ferramentas na sua máquina:
+
+- **Java JDK 21**
+- **MySQL Server 8**, rodando na porta `3306`
+- **Node.js 20** ou superior (com o npm)
+
+> O Maven não precisa ser instalado: o back-end usa o **Maven Wrapper** (`mvnw`).
+
+---
+
+## ⚙️ Como executar
+
+### 1. Banco de dados
+
+1. Inicie o serviço do **MySQL** na porta `3306`.
+2. Rode o script de criação do banco:
+
+   ```bash
+   mysql -u root < db/db_schedemy.sql
+   ```
+
+> ⚠️ **Nota:** por padrão, a API usa o usuário `root` **sem senha**. Para usar outras credenciais, veja a seção [Variáveis de ambiente](#-variáveis-de-ambiente).
+
+### 2. Back-end (API)
+
+```bash
+cd backend
+./mvnw spring-boot:run
+```
+
+No Windows, use `mvnw.cmd spring-boot:run`.
+
+A API fica disponível em **http://localhost:8080**.
+
+### 3. Front-end (painel web)
+
+Em outro terminal:
+
+```bash
+cd frontend
+cp .env.example .env
+npm install
+npm run dev
+```
+
+No Windows, troque `cp` por `copy`.
+
+O painel fica disponível em **http://localhost:5173**.
+
+---
+
+## 🔧 Variáveis de ambiente
+
+### Back-end
+
+Todas são opcionais. Sem elas, a API usa os valores padrão.
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `SERVER_PORT` | `8080` | Porta da API |
+| `DB_HOST` | `localhost` | Host do MySQL |
+| `DB_PORT` | `3306` | Porta do MySQL |
+| `DB_NAME` | `schedemy_db` | Nome do banco |
+| `DB_USER` | `root` | Usuário do MySQL |
+| `DB_PASSWORD` | *(vazio)* | Senha do MySQL |
+| `SHOW_SQL` | `false` | Exibe no log o SQL gerado pelo Hibernate |
+
+### Front-end (`frontend/.env`)
+
+| Variável | Padrão | Descrição |
+| :--- | :--- | :--- |
+| `VITE_API_BASE_URL` | `http://localhost:8080` | Endereço da API |
+
+---
+
+## 📜 Scripts do front-end
+
+| Comando | Descrição |
+| :--- | :--- |
+| `npm run dev` | Inicia o servidor de desenvolvimento |
+| `npm run build` | Checa os tipos e gera a versão de produção em `dist/` |
+| `npm run preview` | Serve localmente a versão de produção |
+| `npm run lint` | Analisa o código com o oxlint |
+
+---
+
+## 🌐 Documentação da API
+
+A interface interativa do Swagger lista e permite testar todos os endpoints:
+
+- **Swagger UI:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
+
+A coleção de requisições também está em [`Documentacao/`](Documentacao/).
+
+---
+
+## 🔑 Contas de acesso
+
+Estas contas vêm pré-cadastradas na API. Na tela de login, elas aparecem como atalhos em "Contas de teste".
+
+| Usuário | Senha | Perfil |
+| :--- | :--- | :--- |
+| `admin` | `admin123` | Administrador (acesso total) |
+| `coordenador` | `coordenador123` | Coordenador |
+| `professor` | `professor123` | Professor |
+| `recepcionista` | `recepcionista123` | Recepcionista |
+| `aluno` | `aluno123` | Aluno |
