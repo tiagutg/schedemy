@@ -26,7 +26,8 @@ O projeto tem duas partes:
 ├── backend/          # API REST (Spring Boot + Maven Wrapper)
 ├── frontend/         # Painel web (React + Vite)
 ├── db/
-│   └── db_schedemy.sql   # Script de criação do banco
+│   ├── db_schedemy.sql     # Script de criação do banco (vazio)
+│   └── dump_schedemy.sql   # Banco completo com usuários de teste
 └── Documentacao/     # Coleção de requisições da API
 ```
 
@@ -49,11 +50,17 @@ Instale e configure estas ferramentas na sua máquina:
 ### 1. Banco de dados
 
 1. Inicie o serviço do **MySQL** na porta `3306`.
-2. Rode o script de criação do banco:
+2. Importe o dump, que cria o banco `schedemy_db` já com os usuários de teste (veja [Contas de acesso](#-contas-de-acesso)):
 
    ```bash
-   mysql -u root < db/db_schedemy.sql
+   mysql -u root < db/dump_schedemy.sql
    ```
+
+   No MySQL Workbench: **Server → Data Import → Import from Self-Contained File**, selecione `db/dump_schedemy.sql` e clique em **Start Import**.
+
+> ⚠️ **Atenção:** o dump apaga e recria todas as tabelas do `schedemy_db`. Faça backup antes se tiver dados que queira manter.
+>
+> Para criar o banco vazio, sem usuários, use `db/db_schedemy.sql`. Nesse caso, cadastre o primeiro usuário pela tela "Cadastre-se" ou pelo Swagger.
 
 > ⚠️ **Nota:** por padrão, a API usa o usuário `root` **sem senha**. Para usar outras credenciais, veja a seção [Variáveis de ambiente](#-variáveis-de-ambiente).
 
@@ -132,12 +139,16 @@ A coleção de requisições também está em [`Documentacao/`](Documentacao/).
 
 ## 🔑 Contas de acesso
 
-Estas contas vêm pré-cadastradas na API. Na tela de login, elas aparecem como atalhos em "Contas de teste".
+O login é feito com o **e-mail e a senha** de um usuário cadastrado no banco. As senhas ficam criptografadas (BCrypt), e o perfil de acesso vem do tipo do usuário.
 
-| Usuário | Senha | Perfil |
+Estas contas vêm no `db/dump_schedemy.sql`:
+
+| Perfil | E-mail | Senha |
 | :--- | :--- | :--- |
-| `admin` | `admin123` | Administrador (acesso total) |
-| `coordenador` | `coordenador123` | Coordenador |
-| `professor` | `professor123` | Professor |
-| `recepcionista` | `recepcionista123` | Recepcionista |
-| `aluno` | `aluno123` | Aluno |
+| Administrador (acesso total) | `admin@hotmail.com` | `admin123` |
+| Coordenador | `marcelo.coord@unisales.edu.br`, `fernanda.coord@unisales.edu.br` | `Senha123@` |
+| Professor | `romulo.professor@unisales.edu.br`, `ebert.professor@unisales.edu.br`, `mykael.professor@unisales.edu.br`, `lucas.professor@unisales.edu.br` | `Senha123@` |
+| Recepcionista | `ana.recepcao@unisales.edu.br`, `mariana.recepcao@unisales.edu.br` | `Senha123@` |
+| Aluno | `kevin.aluno@unisales.edu.br`, `pedro.aluno@unisales.edu.br`, `tiago.aluno@unisales.edu.br`, `diogo.aluno@unisales.edu.br`, `joao.aluno@unisales.edu.br` | `Senha123@` |
+
+> ⚠️ São contas de teste, com senhas públicas. Não use este dump em produção.
