@@ -17,7 +17,7 @@ export interface Pagina<T> {
   ultima: boolean;
 }
 
-export type TipoUsuario = "ALUNO" | "PROFESSOR" | "COORDENADOR" | "RECEPCIONISTA";
+export type TipoUsuario = "ADMIN" | "ALUNO" | "PROFESSOR" | "COORDENADOR" | "RECEPCIONISTA";
 
 export interface Usuario {
   id: number;

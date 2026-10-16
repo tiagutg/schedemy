@@ -1,6 +1,6 @@
 // Espelha os enums Java em br.edu.unisales.schedemy.domain.enums
 
-export const TIPOS_USUARIO = ["ALUNO", "PROFESSOR", "COORDENADOR", "RECEPCIONISTA"];
+export const TIPOS_USUARIO = ["ALUNO", "PROFESSOR", "COORDENADOR", "RECEPCIONISTA", "ADMIN"];
 
 export const FORMATOS_REUNIAO = ["PRESENCIAL", "ONLINE", "HIBRIDO"];
 
@@ -53,6 +53,7 @@ export const CORES_TIPO_USUARIO: Record<string, string> = {
   PROFESSOR: "bg-sage-100 text-sage-700",
   COORDENADOR: "bg-brand-100 text-brand-700",
   RECEPCIONISTA: "bg-brick-100 text-brick-700",
+  ADMIN: "bg-brand-700 text-white",
 };
 
 export function rotularEnum(valor: string | null | undefined): string {

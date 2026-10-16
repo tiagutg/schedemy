@@ -40,6 +40,13 @@ export function setStoredAuth(auth: StoredAuth | null) {
   }
 }
 
+let aoSessaoInvalida: (() => void) | null = null;
+
+/** Registra quem trata um 401 numa requisição autenticada (credenciais salvas que deixaram de valer). */
+export function definirAoSessaoInvalida(tratador: (() => void) | null) {
+  aoSessaoInvalida = tratador;
+}
+
 function buildAuthHeader() {
   const auth = getStoredAuth();
   if (!auth?.username) return null;
@@ -103,6 +110,7 @@ export async function apiFetch<T = unknown>(
   const dados = textoBruto ? safeJsonParse(textoBruto) : null;
 
   if (!response.ok) {
+    if (response.status === 401 && authHeader) aoSessaoInvalida?.();
     throw new ApiError(response.status, dados as ErrorResponse | null);
   }
   return dados as T;

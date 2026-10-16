@@ -1,71 +1,99 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
-import { getStoredAuth, setStoredAuth, type ApiError, type StoredAuth } from "@/api/client";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { definirAoSessaoInvalida, getStoredAuth, setStoredAuth, type ApiError, type StoredAuth } from "@/api/client";
 import { usuariosApi } from "@/api/usuarios";
+import { useToast } from "@/context/ToastContext";
 import { derivarPerfil, perfilPode } from "@/utils/permissoes";
 import type { Usuario } from "@/types";
 
 interface Credenciais {
+  /** E-mail do usuário cadastrado (é o login do Basic Auth). */
   username: string;
   password: string;
-  usuarioId?: number | null;
 }
 
 interface AuthContextValor {
   auth: StoredAuth | null;
   estaAutenticado: boolean;
+  /** Cadastro do usuário logado. */
   perfilVinculado: Usuario | null;
+  /** True enquanto o cadastro do usuário logado está sendo carregado. */
+  buscandoPerfil: boolean;
   perfil: string | null;
   pode: (permissao: string) => boolean;
   carregando: boolean;
   erro: string | null;
   entrar: (credenciais: Credenciais) => Promise<boolean>;
   sair: () => void;
-  vincularPerfil: (usuario: Usuario | null) => void;
 }
 
 const AuthContext = createContext<AuthContextValor | null>(null);
-
-/** Papéis pré-cadastrados no SecurityConfig do back-end, usados para o atalho de login. */
-export const CONTAS_PADRAO = [
-  { usuario: "admin", senha: "admin123", papel: "ADMIN / COORDENADOR / RECEPCIONISTA" },
-  { usuario: "coordenador", senha: "coordenador123", papel: "COORDENADOR" },
-  { usuario: "professor", senha: "professor123", papel: "PROFESSOR" },
-  { usuario: "recepcionista", senha: "recepcionista123", papel: "RECEPCIONISTA" },
-  { usuario: "aluno", senha: "aluno123", papel: "ALUNO" },
-];
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setAuth] = useState<StoredAuth | null>(() => getStoredAuth());
   const [perfilVinculado, setPerfilVinculado] = useState<Usuario | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // Enquanto o cadastro do usuário logado não chega, o perfil ainda é desconhecido.
+  const [buscandoPerfil, setBuscandoPerfil] = useState(() => !!getStoredAuth());
+  const toast = useToast();
 
-  // Ao carregar uma sessão salva, tenta recarregar o perfil (Usuario) vinculado, se houver.
+  // Ao abrir com uma sessão salva, recarrega o cadastro do usuário logado,
+  // pelo id guardado ou, em sessões antigas sem id, pelo e-mail do login.
   useEffect(() => {
-    if (auth?.usuarioId) {
-      usuariosApi
-        .buscarPorId(auth.usuarioId)
-        .then(setPerfilVinculado)
-        .catch(() => setPerfilVinculado(null));
+    if (!auth || (auth.usuarioId && perfilVinculado?.id === auth.usuarioId)) {
+      setBuscandoPerfil(false);
+      return;
     }
-  }, [auth?.usuarioId]);
+    let cancelado = false;
+    setBuscandoPerfil(true);
+    const busca = auth.usuarioId
+      ? usuariosApi.buscarPorId(auth.usuarioId)
+      : usuariosApi.buscarPorEmail(auth.username);
+    busca
+      .then((usuario) => {
+        if (cancelado) return;
+        setPerfilVinculado(usuario);
+        if (usuario && !auth.usuarioId) {
+          const novaAuth = { ...auth, usuarioId: usuario.id };
+          setStoredAuth(novaAuth);
+          setAuth(novaAuth);
+        }
+      })
+      .catch(() => !cancelado && setPerfilVinculado(null))
+      .finally(() => !cancelado && setBuscandoPerfil(false));
+    return () => {
+      cancelado = true;
+    };
+  }, [auth, perfilVinculado?.id]);
 
-  const entrar = useCallback(async ({ username, password, usuarioId }: Credenciais) => {
+  // Credenciais salvas que deixaram de valer (senha trocada, usuário inativado):
+  // encerra a sessão em vez de deixar as telas falhando com 401.
+  const authAtual = useRef(auth);
+  useEffect(() => {
+    authAtual.current = auth;
+  }, [auth]);
+  useEffect(() => {
+    definirAoSessaoInvalida(() => {
+      if (!authAtual.current) return; // durante o login, quem trata o erro é o formulário
+      setStoredAuth(null);
+      setAuth(null);
+      setPerfilVinculado(null);
+      toast.info("Sua sessão expirou. Entre novamente.");
+    });
+    return () => definirAoSessaoInvalida(null);
+  }, [toast]);
+
+  const entrar = useCallback(async ({ username, password }: Credenciais) => {
     setCarregando(true);
     setErro(null);
     try {
-      // Valida as credenciais chamando um endpoint protegido simples.
-      setStoredAuth({ username, password, usuarioId: usuarioId || null });
-      await usuariosApi.listar({ page: 0, size: 1 });
-      const novaAuth = { username, password, usuarioId: usuarioId || null };
+      // A busca do próprio cadastro também valida as credenciais (401 se inválidas).
+      setStoredAuth({ username, password, usuarioId: null });
+      const usuario = await usuariosApi.buscarPorEmail(username);
+      const novaAuth = { username, password, usuarioId: usuario?.id ?? null };
+      setStoredAuth(novaAuth);
+      setPerfilVinculado(usuario);
       setAuth(novaAuth);
-      if (usuarioId) {
-        try {
-          setPerfilVinculado(await usuariosApi.buscarPorId(usuarioId));
-        } catch {
-          setPerfilVinculado(null);
-        }
-      }
       return true;
     } catch (e) {
       const erroApi = e as ApiError;
@@ -73,7 +101,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAuth(null);
       setErro(
         erroApi.status === 401 || erroApi.status === 403
-          ? "Usuário ou senha inválidos."
+          ? "E-mail ou senha inválidos."
           : erroApi.message || "Não foi possível entrar."
       );
       return false;
@@ -88,17 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setPerfilVinculado(null);
   }, []);
 
-  const vincularPerfil = useCallback(
-    (usuario: Usuario | null) => {
-      setPerfilVinculado(usuario);
-      const novaAuth = { ...auth, usuarioId: usuario?.id ?? null } as StoredAuth;
-      setAuth(novaAuth);
-      setStoredAuth(novaAuth);
-    },
-    [auth]
-  );
-
-  const perfil = useMemo(() => derivarPerfil(auth, perfilVinculado), [auth, perfilVinculado]);
+  const perfil = useMemo(() => derivarPerfil(perfilVinculado), [perfilVinculado]);
   const pode = useCallback((permissao: string) => perfilPode(perfil, permissao), [perfil]);
 
   const valor = useMemo(
@@ -106,15 +124,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       auth,
       estaAutenticado: !!auth,
       perfilVinculado,
+      buscandoPerfil,
       perfil,
       pode,
       carregando,
       erro,
       entrar,
       sair,
-      vincularPerfil,
     }),
-    [auth, perfilVinculado, perfil, pode, carregando, erro, entrar, sair, vincularPerfil]
+    [auth, perfilVinculado, buscandoPerfil, perfil, pode, carregando, erro, entrar, sair]
   );
 
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;

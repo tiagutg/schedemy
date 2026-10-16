@@ -69,6 +69,7 @@ export default function CadastroForm({ className = "" }: { className?: string })
       await usuariosApi.criar({
         nome: campos.nome.trim(),
         email: campos.email.trim(),
+        senha: campos.senha,
         tipoUsuario: "ALUNO",
         ativo: true,
       });
@@ -76,8 +77,8 @@ export default function CadastroForm({ className = "" }: { className?: string })
       navigate("/login", { replace: true });
     } catch (e) {
       const erro = e as ApiError;
-      // O endpoint de usuários exige autenticação: enquanto o cadastro público
-      // não for liberado no back-end, orientamos o usuário a procurar a coordenação.
+      // Se o back-end voltar a exigir autenticação no cadastro, orientamos o
+      // usuário a procurar a coordenação.
       if (erro.status === 401 || erro.status === 403) {
         setErroGeral(
           "O cadastro por esta tela ainda não está liberado. Procure a coordenação do curso para criar seu acesso."

@@ -10,7 +10,8 @@ import { Label } from "@/components/ui/label";
 import { duracoesApi } from "@/api/duracoes";
 import type { ApiError } from "@/api/client";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
-import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO } from "@/utils/domain";
+import { useAuth } from "@/context/AuthContext";
+import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
 import { hojeISO } from "@/utils/format";
 import type { Duracao } from "@/types";
 
@@ -31,8 +32,15 @@ interface NovoAgendamentoModalProps {
   criarAgendamento: (payload: unknown) => Promise<unknown>;
 }
 
+// RN 03: recepção e administração não participam das reuniões, só agendam para outros.
+const PODEM_PARTICIPAR = ["ALUNO", "PROFESSOR", "COORDENADOR"];
+
 export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criarAgendamento }: NovoAgendamentoModalProps) {
-  const { usuarios } = useUsuariosOptions();
+  const { perfilVinculado: eu, pode } = useAuth();
+  // Quem não agenda para outros é sempre o organizador do próprio agendamento.
+  const escolheOrganizador = pode("agendamentos.organizarPorOutros");
+  const { usuarios: todos } = useUsuariosOptions();
+  const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
   const [form, setForm] = useState(FORM_VAZIO);
   const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([]);
@@ -42,11 +50,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
   useEffect(() => {
     if (aberto) {
       duracoesApi.listar(true).then(setDuracoes).catch(() => setDuracoes([]));
-      setForm(FORM_VAZIO);
+      setForm({ ...FORM_VAZIO, idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") });
       setConvidadosSelecionados([]);
       setErro("");
     }
-  }, [aberto]);
+  }, [aberto, escolheOrganizador, eu?.id]);
 
   function alternarConvidado(id: string) {
     setConvidadosSelecionados((atual) =>
@@ -54,7 +62,9 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     );
   }
 
-  const candidatosConvidado = usuarios.filter((u) => String(u.id) !== form.idOrganizador);
+  const candidatosConvidado = form.idOrganizador
+    ? usuarios.filter((u) => String(u.id) !== form.idOrganizador)
+    : [];
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -89,14 +99,21 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     <Modal aberto={aberto} onFechar={onFechar} titulo="Novo agendamento" subtitulo="RN 01 a RN 18 são validadas pelo back-end." largura="max-w-2xl">
       <form onSubmit={salvar} className="flex flex-col gap-4">
         <FieldGrid>
-          <SelectField
-            label="Organizador"
-            required
-            placeholder="Selecione…"
-            options={usuarios.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${u.tipoUsuario})` }))}
-            value={form.idOrganizador}
-            onChange={(e) => setForm({ ...form, idOrganizador: e.target.value })}
-          />
+          {escolheOrganizador ? (
+            <SelectField
+              label="Organizador"
+              required
+              placeholder="Selecione…"
+              options={usuarios.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              value={form.idOrganizador}
+              onChange={(e) => {
+                setForm({ ...form, idOrganizador: e.target.value });
+                setConvidadosSelecionados((atual) => atual.filter((c) => c !== e.target.value));
+              }}
+            />
+          ) : (
+            <TextField label="Organizador" value={eu?.nome ?? ""} disabled />
+          )}
           <SelectField
             label="Duração"
             required
@@ -122,7 +139,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
                   onCheckedChange={() => alternarConvidado(String(u.id))}
                 />
                 <span className="flex-1 text-sm">{u.nome}</span>
-                <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{u.tipoUsuario}</Pill>
+                <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>
               </label>
             ))}
           </div>

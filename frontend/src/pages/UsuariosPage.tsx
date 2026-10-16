@@ -20,6 +20,7 @@ import type { Params, TipoUsuario, Usuario } from "@/types";
 interface FormUsuario {
   nome: string;
   email: string;
+  senha: string;
   telefoneWhatsapp: string;
   tipoUsuario: TipoUsuario | string;
   matriculaRa: string;
@@ -31,6 +32,7 @@ interface FormUsuario {
 const FORM_VAZIO: FormUsuario = {
   nome: "",
   email: "",
+  senha: "",
   telefoneWhatsapp: "",
   tipoUsuario: "ALUNO",
   matriculaRa: "",
@@ -67,6 +69,7 @@ export default function UsuariosPage() {
     setForm({
       nome: usuario.nome,
       email: usuario.email,
+      senha: "",
       telefoneWhatsapp: usuario.telefoneWhatsapp || "",
       tipoUsuario: usuario.tipoUsuario,
       matriculaRa: usuario.matriculaRa || "",
@@ -82,6 +85,10 @@ export default function UsuariosPage() {
     const novosErros: Record<string, string> = {};
     if (!form.nome || form.nome.trim().length < 3) novosErros.nome = "Informe ao menos 3 caracteres.";
     if (!form.email || !/^\S+@\S+\.\S+$/.test(form.email)) novosErros.email = "E-mail inválido.";
+    // Na criação a senha é obrigatória; na edição, em branco mantém a atual.
+    if (!editando && !form.senha) novosErros.senha = "Informe uma senha.";
+    else if (form.senha && (form.senha.length < 6 || form.senha.length > 100))
+      novosErros.senha = "A senha deve ter entre 6 e 100 caracteres.";
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
@@ -91,7 +98,7 @@ export default function UsuariosPage() {
     if (!validar()) return;
     setSalvando(true);
     try {
-      const payload = { ...form, telefoneWhatsapp: form.telefoneWhatsapp || null };
+      const payload = { ...form, senha: form.senha || null, telefoneWhatsapp: form.telefoneWhatsapp || null };
       if (editando) {
         await usuariosApi.atualizar(editando.id, payload);
         toast.sucesso("Usuário atualizado com sucesso.");
@@ -247,7 +254,17 @@ export default function UsuariosPage() {
               onChange={(e) => setForm({ ...form, telefoneWhatsapp: e.target.value })}
             />
           </FieldGrid>
-          <FieldGrid colunas={1}>
+          <FieldGrid>
+            <TextField
+              label={editando ? "Nova senha" : "Senha"}
+              type="password"
+              autoComplete="new-password"
+              required={!editando}
+              placeholder={editando ? "Deixe em branco para manter" : undefined}
+              value={form.senha}
+              onChange={(e) => setForm({ ...form, senha: e.target.value })}
+              error={erros.senha}
+            />
             <TextField
               label="Matrícula / RA"
               value={form.matriculaRa}

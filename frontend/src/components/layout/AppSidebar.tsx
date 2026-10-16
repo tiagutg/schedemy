@@ -24,6 +24,13 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
 
   const visivel = (item: { permissao: string | null }) => !item.permissao || pode(item.permissao);
 
+  // Iniciais do primeiro e do último nome; sem cadastro, as duas primeiras letras do login.
+  const partesNome = perfilVinculado?.nome?.trim().split(/\s+/) ?? [];
+  const iniciais =
+    partesNome.length > 1
+      ? partesNome[0][0] + partesNome[partesNome.length - 1][0]
+      : (partesNome[0] || auth?.username || "").slice(0, 2);
+
   return (
     <Sidebar collapsible="offcanvas" {...props}>
       <SidebarHeader>
@@ -46,7 +53,7 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
         <NavUser
           nome={perfilVinculado?.nome || auth?.username || ""}
           descricao={perfil ? ROTULOS_PERFIL[perfil] || perfil : undefined}
-          iniciais={auth?.username?.slice(0, 2).toUpperCase() ?? ""}
+          iniciais={iniciais.toUpperCase()}
           onSair={onSair}
         />
       </SidebarFooter>

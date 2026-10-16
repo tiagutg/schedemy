@@ -28,8 +28,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora } from "@/utils/format";
-import type { Agendamento } from "@/types";
+import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import type { Agendamento, Params } from "@/types";
 
 const STATUS_RESUMO = ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO", "CONCLUIDO", "CANCELADO"];
 
@@ -49,21 +49,24 @@ export default function DashboardPage() {
   const [proximos, setProximos] = useState<Agendamento[]>([]);
   const [carregando, setCarregando] = useState(true);
 
+  // Quem não acompanha a agenda geral vê os números dos próprios agendamentos.
+  const meuId = pode("agendamentos.verTodos") ? null : (perfilVinculado?.id ?? null);
+
   useEffect(() => {
     let cancelado = false;
+    const listar = (params: Params) =>
+      meuId ? agendamentosApi.listarPorUsuario(meuId, params) : agendamentosApi.listarTodos(params);
     async function carregar() {
       setCarregando(true);
       try {
         const [porStatus, usuariosPagina, agendamentosPagina] = await Promise.all([
           Promise.all(
             STATUS_RESUMO.map((status) =>
-              agendamentosApi
-                .listarTodos({ status, page: 0, size: 1 })
-                .then((p) => [status, p.totalElementos] as const)
+              listar({ status, page: 0, size: 1 }).then((p) => [status, p.totalElementos] as const)
             )
           ),
           usuariosApi.listar({ page: 0, size: 1 }),
-          agendamentosApi.listarTodos({ page: 0, size: 6, sort: "dataReuniao,asc" }),
+          listar({ dataInicio: hojeISO(), page: 0, size: 6, sort: "dataReuniao,asc" }),
         ]);
         if (cancelado) return;
         setContagens(Object.fromEntries(porStatus));
@@ -79,7 +82,7 @@ export default function DashboardPage() {
     return () => {
       cancelado = true;
     };
-  }, []);
+  }, [meuId]);
 
   return (
     <>
@@ -126,7 +129,7 @@ export default function DashboardPage() {
                   </CardHeader>
                   <CardFooter className="hidden flex-col items-start gap-1.5 border-t-0 bg-transparent pt-0 text-sm @[220px]/card:flex">
                     <div className="line-clamp-1 flex gap-2 font-medium">{legenda}</div>
-                    <div className="text-muted-foreground">Total de agendamentos neste status</div>
+                    <div className="text-muted-foreground">{meuId ? "Seus agendamentos neste status" : "Total de agendamentos neste status"}</div>
                   </CardFooter>
                 </Card>
               );
@@ -151,7 +154,7 @@ export default function DashboardPage() {
               </CardHeader>
               <CardContent className="px-0">
                 {proximos.length === 0 ? (
-                  <p className="px-4 py-8 text-sm text-muted-foreground">Nenhum agendamento cadastrado ainda.</p>
+                  <p className="px-4 py-8 text-sm text-muted-foreground">Nenhuma reunião marcada a partir de hoje.</p>
                 ) : (
                   <ul className="divide-y border-t">
                     {proximos.map((a) => (

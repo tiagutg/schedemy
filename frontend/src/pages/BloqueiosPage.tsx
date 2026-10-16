@@ -5,6 +5,7 @@ import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
@@ -35,10 +36,17 @@ const FORM_VAZIO = {
 
 export default function BloqueiosPage() {
   const toast = useToast();
+  const { pode, perfilVinculado: eu } = useAuth();
+  // O docente gerencia os próprios bloqueios; a administração, os de qualquer docente.
+  const gerenciaTodos = pode("agenda.gerenciarTodos");
+  const meuId = gerenciaTodos ? null : (eu?.id ?? null);
   const { usuarios: professores } = useUsuariosOptions();
   const docentes = professores.filter((u) => u.tipoUsuario === "PROFESSOR" || u.tipoUsuario === "COORDENADOR");
 
-  const buscar = useCallback((params: Params) => bloqueiosApi.listar(params), []);
+  const buscar = useCallback(
+    (params: Params) => bloqueiosApi.listar(meuId ? { ...params, usuarioId: meuId } : params),
+    [meuId]
+  );
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar);
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -55,7 +63,7 @@ export default function BloqueiosPage() {
 
   function abrirCriacao() {
     setEditando(null);
-    setForm(FORM_VAZIO);
+    setForm({ ...FORM_VAZIO, idUsuario: meuId ? String(meuId) : "" });
     setErro("");
     setModalAberto(true);
   }
@@ -141,8 +149,12 @@ export default function BloqueiosPage() {
   return (
     <>
       <PageHeader
-        titulo="Bloqueios de período"
-        subtitulo="Períodos de indisponibilidade na agenda de professores e coordenadores."
+        titulo={gerenciaTodos ? "Bloqueios de período" : "Meus bloqueios de período"}
+        subtitulo={
+          gerenciaTodos
+            ? "Períodos de indisponibilidade na agenda de professores e coordenadores."
+            : "Períodos em que você não está disponível para reuniões."
+        }
         acao={
           <Button onClick={abrirCriacao}>
             <IconPlus />
@@ -151,16 +163,18 @@ export default function BloqueiosPage() {
         }
       />
 
-      <FiltrosCard>
-        <SelectField
-          label="Professor / coordenador"
-          className="w-full sm:w-64"
-          placeholder="Todos"
-          options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={filtros.usuarioId || ""}
-          onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
-        />
-      </FiltrosCard>
+      {gerenciaTodos && (
+        <FiltrosCard>
+          <SelectField
+            label="Professor / coordenador"
+            className="w-full sm:w-64"
+            placeholder="Todos"
+            options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={filtros.usuarioId || ""}
+            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+          />
+        </FiltrosCard>
+      )}
 
       <DataTable
         carregando={carregando}
@@ -200,14 +214,18 @@ export default function BloqueiosPage() {
         titulo={editando ? "Editar bloqueio" : "Novo bloqueio"}
       >
         <form onSubmit={salvar} className="flex flex-col gap-4">
-          <SelectField
-            label="Professor / coordenador"
-            required
-            placeholder="Selecione…"
-            options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${u.tipoUsuario})` }))}
-            value={form.idUsuario}
-            onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
-          />
+          {gerenciaTodos ? (
+            <SelectField
+              label="Professor / coordenador"
+              required
+              placeholder="Selecione…"
+              options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              value={form.idUsuario}
+              onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
+            />
+          ) : (
+            <TextField label="Professor / coordenador" value={eu?.nome ?? ""} disabled />
+          )}
           <FieldGrid>
             <div className="flex flex-col gap-2">
               <Label htmlFor="bloq-data-inicio">Data de início</Label>

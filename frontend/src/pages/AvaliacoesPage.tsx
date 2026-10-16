@@ -20,9 +20,12 @@ import type { Avaliacao, Pagina, Params } from "@/types";
 
 export default function AvaliacoesPage() {
   const toast = useToast();
-  const { pode } = useAuth();
+  const { pode, perfilVinculado: eu } = useAuth();
   const { usuarios } = useUsuariosOptions("ALUNO");
-  const [alunoId, setAlunoId] = useState("");
+  // O aluno vê e registra as próprias avaliações; docência e administração escolhem o aluno.
+  const verTodas = pode("avaliacoes.verTodas");
+  const [alunoEscolhido, setAlunoEscolhido] = useState("");
+  const alunoId = verTodas ? alunoEscolhido : String(eu?.id ?? "");
 
   const buscar = useCallback(
     (params: Params) =>
@@ -74,8 +77,12 @@ export default function AvaliacoesPage() {
   return (
     <>
       <PageHeader
-        titulo="Avaliações"
-        subtitulo="Avaliações registradas pelos alunos após reuniões concluídas."
+        titulo={verTodas ? "Avaliações" : "Minhas avaliações"}
+        subtitulo={
+          verTodas
+            ? "Avaliações registradas pelos alunos após reuniões concluídas."
+            : "Avaliações que você registrou após reuniões concluídas."
+        }
         acao={
           // RF 24: apenas o aluno avalia a reunião; a coordenação só acompanha.
           pode("avaliacoes.criar") ? (
@@ -87,19 +94,21 @@ export default function AvaliacoesPage() {
         }
       />
 
-      <FiltrosCard>
-        <SelectField
-          label="Aluno"
-          className="w-full sm:w-72"
-          placeholder="Selecione um aluno…"
-          options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={alunoId}
-          onChange={(e) => {
-            setAlunoId(e.target.value);
-            setPaginaAtual(0);
-          }}
-        />
-      </FiltrosCard>
+      {verTodas && (
+        <FiltrosCard>
+          <SelectField
+            label="Aluno"
+            className="w-full sm:w-72"
+            placeholder="Selecione um aluno…"
+            options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={alunoEscolhido}
+            onChange={(e) => {
+              setAlunoEscolhido(e.target.value);
+              setPaginaAtual(0);
+            }}
+          />
+        </FiltrosCard>
+      )}
 
       {!alunoId ? (
         <EmptyState titulo="Selecione um aluno" descricao="Escolha um aluno acima para ver as avaliações registradas por ele." />
@@ -109,6 +118,12 @@ export default function AvaliacoesPage() {
             carregando={carregando}
             chaveLinha={(a) => a.id}
             linhas={linhas}
+            linhaVazia={
+              <EmptyState
+                titulo="Nenhuma avaliação ainda"
+                descricao={verTodas ? "Este aluno ainda não avaliou reuniões." : "Avalie uma reunião depois que ela for concluída."}
+              />
+            }
             colunas={[
               { chave: "agendamento", titulo: "Agendamento", render: (a) => `#${a.idAgendamento}` },
               { chave: "nota", titulo: "Nota", render: (a) => "⭐".repeat(a.nota) || "0" },

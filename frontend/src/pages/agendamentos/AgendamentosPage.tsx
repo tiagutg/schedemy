@@ -22,16 +22,24 @@ import AgendamentoDetailModal from "./AgendamentoDetailModal";
 
 export default function AgendamentosPage() {
   const toast = useToast();
-  const { pode } = useAuth();
+  const { pode, perfilVinculado: eu } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { usuarios } = useUsuariosOptions();
 
-  const buscar = useCallback((params: Params) => {
-    const { usuarioId, ...resto } = params;
-    return usuarioId
-      ? agendamentosApi.listarPorUsuario(usuarioId as string, resto)
-      : agendamentosApi.listarTodos(resto);
-  }, []);
+  // Quem não acompanha a agenda geral vê só os agendamentos de que participa.
+  const verTodos = pode("agendamentos.verTodos");
+  const meuId = verTodos ? null : (eu?.id ?? null);
+
+  const buscar = useCallback(
+    (params: Params) => {
+      const { usuarioId, ...resto } = params;
+      const alvo = meuId ?? usuarioId;
+      return alvo
+        ? agendamentosApi.listarPorUsuario(alvo as string, resto)
+        : agendamentosApi.listarTodos(resto);
+    },
+    [meuId]
+  );
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar, {
     ordenarPor: "dataReuniao,desc",
   });
@@ -79,8 +87,12 @@ export default function AgendamentosPage() {
   return (
     <>
       <PageHeader
-        titulo="Agendamentos"
-        subtitulo="Solicitações e reuniões marcadas entre alunos, professores e coordenadores."
+        titulo={verTodos ? "Agendamentos" : "Meus agendamentos"}
+        subtitulo={
+          verTodos
+            ? "Solicitações e reuniões marcadas entre alunos, professores e coordenadores."
+            : "Reuniões que você organizou ou para as quais foi convidado."
+        }
         acao={
           pode("agendamentos.criar") ? (
             <Button onClick={abrirNovo}>
@@ -92,14 +104,16 @@ export default function AgendamentosPage() {
       />
 
       <FiltrosCard>
-        <SelectField
-          label="Usuário envolvido"
-          className="w-full sm:w-64"
-          placeholder="Todos os agendamentos"
-          options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={filtros.usuarioId || ""}
-          onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
-        />
+        {verTodos && (
+          <SelectField
+            label="Usuário envolvido"
+            className="w-full sm:w-64"
+            placeholder="Todos os agendamentos"
+            options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={filtros.usuarioId || ""}
+            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+          />
+        )}
         <SelectField
           label="Status"
           className="w-full sm:w-52"
