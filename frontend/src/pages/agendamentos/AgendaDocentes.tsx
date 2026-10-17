@@ -116,7 +116,7 @@ export default function AgendaDocentes({
         <p
           className={cn(
             "flex items-start gap-1.5 text-sm",
-            algumAtende ? "text-sage-700" : "text-amber-700"
+            algumAtende ? "text-sage-700" : "text-amber-700 dark:text-amber-300"
           )}
         >
           {algumAtende ? (
@@ -139,7 +139,7 @@ export default function AgendaDocentes({
             {!agenda ? (
               <p className="text-xs text-muted-foreground">Carregando…</p>
             ) : agenda.janelas.length === 0 ? (
-              <p className="text-xs text-amber-700">Não atende neste dia da semana.</p>
+              <p className="text-xs text-amber-700 dark:text-amber-300">Não atende neste dia da semana.</p>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground">
@@ -149,7 +149,7 @@ export default function AgendaDocentes({
                 </p>
                 {duracaoMinutos > 0 &&
                   (agenda.horariosLivres.length === 0 ? (
-                    <p className="text-xs text-amber-700">Sem horários livres para {duracaoMinutos} min neste dia.</p>
+                    <p className="text-xs text-amber-700 dark:text-amber-300">Sem horários livres para {duracaoMinutos} min neste dia.</p>
                   ) : (
                     <div className="flex flex-wrap gap-1">
                       {agenda.horariosLivres
@@ -162,8 +162,8 @@ export default function AgendaDocentes({
                           className={cn(
                             "rounded-md border px-2 py-0.5 text-xs tabular-nums transition-colors",
                             h === horario
-                              ? "border-brand-600 bg-brand-600 text-white"
-                              : "border-brand-200 bg-white text-brand-700 hover:bg-brand-100"
+                              ? "border-primary bg-primary text-primary-foreground"
+                              : "border-brand-200 bg-card text-brand-700 hover:bg-brand-100"
                           )}
                         >
                           {h}

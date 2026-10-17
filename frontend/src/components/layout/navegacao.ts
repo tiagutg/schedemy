@@ -38,5 +38,6 @@ export const ITENS_GESTAO: ItemNav[] = [
 /** Título exibido no cabeçalho para a rota atual. */
 export function tituloDaRota(pathname: string): string {
   const item = [...ITENS_NAV, ...ITENS_GESTAO].find((i) => (i.fim ? pathname === i.to : pathname.startsWith(i.to)));
+  if (pathname.startsWith("/perfil")) return "Meu perfil";
   return item?.rotulo ?? "Schedemy";
 }

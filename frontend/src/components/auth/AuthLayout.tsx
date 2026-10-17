@@ -53,8 +53,8 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
         {/* Véu azul da marca para dar contraste ao conteúdo sobreposto */}
-        <div className="absolute inset-0 bg-brand-950/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-950/90 via-brand-950/45 to-brand-900/25" />
+        <div className="absolute inset-0 bg-marinho-950/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-marinho-950/90 via-marinho-950/45 to-marinho-900/25" />
 
         <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center text-white">
           <img

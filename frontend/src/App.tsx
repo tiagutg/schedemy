@@ -18,6 +18,7 @@ const BloqueiosPage = lazy(() => import("@/pages/BloqueiosPage"));
 const AgendamentosPage = lazy(() => import("@/pages/agendamentos/AgendamentosPage"));
 const AvaliacoesPage = lazy(() => import("@/pages/AvaliacoesPage"));
 const NotificacoesPage = lazy(() => import("@/pages/NotificacoesPage"));
+const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
 
 export default function App() {
   return (
@@ -95,6 +96,7 @@ export default function App() {
                     </RotaProtegida>
                   }
                 />
+                <Route path="perfil" element={<PerfilPage />} />
               </Route>
             </Routes>
             </Suspense>

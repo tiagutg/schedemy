@@ -15,6 +15,7 @@ import { agendamentosApi } from "@/api/agendamentos";
 import { usuariosApi } from "@/api/usuarios";
 import { useAuth } from "@/context/AuthContext";
 import Spinner from "@/components/common/Spinner";
+import AvisoSemDisponibilidade from "./AvisoSemDisponibilidade";
 import ConvitesPendentes from "./ConvitesPendentes";
 import Pill from "@/components/common/Pill";
 import { Badge } from "@/components/ui/badge";
@@ -90,7 +91,7 @@ export default function DashboardPage() {
   return (
     <>
       {/* Faixa de boas-vindas com o azul da marca */}
-      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-brand-900 via-brand-700 to-brand-500 px-5 py-6 text-white shadow-sm sm:px-8 sm:py-8">
+      <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-marinho-900 via-marinho-700 to-marinho-500 px-5 py-6 text-white shadow-sm sm:px-8 sm:py-8">
         <img
           src="/schedemy-logo.png"
           alt=""
@@ -104,6 +105,8 @@ export default function DashboardPage() {
           <p className="max-w-2xl text-sm text-white/85">Visão geral dos agendamentos e cadastros do Schedemy.</p>
         </div>
       </div>
+
+      <AvisoSemDisponibilidade />
 
       <ConvitesPendentes onRespondido={() => setVersao((v) => v + 1)} />
 

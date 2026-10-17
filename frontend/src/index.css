@@ -84,38 +84,63 @@
     --sidebar-ring: #7fb0e0;
 }
 
+/* Tema escuro: fundo azul-noite, sidebar mais escura e azul da marca clareado para contraste. */
 .dark {
-    --background: oklch(0.145 0 0);
-    --foreground: oklch(0.985 0 0);
-    --card: oklch(0.205 0 0);
-    --card-foreground: oklch(0.985 0 0);
-    --popover: oklch(0.205 0 0);
-    --popover-foreground: oklch(0.985 0 0);
-    --primary: oklch(0.922 0 0);
-    --primary-foreground: oklch(0.205 0 0);
-    --secondary: oklch(0.269 0 0);
-    --secondary-foreground: oklch(0.985 0 0);
-    --muted: oklch(0.269 0 0);
-    --muted-foreground: oklch(0.708 0 0);
-    --accent: oklch(0.269 0 0);
-    --accent-foreground: oklch(0.985 0 0);
+    --background: #0b1624;
+    --foreground: #e6eef7;
+    --card: #102033;
+    --card-foreground: #e6eef7;
+    --popover: #102033;
+    --popover-foreground: #e6eef7;
+    --primary: #6ea8e6;
+    --primary-foreground: #0b1624;
+    --secondary: #17304a;
+    --secondary-foreground: #dbe9f7;
+    --muted: #142a40;
+    --muted-foreground: #9db0c4;
+    --accent: #1b3a5c;
+    --accent-foreground: #e6eef7;
     --destructive: oklch(0.704 0.191 22.216);
-    --border: oklch(1 0 0 / 10%);
-    --input: oklch(1 0 0 / 15%);
-    --ring: oklch(0.556 0 0);
-    --chart-1: oklch(0.87 0 0);
-    --chart-2: oklch(0.556 0 0);
-    --chart-3: oklch(0.439 0 0);
-    --chart-4: oklch(0.371 0 0);
-    --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
-    --sidebar-foreground: oklch(0.985 0 0);
-    --sidebar-primary: oklch(0.488 0.243 264.376);
-    --sidebar-primary-foreground: oklch(0.985 0 0);
-    --sidebar-accent: oklch(0.269 0 0);
-    --sidebar-accent-foreground: oklch(0.985 0 0);
-    --sidebar-border: oklch(1 0 0 / 10%);
-    --sidebar-ring: oklch(0.556 0 0);
+    --border: #1f3550;
+    --input: #2a4767;
+    --ring: #6ea8e6;
+    --chart-1: #23466f;
+    --chart-2: #3f72a8;
+    --chart-3: #6ea8e6;
+    --chart-4: #a3c9f1;
+    --chart-5: #d6e6f7;
+    --sidebar: #07101b;
+    --sidebar-foreground: #dbe7f3;
+    --sidebar-primary: #e6eef7;
+    --sidebar-primary-foreground: #0b1624;
+    --sidebar-accent: oklch(1 0 0 / 9%);
+    --sidebar-accent-foreground: #ffffff;
+    --sidebar-border: oklch(1 0 0 / 9%);
+    --sidebar-ring: #6ea8e6;
+
+    /* Tons da marca e de status invertidos: fundos claros viram escuros e textos escuros viram claros. */
+    --color-brand-950: #eef5fc;
+    --color-brand-900: #d6e6f7;
+    --color-brand-700: #a3c9f1;
+    --color-brand-600: #7fb3ea;
+    --color-brand-500: #6ea8e6;
+    --color-brand-300: #3f72a8;
+    --color-brand-200: #234a73;
+    --color-brand-100: #15304d;
+    --color-brand-50: #0f2236;
+
+    --color-ink-950: #f5f7fa;
+    --color-ink-900: #e9eef4;
+    --color-ink-800: #d3dce6;
+    --color-ink-700: #b3c0ce;
+    --color-ink-600: #9aa8b8;
+    --color-ink-100: #1f2c3b;
+    --color-ink-50: #1a2532;
+
+    --color-sage-700: #6fd59a;
+    --color-sage-100: #12301f;
+    --color-brick-700: #ff8a8a;
+    --color-brick-100: #3a1518;
 }
 
 /* Tons de status usados nos badges (agendamento, envio, tipo de usuário). */
@@ -138,6 +163,13 @@
   --color-brand-200: #c9def2;
   --color-brand-100: #e6f0fa;
   --color-brand-50: #f2f7fc;
+
+  /* Azul-marinho fixo: não muda no tema escuro (faixas e selos com texto branco). */
+  --color-marinho-950: #0d1e31;
+  --color-marinho-900: #142e49;
+  --color-marinho-700: #1a416c;
+  --color-marinho-600: #1f5086;
+  --color-marinho-500: #2f6aa8;
 
   --color-sage-700: #15803d;
   --color-sage-100: #ecfdf3;

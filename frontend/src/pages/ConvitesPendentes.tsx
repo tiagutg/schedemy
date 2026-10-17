@@ -78,7 +78,7 @@ export default function ConvitesPendentes({ onRespondido }: { onRespondido?: () 
         <CardTitle className="flex items-center gap-2 text-brand-900">
           <IconMailQuestion className="size-5 text-brand-600" />
           Aguardando sua resposta
-          <Badge className="bg-brand-600 text-white">{convites.length}</Badge>
+          <Badge className="bg-primary text-primary-foreground">{convites.length}</Badge>
         </CardTitle>
         <CardDescription>Reuniões para as quais você foi convidado e ainda não respondeu.</CardDescription>
       </CardHeader>

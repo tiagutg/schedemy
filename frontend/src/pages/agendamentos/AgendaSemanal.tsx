@@ -102,7 +102,7 @@ export default function AgendaSemanal({ buscarSemana, onAbrir, versao }: AgendaS
                 {iso === hoje && " · hoje"}
               </p>
               {doDia.length === 0 ? (
-                <p className="text-xs text-muted-foreground/70">Sem reuniões</p>
+                <p className="text-xs text-muted-foreground">Sem reuniões</p>
               ) : (
                 doDia.map((a) => (
                   <button
