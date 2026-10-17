@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { IconCheck, IconExternalLink, IconX } from "@tabler/icons-react";
+import { useEffect, useState } from "react";
+import { IconCalendarRepeat, IconCheck, IconExternalLink, IconPencil, IconX } from "@tabler/icons-react";
 import Modal from "@/components/common/Modal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormActions from "@/components/common/FormActions";
@@ -7,20 +7,23 @@ import Pill from "@/components/common/Pill";
 import { TextAreaField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
 import { agendamentosApi } from "@/api/agendamentos";
+import { registrosMotivoApi } from "@/api/registrosMotivo";
 import type { ApiError } from "@/api/client";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora } from "@/utils/format";
-import type { Agendamento, Participante } from "@/types";
+import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
+import type { Agendamento, Participante, RegistroMotivo } from "@/types";
 
 interface AgendamentoDetailModalProps {
   agendamento: Agendamento | null;
   onFechar: () => void;
   onAlterado: () => void;
+  /** Abre o formulário para editar ou remarcar este agendamento. */
+  onAlterar?: (modo: "editar" | "remarcar", agendamento: Agendamento) => void;
 }
 
-export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado }: AgendamentoDetailModalProps) {
+export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado, onAlterar }: AgendamentoDetailModalProps) {
   const toast = useToast();
   const { pode, perfilVinculado: eu } = useAuth();
   const [participanteRecusando, setParticipanteRecusando] = useState<Participante | null>(null);
@@ -34,11 +37,39 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   const [modalRemover, setModalRemover] = useState(false);
   const [removendo, setRemovendo] = useState(false);
 
+  // Histórico de motivos (cancelamentos, recusas e edições) registrado pela API (RF 11).
+  const [historico, setHistorico] = useState<RegistroMotivo[]>([]);
+  // Momento de referência para os prazos de edição/remarcação, renovado a cada abertura.
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    if (!agendamento) return;
+    setAgora(Date.now());
+    let cancelado = false;
+    registrosMotivoApi
+      .listarPorAgendamento(agendamento.id, { size: 50, sort: "criadoEm,desc" })
+      .then((p) => !cancelado && setHistorico(p.conteudo))
+      .catch(() => !cancelado && setHistorico([]));
+    return () => {
+      cancelado = true;
+    };
+  }, [agendamento]);
+
   if (!agendamento) return null;
   const a = agendamento;
   // Além do estado do agendamento, cada ação depende da permissão do perfil.
   const podeCancelar =
     a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && pode("agendamentos.cancelar");
+  // Editar e remarcar são do organizador; recepção e administração podem fazer por ele.
+  const podeGerir = a.idOrganizador === eu?.id || pode("agendamentos.organizarPorOutros");
+  const horasAteReuniao = (new Date(`${a.dataReuniao}T${a.horarioInicio}`).getTime() - agora) / 3_600_000;
+  // RN 14: edição direta só de pendentes, com 24 h de antecedência. Fora disso, remarca-se
+  // (nova reunião ligada à original, que é cancelada — exige 1 h de antecedência, RN 05).
+  const podeEditar = podeGerir && a.status === "PENDENTE" && horasAteReuniao >= 24;
+  const podeRemarcar =
+    podeGerir &&
+    !podeEditar &&
+    ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
+    horasAteReuniao >= 1;
   // A remoção definitiva não consta nos casos de uso: fica restrita à administração.
   const podeRemover =
     (a.status === "PENDENTE" || a.status === "CANCELADO") && pode("agendamentos.remover");
@@ -125,6 +156,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               <p className="font-medium">{a.nomeOrganizador}</p>
             </div>
           </div>
+
+          {a.idAgendamentoOrigem && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <IconCalendarRepeat className="size-4 shrink-0" />
+              Remarcação do agendamento #{a.idAgendamentoOrigem}
+            </p>
+          )}
 
           {a.resumo && (
             <div className="flex flex-col gap-1.5">
@@ -232,6 +270,25 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           )}
 
+          {historico.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Histórico</p>
+              <ul className="divide-y rounded-lg border">
+                {historico.map((r) => (
+                  <li key={r.id} className="flex flex-col gap-0.5 px-3.5 py-2.5 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="font-medium">
+                        {rotularEnum(r.tipoOperacao)} · {r.idUsuario === eu?.id ? "você" : r.nomeUsuario}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{formatarDataHora(r.criadoEm)}</span>
+                    </div>
+                    <p className="text-muted-foreground">{r.justificativa}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <FormActions>
             {podeRemover && (
               <Button variant="destructive" onClick={() => setModalRemover(true)}>
@@ -241,6 +298,18 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             {podeCancelar && (
               <Button className="bg-destructive text-white hover:bg-destructive/90" onClick={() => setModalCancelar(true)}>
                 Cancelar agendamento
+              </Button>
+            )}
+            {podeEditar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("editar", a)}>
+                <IconPencil />
+                Editar
+              </Button>
+            )}
+            {podeRemarcar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
+                <IconCalendarRepeat />
+                Remarcar
               </Button>
             )}
             <Button variant="outline" onClick={onFechar}>

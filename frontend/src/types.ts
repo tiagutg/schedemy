@@ -47,8 +47,11 @@ export interface Agendamento {
   horarioFim?: string | null;
   formato: string;
   status: string;
+  idOrganizador: number;
   nomeOrganizador: string;
   duracaoMinutos?: number;
+  /** Agendamento original, quando este é uma remarcação (RF 28). */
+  idAgendamentoOrigem?: number | null;
   participantes: Participante[];
   salaVirtual?: { linkTeams: string } | null;
 }
@@ -102,7 +105,12 @@ export interface Notificacao {
 
 export interface RegistroMotivo {
   id: number;
-  [campo: string]: unknown;
+  idAgendamento: number;
+  idUsuario: number;
+  nomeUsuario: string;
+  tipoOperacao: "CANCELAMENTO" | "SOLICITACAO_EDICAO" | "RECUSA_AGENDAMENTO" | "RECUSA_REMARCACAO" | string;
+  justificativa: string;
+  criadoEm: string;
 }
 
 /** Corpo padronizado de erro da API (ErrorResponseDTO). */

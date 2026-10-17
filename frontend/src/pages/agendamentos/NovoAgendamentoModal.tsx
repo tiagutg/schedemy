@@ -7,13 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { agendamentosApi } from "@/api/agendamentos";
 import { duracoesApi } from "@/api/duracoes";
 import type { ApiError } from "@/api/client";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useAuth } from "@/context/AuthContext";
+import { useToast } from "@/context/ToastContext";
 import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
-import { hojeISO } from "@/utils/format";
-import type { Duracao } from "@/types";
+import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import type { Agendamento, Duracao } from "@/types";
+import AgendaDocentes from "./AgendaDocentes";
 
 const FORM_VAZIO = {
   idOrganizador: "",
@@ -25,36 +28,84 @@ const FORM_VAZIO = {
   resumo: "",
 };
 
+// RN 16: agendamentos com até 30 dias de antecedência.
+const MAX_DIAS_ANTECEDENCIA = 30;
+
+function dataMaxima(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + MAX_DIAS_ANTECEDENCIA);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export type ModoAgendamento = "criar" | "editar" | "remarcar";
+
 interface NovoAgendamentoModalProps {
   aberto: boolean;
   onFechar: () => void;
-  onCriado?: () => void;
-  criarAgendamento: (payload: unknown) => Promise<unknown>;
+  onSalvo?: (agendamento: Agendamento) => void;
+  /**
+   * criar: novo agendamento; editar: altera um agendamento PENDENTE (RN 14);
+   * remarcar: cria um novo ligado ao original (RF 28) e cancela o original.
+   */
+  modo?: ModoAgendamento;
+  base?: Agendamento | null;
 }
 
 // RN 03: recepção e administração não participam das reuniões, só agendam para outros.
 const PODEM_PARTICIPAR = ["ALUNO", "PROFESSOR", "COORDENADOR"];
+const DOCENTES = ["PROFESSOR", "COORDENADOR"];
 
-export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criarAgendamento }: NovoAgendamentoModalProps) {
+const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando: string }> = {
+  criar: { titulo: "Novo agendamento", botao: "Criar agendamento", salvando: "Criando…" },
+  editar: { titulo: "Editar agendamento", botao: "Salvar alterações", salvando: "Salvando…" },
+  remarcar: { titulo: "Remarcar reunião", botao: "Remarcar", salvando: "Remarcando…" },
+};
+
+export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
+  const toast = useToast();
   const { perfilVinculado: eu, pode } = useAuth();
-  // Quem não agenda para outros é sempre o organizador do próprio agendamento.
-  const escolheOrganizador = pode("agendamentos.organizarPorOutros");
+  // Na criação, quem não agenda para outros é sempre o organizador; na edição e
+  // na remarcação o organizador é o do agendamento original.
+  const escolheOrganizador = modo === "criar" && pode("agendamentos.organizarPorOutros");
   const { usuarios: todos } = useUsuariosOptions();
   const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
   const [form, setForm] = useState(FORM_VAZIO);
   const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([]);
+  const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    if (aberto) {
-      duracoesApi.listar(true).then(setDuracoes).catch(() => setDuracoes([]));
+    if (!aberto) return;
+    duracoesApi.listar(true).then(setDuracoes).catch(() => setDuracoes([]));
+    setErro("");
+    setMotivoRemarcacao("");
+    if (base) {
+      setForm({
+        idOrganizador: String(base.idOrganizador),
+        idDuracao: "",
+        dataReuniao: base.dataReuniao,
+        horarioInicio: formatarHora(base.horarioInicio),
+        formato: base.formato,
+        topico: base.topico,
+        resumo: base.resumo ?? "",
+      });
+      setConvidadosSelecionados(
+        base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario))
+      );
+    } else {
       setForm({ ...FORM_VAZIO, idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") });
       setConvidadosSelecionados([]);
-      setErro("");
     }
-  }, [aberto, escolheOrganizador, eu?.id]);
+  }, [aberto, base, escolheOrganizador, eu?.id]);
+
+  // A resposta do agendamento traz só os minutos; a duração é casada depois que a lista chega.
+  useEffect(() => {
+    if (!aberto || !base?.duracaoMinutos || duracoes.length === 0) return;
+    const duracao = duracoes.find((d) => d.minutos === base.duracaoMinutos);
+    if (duracao) setForm((atual) => (atual.idDuracao ? atual : { ...atual, idDuracao: String(duracao.id) }));
+  }, [aberto, base, duracoes]);
 
   function alternarConvidado(id: string) {
     setConvidadosSelecionados((atual) =>
@@ -65,6 +116,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
   const candidatosConvidado = form.idOrganizador
     ? usuarios.filter((u) => String(u.id) !== form.idOrganizador)
     : [];
+  const docentesConvidados = usuarios
+    .filter((u) => convidadosSelecionados.includes(String(u.id)) && DOCENTES.includes(u.tipoUsuario))
+    .map((u) => ({ id: u.id, nome: u.nome }));
+  const duracaoMinutos = duracoes.find((d) => String(d.id) === form.idDuracao)?.minutos ?? 0;
+  const textos = TITULOS[modo];
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -72,22 +128,43 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     if (!form.idDuracao) return setErro("Selecione a duração da reunião.");
     if (convidadosSelecionados.length === 0) return setErro("Selecione ao menos um convidado.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
+    if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
 
     setSalvando(true);
     setErro("");
+    const payload = {
+      idOrganizador: Number(form.idOrganizador),
+      idsConvidados: convidadosSelecionados.map(Number),
+      idDuracao: Number(form.idDuracao),
+      dataReuniao: form.dataReuniao,
+      horarioInicio: `${form.horarioInicio}:00`,
+      formato: form.formato,
+      topico: form.topico,
+      resumo: form.resumo || null,
+      idAgendamentoOrigem: modo === "remarcar" ? base?.id : undefined,
+    };
     try {
-      const payload = {
-        idOrganizador: Number(form.idOrganizador),
-        idsConvidados: convidadosSelecionados.map(Number),
-        idDuracao: Number(form.idDuracao),
-        dataReuniao: form.dataReuniao,
-        horarioInicio: `${form.horarioInicio}:00`,
-        formato: form.formato,
-        topico: form.topico,
-        resumo: form.resumo || null,
-      };
-      await criarAgendamento(payload);
-      onCriado?.();
+      let salvo: Agendamento;
+      if (modo === "editar" && base) {
+        salvo = await agendamentosApi.atualizar(base.id, payload);
+      } else {
+        salvo = await agendamentosApi.criar(payload);
+      }
+      // Na remarcação, a reunião original é cancelada com o motivo informado.
+      if (modo === "remarcar" && base && eu) {
+        try {
+          await agendamentosApi.cancelar(base.id, {
+            idUsuario: eu.id,
+            motivo: `Remarcada para ${formatarData(form.dataReuniao)} às ${form.horarioInicio}: ${motivoRemarcacao.trim()}`,
+            confirmar: true,
+          });
+        } catch (e2) {
+          toast.erro(
+            `A nova reunião foi criada, mas não foi possível cancelar a original: ${(e2 as ApiError).message}`
+          );
+        }
+      }
+      onSalvo?.(salvo);
     } catch (e2) {
       setErro((e2 as ApiError).message);
     } finally {
@@ -95,8 +172,15 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     }
   }
 
+  const subtitulo =
+    modo === "criar"
+      ? "RN 01 a RN 18 são validadas pelo back-end."
+      : modo === "editar"
+        ? "Só agendamentos pendentes podem ser editados, com 24 h de antecedência (RN 14). Os convidados terão que responder de novo."
+        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
+
   return (
-    <Modal aberto={aberto} onFechar={onFechar} titulo="Novo agendamento" subtitulo="RN 01 a RN 18 são validadas pelo back-end." largura="max-w-2xl">
+    <Modal aberto={aberto} onFechar={onFechar} titulo={textos.titulo} subtitulo={subtitulo} largura="max-w-2xl">
       <form onSubmit={salvar} className="flex flex-col gap-4">
         <FieldGrid>
           {escolheOrganizador ? (
@@ -112,7 +196,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
               }}
             />
           ) : (
-            <TextField label="Organizador" value={eu?.nome ?? ""} disabled />
+            <TextField label="Organizador" value={base?.nomeOrganizador ?? eu?.nome ?? ""} disabled />
           )}
           <SelectField
             label="Duração"
@@ -154,6 +238,8 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             <Input
               id="novo-data"
               type="date"
+              min={hojeISO()}
+              max={dataMaxima()}
               value={form.dataReuniao}
               onChange={(e) => setForm({ ...form, dataReuniao: e.target.value })}
               required
@@ -164,6 +250,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             <Input
               id="novo-horario"
               type="time"
+              step={300}
               value={form.horarioInicio}
               onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
               required
@@ -172,11 +259,26 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
           <SelectField
             label="Formato"
             required
-            options={FORMATOS_REUNIAO}
+            options={FORMATOS_REUNIAO.map((f) => ({ valor: f, rotulo: rotularEnum(f) }))}
             value={form.formato}
             onChange={(e) => setForm({ ...form, formato: e.target.value })}
           />
         </FieldGrid>
+
+        {docentesConvidados.length > 0 ? (
+          <AgendaDocentes
+            docentes={docentesConvidados}
+            dataISO={form.dataReuniao}
+            duracaoMinutos={duracaoMinutos}
+            horario={form.horarioInicio}
+            ignorarAgendamentoId={modo === "editar" ? base?.id : null}
+            onEscolherHorario={(horarioInicio) => setForm((atual) => ({ ...atual, horarioInicio }))}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Convide um professor ou coordenador para ver os horários em que ele atende.
+          </p>
+        )}
 
         <TextField
           label="Tópico"
@@ -191,6 +293,15 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
           value={form.resumo}
           onChange={(e) => setForm({ ...form, resumo: e.target.value })}
         />
+        {modo === "remarcar" && (
+          <TextAreaField
+            label="Motivo da remarcação"
+            required
+            placeholder="Ex.: Conflito com prova"
+            value={motivoRemarcacao}
+            onChange={(e) => setMotivoRemarcacao(e.target.value)}
+          />
+        )}
 
         {erro && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{erro}</p>
@@ -201,7 +312,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             Cancelar
           </Button>
           <Button type="submit" disabled={salvando}>
-            {salvando ? "Criando…" : "Criar agendamento"}
+            {salvando ? textos.salvando : textos.botao}
           </Button>
         </FormActions>
       </form>

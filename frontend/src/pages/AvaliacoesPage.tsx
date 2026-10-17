@@ -1,5 +1,6 @@
 import { useCallback, useState, type FormEvent } from "react";
 import { IconPlus } from "@tabler/icons-react";
+import { agendamentosApi } from "@/api/agendamentos";
 import { avaliacoesApi } from "@/api/avaliacoes";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -13,10 +14,10 @@ import Modal from "@/components/common/Modal";
 import EmptyState from "@/components/common/EmptyState";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
-import { FieldError, SelectField, TextField, TextAreaField } from "@/components/common/fields";
+import { FieldError, SelectField, TextAreaField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
-import { formatarDataHora } from "@/utils/format";
-import type { Avaliacao, Pagina, Params } from "@/types";
+import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
+import type { Agendamento, Avaliacao, Pagina, Params } from "@/types";
 
 export default function AvaliacoesPage() {
   const toast = useToast();
@@ -44,17 +45,33 @@ export default function AvaliacoesPage() {
   });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // Reuniões concluídas do aluno que ele ainda não avaliou (null = carregando).
+  const [paraAvaliar, setParaAvaliar] = useState<Agendamento[] | null>(null);
 
-  function abrirCriacao() {
+  async function abrirCriacao() {
     if (!alunoId) return toast.info("Selecione um aluno para avaliar uma reunião.");
     setForm({ idAgendamento: "", nota: 5, comentario: "" });
     setErro("");
+    setParaAvaliar(null);
     setModalAberto(true);
+    try {
+      const [concluidas, avaliadas] = await Promise.all([
+        agendamentosApi.listarPorUsuario(alunoId, { status: "CONCLUIDO", size: 100, sort: "dataReuniao,desc" }),
+        avaliacoesApi.listarPorAluno(alunoId, { size: 200 }),
+      ]);
+      const jaAvaliadas = new Set(avaliadas.conteudo.map((av) => av.idAgendamento));
+      const pendentes = concluidas.conteudo.filter((ag) => !jaAvaliadas.has(ag.id));
+      setParaAvaliar(pendentes);
+      if (pendentes.length === 1) setForm((atual) => ({ ...atual, idAgendamento: String(pendentes[0].id) }));
+    } catch (e) {
+      setParaAvaliar([]);
+      setErro((e as ApiError).message);
+    }
   }
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!form.idAgendamento) return setErro("Informe o ID do agendamento concluído.");
+    if (!form.idAgendamento) return setErro("Escolha a reunião que você quer avaliar.");
     setSalvando(true);
     try {
       await avaliacoesApi.criar({
@@ -137,13 +154,26 @@ export default function AvaliacoesPage() {
 
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Nova avaliação" largura="max-w-md">
         <form onSubmit={salvar} className="flex flex-col gap-4">
-          <TextField
-            label="ID do agendamento (concluído)"
-            type="number"
-            required
-            value={form.idAgendamento}
-            onChange={(e) => setForm({ ...form, idAgendamento: e.target.value })}
-          />
+          {paraAvaliar === null ? (
+            <p className="py-2 text-sm text-muted-foreground">Carregando reuniões concluídas…</p>
+          ) : paraAvaliar.length === 0 ? (
+            <EmptyState
+              titulo="Nada para avaliar"
+              descricao="Não há reuniões concluídas aguardando avaliação. Elas aparecem aqui depois que a reunião acontece."
+            />
+          ) : (
+            <SelectField
+              label="Reunião"
+              required
+              placeholder="Selecione a reunião…"
+              options={paraAvaliar.map((ag) => ({
+                valor: ag.id,
+                rotulo: `${formatarData(ag.dataReuniao)} ${formatarHora(ag.horarioInicio)} · ${ag.topico}`,
+              }))}
+              value={form.idAgendamento}
+              onChange={(e) => setForm({ ...form, idAgendamento: e.target.value })}
+            />
+          )}
           <SelectField
             label="Nota"
             options={[0, 1, 2, 3, 4, 5].map((n) => ({ valor: n, rotulo: `${n} estrela${n === 1 ? "" : "s"}` }))}
@@ -155,13 +185,14 @@ export default function AvaliacoesPage() {
             value={form.comentario}
             onChange={(e) => setForm({ ...form, comentario: e.target.value })}
             placeholder="Conte como foi o atendimento"
+            maxLength={200}
           />
           {erro && <FieldError>{erro}</FieldError>}
           <FormActions>
             <Button type="button" variant="outline" onClick={() => setModalAberto(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={salvando}>
+            <Button type="submit" disabled={salvando || !paraAvaliar?.length}>
               {salvando ? "Enviando…" : "Registrar avaliação"}
             </Button>
           </FormActions>

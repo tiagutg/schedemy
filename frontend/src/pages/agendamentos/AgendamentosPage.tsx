@@ -17,7 +17,7 @@ import { Button } from "@/components/ui/button";
 import { STATUS_AGENDAMENTO, CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
 import { formatarData, formatarHora } from "@/utils/format";
 import type { Agendamento, Params } from "@/types";
-import NovoAgendamentoModal from "./NovoAgendamentoModal";
+import NovoAgendamentoModal, { type ModoAgendamento } from "./NovoAgendamentoModal";
 import AgendamentoDetailModal from "./AgendamentoDetailModal";
 
 export default function AgendamentosPage() {
@@ -50,6 +50,8 @@ export default function AgendamentosPage() {
   // O link "?novo=1" (sidebar e painel) também abre o modal com a tela já montada.
   const abertoPorLink = searchParams.get("novo") === "1" && pode("agendamentos.criar");
   const [detalhe, setDetalhe] = useState<Agendamento | null>(null);
+  // Edição/remarcação abertas a partir do detalhe.
+  const [alteracao, setAlteracao] = useState<{ modo: ModoAgendamento; base: Agendamento } | null>(null);
 
   function abrirNovo() {
     setModalNovoAberto(true);
@@ -64,6 +66,12 @@ export default function AgendamentosPage() {
   function aoCriar() {
     toast.sucesso("Agendamento criado com sucesso!");
     fecharNovo();
+    recarregar();
+  }
+  function aoAlterar(salvo: Agendamento) {
+    toast.sucesso(alteracao?.modo === "remarcar" ? "Reunião remarcada." : "Agendamento atualizado.");
+    setAlteracao(null);
+    setDetalhe(salvo);
     recarregar();
   }
 
@@ -164,14 +172,22 @@ export default function AgendamentosPage() {
       />
       <Pagination pagina={pagina} onMudarPagina={setPaginaAtual} />
 
+      <NovoAgendamentoModal aberto={modalNovoAberto || abertoPorLink} onFechar={fecharNovo} onSalvo={aoCriar} />
+
       <NovoAgendamentoModal
-        aberto={modalNovoAberto || abertoPorLink}
-        onFechar={fecharNovo}
-        onCriado={aoCriar}
-        criarAgendamento={agendamentosApi.criar}
+        aberto={!!alteracao}
+        modo={alteracao?.modo}
+        base={alteracao?.base}
+        onFechar={() => setAlteracao(null)}
+        onSalvo={aoAlterar}
       />
 
-      <AgendamentoDetailModal agendamento={detalhe} onFechar={() => setDetalhe(null)} onAlterado={recarregarDetalhe} />
+      <AgendamentoDetailModal
+        agendamento={alteracao ? null : detalhe}
+        onFechar={() => setDetalhe(null)}
+        onAlterado={recarregarDetalhe}
+        onAlterar={(modo, base) => setAlteracao({ modo, base })}
+      />
     </>
   );
 }
