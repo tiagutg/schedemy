@@ -329,7 +329,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
           />
           <p className="text-sm text-muted-foreground">
             O cancelamento fica registrado em seu nome e exige no mínimo 1 hora de antecedência em relação ao
-            horário da reunião (RN 05).
+            horário da reunião.
           </p>
           <FormActions>
             <Button variant="outline" onClick={() => setModalCancelar(false)}>

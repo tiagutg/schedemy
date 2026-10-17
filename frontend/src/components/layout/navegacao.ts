@@ -39,5 +39,5 @@ export const ITENS_GESTAO: ItemNav[] = [
 export function tituloDaRota(pathname: string): string {
   const item = [...ITENS_NAV, ...ITENS_GESTAO].find((i) => (i.fim ? pathname === i.to : pathname.startsWith(i.to)));
   if (pathname.startsWith("/perfil")) return "Meu perfil";
-  return item?.rotulo ?? "Schedemy";
+  return item?.rotulo ?? "Página não encontrada";
 }

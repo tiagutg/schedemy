@@ -90,3 +90,11 @@ test("o tema escolhido no menu é aplicado e lembrado", async ({ page }) => {
   await page.getByRole("menuitemradio", { name: "Claro" }).click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
 });
+
+test("endereço inexistente mostra a página de não encontrada", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.goto("/agendamento-que-nao-existe");
+  await expect(page.getByRole("heading", { name: "Página não encontrada", level: 2 })).toBeVisible();
+  await page.getByRole("link", { name: "Voltar ao painel" }).click();
+  await expect(page).toHaveURL("/");
+});

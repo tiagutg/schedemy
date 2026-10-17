@@ -19,6 +19,7 @@ const AgendamentosPage = lazy(() => import("@/pages/agendamentos/AgendamentosPag
 const AvaliacoesPage = lazy(() => import("@/pages/AvaliacoesPage"));
 const NotificacoesPage = lazy(() => import("@/pages/NotificacoesPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
+const NaoEncontradaPage = lazy(() => import("@/pages/NaoEncontradaPage"));
 
 export default function App() {
   return (
@@ -97,6 +98,8 @@ export default function App() {
                   }
                 />
                 <Route path="perfil" element={<PerfilPage />} />
+                {/* Qualquer outro endereço: página de não encontrada dentro do painel */}
+                <Route path="*" element={<NaoEncontradaPage />} />
               </Route>
             </Routes>
             </Suspense>

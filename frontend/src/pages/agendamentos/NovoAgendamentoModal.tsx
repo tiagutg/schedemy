@@ -181,9 +181,9 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
 
   const subtitulo =
     modo === "criar"
-      ? "RN 01 a RN 18 são validadas pelo back-end."
+      ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade dos professores."
       : modo === "editar"
-        ? "Só agendamentos pendentes podem ser editados, com 24 h de antecedência (RN 14). Os convidados terão que responder de novo."
+        ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
         : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
 
   return (
