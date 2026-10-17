@@ -1,0 +1,39 @@
+# Verifica o front-end a cada push e pull request que mexa nele:
+# lint, checagem de tipos e build de produção.
+# Os testes de ponta a ponta (npm run test:e2e) ficam de fora porque
+# precisam da API e do MySQL rodando.
+name: Front-end
+
+on:
+  push:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+  pull_request:
+    paths:
+      - "frontend/**"
+      - ".github/workflows/frontend.yml"
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependências
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tipos e build de produção
+        run: npm run build
