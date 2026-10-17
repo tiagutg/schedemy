@@ -59,3 +59,34 @@ test("sessão com senha que deixou de valer volta para o login", async ({ page }
   await expect(page).toHaveURL(/\/login$/);
   await expect(page.getByText("Sua sessão expirou. Entre novamente.")).toBeVisible();
 });
+
+test("professor sem horários cadastrados é avisado no painel", async ({ page }) => {
+  // Éberte não tem disponibilidade no dump.
+  await entrar(page, { email: "ebert.professor@unisales.edu.br", senha: "Senha123@" });
+  const aviso = page.getByRole("status").filter({ hasText: "Você ainda não cadastrou seus horários" });
+  await expect(aviso).toBeVisible();
+  await aviso.getByRole("link", { name: "Cadastrar horários" }).click();
+  await expect(page.getByRole("heading", { name: "Minhas disponibilidades" })).toBeVisible();
+});
+
+test("meu perfil mostra os dados do usuário logado", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitem", { name: "Meu perfil" }).click();
+  await expect(page.getByRole("heading", { name: "Meu perfil", level: 2 })).toBeVisible();
+  await expect(page.getByText(CONTAS.aluno.email)).toBeVisible();
+  await expect(page.locator("main").getByText("Aluno", { exact: true })).toBeVisible();
+});
+
+test("o tema escolhido no menu é aplicado e lembrado", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitemradio", { name: "Escuro" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.reload();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitemradio", { name: "Claro" }).click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+});
