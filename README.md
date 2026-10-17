@@ -124,6 +124,19 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `npm run build` | Checa os tipos e gera a versão de produção em `dist/` |
 | `npm run preview` | Serve localmente a versão de produção |
 | `npm run lint` | Analisa o código com o oxlint |
+| `npm run test:e2e` | Roda os testes de ponta a ponta (Playwright) |
+
+### Testes de ponta a ponta
+
+Os testes em `frontend/e2e/` usam o painel como um usuário faria: login por perfil, criar, editar, aceitar e remarcar uma reunião, visão semanal e sessão expirada.
+
+Antes de rodar:
+
+1. Importe o `db/dump_schedemy.sql` (os testes usam as contas de teste).
+2. Deixe a API rodando em `http://localhost:8080`.
+3. Tenha o Google Chrome instalado (os testes usam o navegador da máquina).
+
+O servidor do front-end é iniciado pelos próprios testes, se ainda não estiver no ar. Os agendamentos criados durante os testes são removidos no final.
 
 ---
 
