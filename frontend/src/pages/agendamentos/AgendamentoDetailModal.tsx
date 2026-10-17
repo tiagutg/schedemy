@@ -39,11 +39,10 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
 
   // Histórico de motivos (cancelamentos, recusas e edições) registrado pela API (RF 11).
   const [historico, setHistorico] = useState<RegistroMotivo[]>([]);
-  // Momento de referência para os prazos de edição/remarcação, renovado a cada abertura.
-  const [agora, setAgora] = useState(() => Date.now());
+  // Momento de referência para os prazos de edição/remarcação (a página recria o modal por agendamento).
+  const [agora] = useState(() => Date.now());
   useEffect(() => {
     if (!agendamento) return;
-    setAgora(Date.now());
     let cancelado = false;
     registrosMotivoApi
       .listarPorAgendamento(agendamento.id, { size: 50, sort: "criadoEm,desc" })

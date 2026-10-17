@@ -33,19 +33,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [perfilVinculado, setPerfilVinculado] = useState<Usuario | null>(null);
   const [carregando, setCarregando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
-  // Enquanto o cadastro do usuário logado não chega, o perfil ainda é desconhecido.
-  const [buscandoPerfil, setBuscandoPerfil] = useState(() => !!getStoredAuth());
+  // Sessão para a qual a busca do cadastro já terminou (com ou sem sucesso).
+  const [perfilResolvidoPara, setPerfilResolvidoPara] = useState<string | null>(null);
   const toast = useToast();
+
+  const chaveSessao = auth ? `${auth.username}|${auth.usuarioId ?? ""}` : null;
+  const perfilEmDia = !!auth?.usuarioId && perfilVinculado?.id === auth.usuarioId;
+  // Enquanto o cadastro do usuário logado não chega, o perfil ainda é desconhecido.
+  const buscandoPerfil = !!auth && !perfilEmDia && perfilResolvidoPara !== chaveSessao;
 
   // Ao abrir com uma sessão salva, recarrega o cadastro do usuário logado,
   // pelo id guardado ou, em sessões antigas sem id, pelo e-mail do login.
   useEffect(() => {
-    if (!auth || (auth.usuarioId && perfilVinculado?.id === auth.usuarioId)) {
-      setBuscandoPerfil(false);
-      return;
-    }
+    if (!auth || (auth.usuarioId && perfilVinculado?.id === auth.usuarioId)) return;
     let cancelado = false;
-    setBuscandoPerfil(true);
+    const chave = `${auth.username}|${auth.usuarioId ?? ""}`;
     const busca = auth.usuarioId
       ? usuariosApi.buscarPorId(auth.usuarioId)
       : usuariosApi.buscarPorEmail(auth.username);
@@ -60,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch(() => !cancelado && setPerfilVinculado(null))
-      .finally(() => !cancelado && setBuscandoPerfil(false));
+      .finally(() => !cancelado && setPerfilResolvidoPara(chave));
     return () => {
       cancelado = true;
     };

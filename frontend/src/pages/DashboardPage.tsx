@@ -15,6 +15,7 @@ import { agendamentosApi } from "@/api/agendamentos";
 import { usuariosApi } from "@/api/usuarios";
 import { useAuth } from "@/context/AuthContext";
 import Spinner from "@/components/common/Spinner";
+import ConvitesPendentes from "./ConvitesPendentes";
 import Pill from "@/components/common/Pill";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,8 @@ export default function DashboardPage() {
   const [totalUsuarios, setTotalUsuarios] = useState<number | null>(null);
   const [proximos, setProximos] = useState<Agendamento[]>([]);
   const [carregando, setCarregando] = useState(true);
+  // Incrementada quando um convite é respondido, para atualizar os números.
+  const [versao, setVersao] = useState(0);
 
   // Quem não acompanha a agenda geral vê os números dos próprios agendamentos.
   const meuId = pode("agendamentos.verTodos") ? null : (perfilVinculado?.id ?? null);
@@ -82,7 +85,7 @@ export default function DashboardPage() {
     return () => {
       cancelado = true;
     };
-  }, [meuId]);
+  }, [meuId, versao]);
 
   return (
     <>
@@ -101,6 +104,8 @@ export default function DashboardPage() {
           <p className="max-w-2xl text-sm text-white/85">Visão geral dos agendamentos e cadastros do Schedemy.</p>
         </div>
       </div>
+
+      <ConvitesPendentes onRespondido={() => setVersao((v) => v + 1)} />
 
       {carregando ? (
         <div className="flex justify-center py-16 text-muted-foreground">

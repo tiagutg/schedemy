@@ -41,16 +41,22 @@ export default function AgendaDocentes({
   ignorarAgendamentoId,
   onEscolherHorario,
 }: AgendaDocentesProps) {
-  const [dados, setDados] = useState<Record<number, DadosDocente>>({});
-  const [carregando, setCarregando] = useState(false);
   const [expandidos, setExpandidos] = useState<Record<number, boolean>>({});
   const chaveDocentes = docentes.map((d) => d.id).join(",");
+  // Guarda para quais docentes/data os dados foram carregados; enquanto não bate, está carregando.
+  const chave = `${chaveDocentes}|${dataISO}`;
+  const [resultado, setResultado] = useState<{ chave: string; dados: Record<number, DadosDocente> }>({
+    chave: "",
+    dados: {},
+  });
+  const carregando = resultado.chave !== chave;
+  const dados = resultado.dados;
 
   useEffect(() => {
     if (!dataISO || !chaveDocentes) return;
     let cancelado = false;
     const ids = chaveDocentes.split(",").map(Number);
-    setCarregando(true);
+    const chaveBusca = `${chaveDocentes}|${dataISO}`;
     Promise.all(
       ids.map(async (id) => {
         const [disponibilidades, bloqueios, agendamentos] = await Promise.all([
@@ -68,9 +74,8 @@ export default function AgendaDocentes({
         return [id, { disponibilidades, bloqueios, agendamentos }] as const;
       })
     )
-      .then((resultado) => !cancelado && setDados(Object.fromEntries(resultado)))
-      .catch(() => !cancelado && setDados({}))
-      .finally(() => !cancelado && setCarregando(false));
+      .then((porDocente) => !cancelado && setResultado({ chave: chaveBusca, dados: Object.fromEntries(porDocente) }))
+      .catch(() => !cancelado && setResultado({ chave: chaveBusca, dados: {} }));
     return () => {
       cancelado = true;
     };
@@ -101,7 +106,7 @@ export default function AgendaDocentes({
   const semPermissaoBloqueios = agendas.some((a) => a.info && a.info.bloqueios === null);
 
   return (
-    <div className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
+    <section aria-label="Agenda dos docentes" className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm font-medium text-brand-900">Agenda dos docentes em {formatarData(dataISO)}</p>
         {carregando && <Spinner className="size-4 text-brand-700" />}
@@ -188,6 +193,6 @@ export default function AgendaDocentes({
           Bloqueios de período dos docentes não aparecem para o seu perfil; o horário ainda pode estar bloqueado.
         </p>
       )}
-    </div>
+    </section>
   );
 }

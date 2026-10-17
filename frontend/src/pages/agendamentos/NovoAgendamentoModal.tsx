@@ -17,6 +17,7 @@ import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domai
 import { formatarData, formatarHora, hojeISO } from "@/utils/format";
 import type { Agendamento, Duracao } from "@/types";
 import AgendaDocentes from "./AgendaDocentes";
+import AvisosAgendamento from "./AvisosAgendamento";
 
 const FORM_VAZIO = {
   idOrganizador: "",
@@ -70,42 +71,42 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   const { usuarios: todos } = useUsuariosOptions();
   const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
-  const [form, setForm] = useState(FORM_VAZIO);
-  const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([]);
+  // O formulário nasce preenchido; a página recria o componente (key) a cada abertura.
+  const [form, setForm] = useState(() =>
+    base
+      ? {
+          idOrganizador: String(base.idOrganizador),
+          idDuracao: "",
+          dataReuniao: base.dataReuniao,
+          horarioInicio: formatarHora(base.horarioInicio),
+          formato: base.formato,
+          topico: base.topico,
+          resumo: base.resumo ?? "",
+        }
+      : { ...FORM_VAZIO, idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") }
+  );
+  const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>(() =>
+    base ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
+  );
   const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
-    duracoesApi.listar(true).then(setDuracoes).catch(() => setDuracoes([]));
-    setErro("");
-    setMotivoRemarcacao("");
-    if (base) {
-      setForm({
-        idOrganizador: String(base.idOrganizador),
-        idDuracao: "",
-        dataReuniao: base.dataReuniao,
-        horarioInicio: formatarHora(base.horarioInicio),
-        formato: base.formato,
-        topico: base.topico,
-        resumo: base.resumo ?? "",
-      });
-      setConvidadosSelecionados(
-        base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario))
-      );
-    } else {
-      setForm({ ...FORM_VAZIO, idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") });
-      setConvidadosSelecionados([]);
-    }
-  }, [aberto, base, escolheOrganizador, eu?.id]);
+    let cancelado = false;
+    duracoesApi
+      .listar(true)
+      .then((lista) => !cancelado && setDuracoes(lista))
+      .catch(() => !cancelado && setDuracoes([]));
+    return () => {
+      cancelado = true;
+    };
+  }, [aberto]);
 
-  // A resposta do agendamento traz só os minutos; a duração é casada depois que a lista chega.
-  useEffect(() => {
-    if (!aberto || !base?.duracaoMinutos || duracoes.length === 0) return;
-    const duracao = duracoes.find((d) => d.minutos === base.duracaoMinutos);
-    if (duracao) setForm((atual) => (atual.idDuracao ? atual : { ...atual, idDuracao: String(duracao.id) }));
-  }, [aberto, base, duracoes]);
+  // A resposta do agendamento traz só os minutos; sem escolha explícita, casa com a lista de durações.
+  const idDuracao =
+    form.idDuracao || (base ? String(duracoes.find((d) => d.minutos === base.duracaoMinutos)?.id ?? "") : "");
 
   function alternarConvidado(id: string) {
     setConvidadosSelecionados((atual) =>
@@ -119,13 +120,19 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   const docentesConvidados = usuarios
     .filter((u) => convidadosSelecionados.includes(String(u.id)) && DOCENTES.includes(u.tipoUsuario))
     .map((u) => ({ id: u.id, nome: u.nome }));
-  const duracaoMinutos = duracoes.find((d) => String(d.id) === form.idDuracao)?.minutos ?? 0;
+  const duracaoMinutos = duracoes.find((d) => String(d.id) === idDuracao)?.minutos ?? 0;
+  // Os docentes convidados já têm a agenda no painel; os avisos cobrem os demais envolvidos.
+  const organizadorUsuario = todos.find((u) => String(u.id) === form.idOrganizador) ?? null;
+  const pessoasSemPainel = [
+    ...(organizadorUsuario ? [organizadorUsuario] : []),
+    ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && !DOCENTES.includes(u.tipoUsuario)),
+  ].map((u) => ({ id: u.id, nome: u.nome }));
   const textos = TITULOS[modo];
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.idOrganizador) return setErro("Selecione o organizador do agendamento.");
-    if (!form.idDuracao) return setErro("Selecione a duração da reunião.");
+    if (!idDuracao) return setErro("Selecione a duração da reunião.");
     if (convidadosSelecionados.length === 0) return setErro("Selecione ao menos um convidado.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
     if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
@@ -135,7 +142,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     const payload = {
       idOrganizador: Number(form.idOrganizador),
       idsConvidados: convidadosSelecionados.map(Number),
-      idDuracao: Number(form.idDuracao),
+      idDuracao: Number(idDuracao),
       dataReuniao: form.dataReuniao,
       horarioInicio: `${form.horarioInicio}:00`,
       formato: form.formato,
@@ -203,7 +210,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             required
             placeholder="Selecione…"
             options={duracoes.map((d) => ({ valor: d.id, rotulo: `${d.minutos} minutos` }))}
-            value={form.idDuracao}
+            value={idDuracao}
             onChange={(e) => setForm({ ...form, idDuracao: e.target.value })}
           />
         </FieldGrid>
@@ -279,6 +286,22 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             Convide um professor ou coordenador para ver os horários em que ele atende.
           </p>
         )}
+
+        <AvisosAgendamento
+          pessoas={pessoasSemPainel}
+          organizador={
+            organizadorUsuario && {
+              id: organizadorUsuario.id,
+              ehAluno: organizadorUsuario.tipoUsuario === "ALUNO",
+              ehEu: organizadorUsuario.id === eu?.id,
+            }
+          }
+          dataISO={form.dataReuniao}
+          horario={form.horarioInicio}
+          duracaoMinutos={duracaoMinutos}
+          ignorarAgendamentoId={modo === "editar" ? base?.id : null}
+          verificarLimite={modo !== "editar"}
+        />
 
         <TextField
           label="Tópico"

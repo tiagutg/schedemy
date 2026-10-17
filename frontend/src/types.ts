@@ -54,6 +54,7 @@ export interface Agendamento {
   idAgendamentoOrigem?: number | null;
   participantes: Participante[];
   salaVirtual?: { linkTeams: string } | null;
+  criadoEm?: string;
 }
 
 export interface Duracao {

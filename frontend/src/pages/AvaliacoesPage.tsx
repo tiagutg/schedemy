@@ -1,4 +1,4 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { IconPlus } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
 import { avaliacoesApi } from "@/api/avaliacoes";
@@ -36,6 +36,20 @@ export default function AvaliacoesPage() {
     [alunoId]
   );
   const { pagina, linhas, carregando, setPaginaAtual, recarregar } = usePaginatedList(buscar, { ordenarPor: "criadoEm,desc" });
+
+  // Reuniões concluídas do aluno, para mostrar tópico e data em vez do número do agendamento.
+  const [reunioes, setReunioes] = useState<Record<number, Agendamento>>({});
+  useEffect(() => {
+    if (!alunoId) return;
+    let cancelado = false;
+    agendamentosApi
+      .listarPorUsuario(alunoId, { status: "CONCLUIDO", size: 200 })
+      .then((p) => !cancelado && setReunioes(Object.fromEntries(p.conteudo.map((ag) => [ag.id, ag]))))
+      .catch(() => !cancelado && setReunioes({}));
+    return () => {
+      cancelado = true;
+    };
+  }, [alunoId]);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [form, setForm] = useState<{ idAgendamento: string; nota: number | string; comentario: string }>({
@@ -142,7 +156,19 @@ export default function AvaliacoesPage() {
               />
             }
             colunas={[
-              { chave: "agendamento", titulo: "Agendamento", render: (a) => `#${a.idAgendamento}` },
+              { chave: "agendamento", titulo: "Reunião", render: (a) => {
+                  const r = reunioes[a.idAgendamento];
+                  return r ? (
+                    <div>
+                      <p className="font-medium">{r.topico}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatarData(r.dataReuniao)} às {formatarHora(r.horarioInicio)} · {r.nomeOrganizador}
+                      </p>
+                    </div>
+                  ) : (
+                    `#${a.idAgendamento}`
+                  );
+                } },
               { chave: "nota", titulo: "Nota", render: (a) => "⭐".repeat(a.nota) || "0" },
               { chave: "comentario", titulo: "Comentário", render: (a) => a.comentario || "—" },
               { chave: "data", titulo: "Registrada em", render: (a) => formatarDataHora(a.criadoEm) },
