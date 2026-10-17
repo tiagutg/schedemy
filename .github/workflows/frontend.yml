@@ -1,5 +1,5 @@
 # Verifica o front-end a cada push e pull request que mexa nele:
-# lint, checagem de tipos e build de produção.
+# lint, testes unitários, checagem de tipos e build de produção.
 # Os testes de ponta a ponta (npm run test:e2e) ficam de fora porque
 # precisam da API e do MySQL rodando.
 name: Front-end
@@ -34,6 +34,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: Testes unitários
+        run: npm test
 
       - name: Tipos e build de produção
         run: npm run build

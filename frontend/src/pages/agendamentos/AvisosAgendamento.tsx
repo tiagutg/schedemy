@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
-import { paraHora, paraMinutos } from "@/utils/agenda";
+import { encontrarConflito, LIMITE_AGENDAMENTOS_ALUNO_24H, paraHora, paraMinutos, situacaoLimiteAluno } from "@/utils/agenda";
 import { formatarDataHora } from "@/utils/format";
 import type { Agendamento } from "@/types";
-
-// RN 13: no máximo 2 agendamentos criados por aluno a cada 24 horas.
-const LIMITE_AGENDAMENTOS_ALUNO_24H = 2;
-const DIA_MS = 24 * 3_600_000;
 
 interface AvisosAgendamentoProps {
   /** Organizador e convidados que não aparecem no painel de agenda dos docentes. */
@@ -36,7 +32,8 @@ export default function AvisosAgendamento({
   verificarLimite,
 }: AvisosAgendamentoProps) {
   const [porPessoa, setPorPessoa] = useState<Record<number, Agendamento[]>>({});
-  const [criadosRecentes, setCriadosRecentes] = useState<Agendamento[]>([]);
+  // Agendamentos recentes do organizador e o momento da consulta (base da janela de 24 h).
+  const [recentes, setRecentes] = useState<{ lista: Agendamento[]; agora: number }>({ lista: [], agora: 0 });
   const chavePessoas = pessoas.map((p) => p.id).join(",");
   const idOrganizadorAluno = verificarLimite && organizador?.ehAluno ? organizador.id : null;
 
@@ -62,20 +59,8 @@ export default function AvisosAgendamento({
     let cancelado = false;
     agendamentosApi
       .listarPorUsuario(idOrganizadorAluno, { size: 20, sort: "criadoEm,desc" })
-      .then((p) => {
-        if (cancelado) return;
-        const desde = Date.now() - DIA_MS;
-        setCriadosRecentes(
-          p.conteudo.filter(
-            (a) =>
-              a.idOrganizador === idOrganizadorAluno &&
-              a.status !== "CANCELADO" &&
-              !!a.criadoEm &&
-              new Date(a.criadoEm).getTime() >= desde
-          )
-        );
-      })
-      .catch(() => !cancelado && setCriadosRecentes([]));
+      .then((p) => !cancelado && setRecentes({ lista: p.conteudo, agora: Date.now() }))
+      .catch(() => !cancelado && setRecentes({ lista: [], agora: 0 }));
     return () => {
       cancelado = true;
     };
@@ -84,17 +69,8 @@ export default function AvisosAgendamento({
   const avisos: string[] = [];
 
   if (horario && duracaoMinutos > 0) {
-    const inicio = paraMinutos(horario);
-    const fim = inicio + duracaoMinutos;
     for (const pessoa of pessoas) {
-      const choque = (porPessoa[pessoa.id] ?? []).find(
-        (a) =>
-          a.dataReuniao === dataISO &&
-          a.status !== "CANCELADO" &&
-          a.id !== ignorarAgendamentoId &&
-          paraMinutos(a.horarioInicio) < fim &&
-          inicio < (a.horarioFim ? paraMinutos(a.horarioFim) : paraMinutos(a.horarioInicio) + (a.duracaoMinutos ?? 0))
-      );
+      const choque = encontrarConflito(porPessoa[pessoa.id] ?? [], { dataISO, horario, duracaoMinutos, ignorarAgendamentoId });
       if (choque) {
         const quem = pessoa.id === organizador?.id && organizador.ehEu ? "Você já tem" : `${pessoa.nome} já tem`;
         const ate = choque.horarioFim ? paraHora(paraMinutos(choque.horarioFim)) : "";
@@ -103,13 +79,11 @@ export default function AvisosAgendamento({
     }
   }
 
-  if (idOrganizadorAluno && criadosRecentes.length >= LIMITE_AGENDAMENTOS_ALUNO_24H) {
-    const maisAntigo = criadosRecentes
-      .map((a) => new Date(a.criadoEm as string).getTime())
-      .sort((a, b) => a - b)[criadosRecentes.length - LIMITE_AGENDAMENTOS_ALUNO_24H];
-    const liberaEm = formatarDataHora(new Date(maisAntigo + DIA_MS).toISOString());
+  const limite = idOrganizadorAluno ? situacaoLimiteAluno(recentes.lista, idOrganizadorAluno, recentes.agora) : null;
+  if (limite?.atingido && limite.liberaEm) {
+    const liberaEm = formatarDataHora(limite.liberaEm.toISOString());
     avisos.push(
-      `${organizador?.ehEu ? "Você já criou" : "Este aluno já criou"} ${criadosRecentes.length} agendamentos nas últimas 24 horas; o limite é ${LIMITE_AGENDAMENTOS_ALUNO_24H} (RN 13). Um novo poderá ser criado a partir de ${liberaEm}.`
+      `${organizador?.ehEu ? "Você já criou" : "Este aluno já criou"} ${limite.recentes} agendamentos nas últimas 24 horas; o limite é ${LIMITE_AGENDAMENTOS_ALUNO_24H}. Um novo poderá ser criado a partir de ${liberaEm}.`
     );
   }
 

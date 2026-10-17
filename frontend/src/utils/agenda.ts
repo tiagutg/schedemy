@@ -109,3 +109,57 @@ export function horarioCabe(agenda: AgendaDoDia, horario: string, duracaoMinutos
   const conflito = agenda.ocupados.find((o) => sobrepoe(slot, o));
   return { dentroDaJanela, conflito };
 }
+
+function fimDe(a: Agendamento): number {
+  return a.horarioFim ? paraMinutos(a.horarioFim) : paraMinutos(a.horarioInicio) + (a.duracaoMinutos ?? 0);
+}
+
+/**
+ * Reunião ativa que choca com o horário proposto (RN 01), ou undefined.
+ * Na edição, a própria reunião é ignorada.
+ */
+export function encontrarConflito(
+  agendamentos: Agendamento[],
+  {
+    dataISO,
+    horario,
+    duracaoMinutos,
+    ignorarAgendamentoId,
+  }: { dataISO: string; horario: string; duracaoMinutos: number; ignorarAgendamentoId?: number | null }
+): Agendamento | undefined {
+  const inicio = paraMinutos(horario);
+  const fim = inicio + duracaoMinutos;
+  return agendamentos.find(
+    (a) =>
+      a.dataReuniao === dataISO &&
+      a.status !== "CANCELADO" &&
+      a.id !== ignorarAgendamentoId &&
+      paraMinutos(a.horarioInicio) < fim &&
+      inicio < fimDe(a)
+  );
+}
+
+// RN 13: no máximo 2 agendamentos criados por aluno a cada 24 horas.
+export const LIMITE_AGENDAMENTOS_ALUNO_24H = 2;
+const DIA_MS = 24 * 3_600_000;
+
+/**
+ * Quantos agendamentos o aluno organizou nas últimas 24 horas (sem os
+ * cancelados, como o back-end conta) e, se o limite foi atingido, a partir
+ * de quando poderá criar outro.
+ */
+export function situacaoLimiteAluno(
+  agendamentos: Agendamento[],
+  idAluno: number,
+  agoraMs: number,
+  limite = LIMITE_AGENDAMENTOS_ALUNO_24H
+): { recentes: number; atingido: boolean; liberaEm: Date | null } {
+  const criados = agendamentos
+    .filter((a) => a.idOrganizador === idAluno && a.status !== "CANCELADO" && !!a.criadoEm)
+    .map((a) => new Date(a.criadoEm as string).getTime())
+    .filter((t) => t >= agoraMs - DIA_MS)
+    .sort((a, b) => a - b);
+  if (criados.length < limite) return { recentes: criados.length, atingido: false, liberaEm: null };
+  // Libera quando sobrarem menos que `limite` criações dentro da janela de 24 h.
+  return { recentes: criados.length, atingido: true, liberaEm: new Date(criados[criados.length - limite] + DIA_MS) };
+}

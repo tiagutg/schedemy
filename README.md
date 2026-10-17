@@ -124,6 +124,7 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `npm run build` | Checa os tipos e gera a versão de produção em `dist/` |
 | `npm run preview` | Serve localmente a versão de produção |
 | `npm run lint` | Analisa o código com o oxlint |
+| `npm test` | Roda os testes unitários (Vitest) |
 | `npm run test:e2e` | Roda os testes de ponta a ponta (Playwright) |
 
 ### Testes de ponta a ponta
