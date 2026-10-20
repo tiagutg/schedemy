@@ -56,7 +56,7 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
-                        .requestMatchers(HttpMethod.POST, "/api/v1/usuarios").permitAll() // REMOVER: permite que qualquer um cadastre usuários.
+                    
                         // Console H2 livre
                         .requestMatchers("/h2-console/**").permitAll()
 
