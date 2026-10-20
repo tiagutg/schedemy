@@ -73,9 +73,8 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   const podeRemover =
     (a.status === "PENDENTE" || a.status === "CANCELADO") && pode("agendamentos.remover");
   // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador),
-  // e cada um responde só o próprio convite; a administração pode responder por outros.
-  const podeResponderPor = (p: Participante) =>
-    pode("agendamentos.responderPorOutros") || (pode("agendamentos.responder") && p.idUsuario === eu?.id);
+  // e cada um responde só o próprio convite (a API não aceita responder por outra pessoa).
+  const podeResponderPor = (p: Participante) => pode("agendamentos.responder") && p.idUsuario === eu?.id;
 
   async function responder(participante: Participante, aceitar: boolean, motivo?: string) {
     setRespondendo(true);

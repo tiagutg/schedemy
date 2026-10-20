@@ -37,19 +37,25 @@ export default function AvaliacoesPage() {
   );
   const { pagina, linhas, carregando, setPaginaAtual, recarregar } = usePaginatedList(buscar, { ordenarPor: "criadoEm,desc" });
 
-  // Reuniões concluídas do aluno, para mostrar tópico e data em vez do número do agendamento.
-  const [reunioes, setReunioes] = useState<Record<number, Agendamento>>({});
+  // Detalhes das reuniões avaliadas, para mostrar tópico e data em vez do número.
+  // Busca cada reunião da página (quem vê a avaliação participou dela); null = sem acesso.
+  const [reunioes, setReunioes] = useState<Record<number, Agendamento | null>>({});
+  const faltando = [...new Set(linhas.map((a) => a.idAgendamento))].filter((id) => !(id in reunioes)).join(",");
   useEffect(() => {
-    if (!alunoId) return;
+    if (!faltando) return;
     let cancelado = false;
-    agendamentosApi
-      .listarPorUsuario(alunoId, { status: "CONCLUIDO", size: 200 })
-      .then((p) => !cancelado && setReunioes(Object.fromEntries(p.conteudo.map((ag) => [ag.id, ag]))))
-      .catch(() => !cancelado && setReunioes({}));
+    Promise.all(
+      faltando.split(",").map((id) =>
+        agendamentosApi
+          .buscarPorId(id)
+          .then((ag) => [Number(id), ag] as const)
+          .catch(() => [Number(id), null] as const)
+      )
+    ).then((encontradas) => !cancelado && setReunioes((atual) => ({ ...atual, ...Object.fromEntries(encontradas) })));
     return () => {
       cancelado = true;
     };
-  }, [alunoId]);
+  }, [faltando]);
 
   const [modalAberto, setModalAberto] = useState(false);
   const [form, setForm] = useState<{ idAgendamento: string; nota: number | string; comentario: string }>({

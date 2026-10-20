@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { IconAlertTriangle } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
+import { useAuth } from "@/context/AuthContext";
 import { encontrarConflito, LIMITE_AGENDAMENTOS_ALUNO_24H, paraHora, paraMinutos, situacaoLimiteAluno } from "@/utils/agenda";
 import { formatarDataHora } from "@/utils/format";
 import type { Agendamento } from "@/types";
@@ -31,11 +32,15 @@ export default function AvisosAgendamento({
   ignorarAgendamentoId,
   verificarLimite,
 }: AvisosAgendamentoProps) {
+  const { perfilVinculado: eu, perfil } = useAuth();
+  // A API só mostra a agenda do próprio usuário (ou de todos, para a administração).
+  const consultaveis = perfil === "ADMIN" ? pessoas : pessoas.filter((p) => p.id === eu?.id);
   const [porPessoa, setPorPessoa] = useState<Record<number, Agendamento[]>>({});
   // Agendamentos recentes do organizador e o momento da consulta (base da janela de 24 h).
   const [recentes, setRecentes] = useState<{ lista: Agendamento[]; agora: number }>({ lista: [], agora: 0 });
-  const chavePessoas = pessoas.map((p) => p.id).join(",");
-  const idOrganizadorAluno = verificarLimite && organizador?.ehAluno ? organizador.id : null;
+  const chavePessoas = consultaveis.map((p) => p.id).join(",");
+  const organizadorConsultavel = !!organizador && consultaveis.some((p) => p.id === organizador.id);
+  const idOrganizadorAluno = verificarLimite && organizador?.ehAluno && organizadorConsultavel ? organizador.id : null;
 
   useEffect(() => {
     if (!dataISO || !chavePessoas) return;
@@ -69,7 +74,7 @@ export default function AvisosAgendamento({
   const avisos: string[] = [];
 
   if (horario && duracaoMinutos > 0) {
-    for (const pessoa of pessoas) {
+    for (const pessoa of consultaveis) {
       const choque = encontrarConflito(porPessoa[pessoa.id] ?? [], { dataISO, horario, duracaoMinutos, ignorarAgendamentoId });
       if (choque) {
         const quem = pessoa.id === organizador?.id && organizador.ehEu ? "Você já tem" : `${pessoa.nome} já tem`;

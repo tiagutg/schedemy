@@ -32,7 +32,6 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * Por padrão cada pessoa age em nome próprio (organiza, cancela, responde e
  * avalia como o usuário logado). As permissões abaixo liberam agir por outros:
  * - agendamentos.verTodos / organizarPorOutros → recepção agenda para terceiros (RN 03)
- * - agendamentos.responderPorOutros → só administração
  * - agenda.gerenciarTodos → disponibilidades e bloqueios de qualquer docente
  * - avaliacoes.verTodas → docência acompanha as avaliações dos alunos (RNF 11)
  */

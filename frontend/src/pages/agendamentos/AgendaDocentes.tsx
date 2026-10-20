@@ -4,6 +4,7 @@ import { agendamentosApi } from "@/api/agendamentos";
 import { bloqueiosApi } from "@/api/bloqueios";
 import { disponibilidadesApi } from "@/api/disponibilidades";
 import Spinner from "@/components/common/Spinner";
+import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
 import { calcularAgendaDoDia, diaSemanaDe, horarioCabe, paraHora } from "@/utils/agenda";
 import { formatarData } from "@/utils/format";
@@ -11,9 +12,12 @@ import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";
 
 interface DadosDocente {
   disponibilidades: Disponibilidade[];
-  /** null quando o perfil logado não pode consultar bloqueios. */
+  /**
+   * Bloqueios e reuniões marcadas: a API só mostra os do próprio usuário (ou
+   * todos, para a administração). null quando não podem ser consultados.
+   */
   bloqueios: Bloqueio[] | null;
-  agendamentos: Agendamento[];
+  agendamentos: Agendamento[] | null;
 }
 
 interface AgendaDocentesProps {
@@ -41,7 +45,11 @@ export default function AgendaDocentes({
   ignorarAgendamentoId,
   onEscolherHorario,
 }: AgendaDocentesProps) {
+  const { perfilVinculado: eu, perfil } = useAuth();
   const [expandidos, setExpandidos] = useState<Record<number, boolean>>({});
+  // A disponibilidade de qualquer docente é pública; a agenda (reuniões e bloqueios), não.
+  const veAgendaDeTodos = perfil === "ADMIN";
+  const meuId = eu?.id ?? null;
   const chaveDocentes = docentes.map((d) => d.id).join(",");
   // Guarda para quais docentes/data os dados foram carregados; enquanto não bate, está carregando.
   const chave = `${chaveDocentes}|${dataISO}`;
@@ -59,17 +67,23 @@ export default function AgendaDocentes({
     const chaveBusca = `${chaveDocentes}|${dataISO}`;
     Promise.all(
       ids.map(async (id) => {
+        const podeVerAgenda = veAgendaDeTodos || id === meuId;
         const [disponibilidades, bloqueios, agendamentos] = await Promise.all([
           disponibilidadesApi
             .listar({ usuarioId: id, diaSemana: diaSemanaDe(dataISO), ativo: true, size: 50 })
             .then((p) => p.conteudo),
-          bloqueiosApi
-            .listar({ usuarioId: id, size: 200 })
-            .then((p) => p.conteudo)
-            .catch(() => null),
-          agendamentosApi
-            .listarPorUsuario(id, { dataInicio: dataISO, dataFim: dataISO, size: 50 })
-            .then((p) => p.conteudo),
+          podeVerAgenda
+            ? bloqueiosApi
+                .listar({ usuarioId: id, size: 200 })
+                .then((p) => p.conteudo)
+                .catch(() => null)
+            : null,
+          podeVerAgenda
+            ? agendamentosApi
+                .listarPorUsuario(id, { dataInicio: dataISO, dataFim: dataISO, size: 50 })
+                .then((p) => p.conteudo)
+                .catch(() => null)
+            : null,
         ]);
         return [id, { disponibilidades, bloqueios, agendamentos }] as const;
       })
@@ -79,7 +93,7 @@ export default function AgendaDocentes({
     return () => {
       cancelado = true;
     };
-  }, [chaveDocentes, dataISO]);
+  }, [chaveDocentes, dataISO, veAgendaDeTodos, meuId]);
 
   if (docentes.length === 0) return null;
 
@@ -91,7 +105,7 @@ export default function AgendaDocentes({
           duracaoMinutos,
           disponibilidades: info.disponibilidades,
           bloqueios: info.bloqueios ?? [],
-          agendamentos: info.agendamentos,
+          agendamentos: info.agendamentos ?? [],
           ignorarAgendamentoId,
           passoMinutos: 30,
         })
@@ -103,7 +117,11 @@ export default function AgendaDocentes({
   // O back-end aceita se ao menos um docente convidado atende no horário (RN 06).
   const algumAtende = agendas.some((a) => a.encaixe?.dentroDaJanela && !a.encaixe.conflito);
   const podeAvaliar = !carregando && !!horario && duracaoMinutos > 0 && agendas.every((a) => a.agenda);
-  const semPermissaoBloqueios = agendas.some((a) => a.info && a.info.bloqueios === null);
+  const agendaOculta = agendas.some((a) => a.info && (a.info.bloqueios === null || a.info.agendamentos === null));
+  // Sem ver a agenda, só dá para afirmar que o horário está dentro do atendimento.
+  const textoLivre = agendaOculta
+    ? `O horário ${horario} está dentro do horário de atendimento de pelo menos um docente.`
+    : `O horário ${horario} está livre na agenda de pelo menos um docente.`;
 
   return (
     <section aria-label="Agenda dos docentes" className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
@@ -125,7 +143,7 @@ export default function AgendaDocentes({
             <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
           )}
           {algumAtende
-            ? `O horário ${horario} está livre na agenda de pelo menos um docente.`
+            ? textoLivre
             : `O horário ${horario} (${duracaoMinutos} min) não está livre para nenhum docente convidado. Escolha um horário sugerido abaixo.`}
         </p>
       )}
@@ -188,9 +206,10 @@ export default function AgendaDocentes({
         ))}
       </ul>
 
-      {semPermissaoBloqueios && (
+      {agendaOculta && (
         <p className="text-xs text-muted-foreground">
-          Bloqueios de período dos docentes não aparecem para o seu perfil; o horário ainda pode estar bloqueado.
+          As reuniões já marcadas e os bloqueios dos professores não aparecem para o seu perfil: os horários
+          sugeridos seguem só o horário de atendimento. Se houver conflito, o sistema avisa ao salvar.
         </p>
       )}
     </section>

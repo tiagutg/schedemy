@@ -51,7 +51,8 @@ test("aluno cria escolhendo um horário livre do professor", async ({ page }) =>
   // Fora do horário de atendimento: o aviso aparece antes do envio.
   await expect(agendaDocentes(page)).toContainText("não está livre");
   await horariosSugeridos(page).first().click();
-  await expect(agendaDocentes(page)).toContainText("está livre na agenda");
+  // O aluno não vê a agenda do professor: o painel confirma só o horário de atendimento.
+  await expect(agendaDocentes(page)).toContainText("está dentro do horário de atendimento");
   horarioCriado = await modal.locator("#novo-horario").inputValue();
 
   await modal.getByLabel("Tópico").fill(topico);
