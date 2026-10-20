@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
@@ -25,10 +27,12 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
     private final DisponibilidadeRepository disponibilidadeRepository;
     private final UsuarioRepository usuarioRepository;
     private final DisponibilidadeMapper disponibilidadeMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public DisponibilidadeResponseDTO criar(DisponibilidadeRequestDTO dto) {
         Usuario usuario = buscarUsuario(dto.idUsuario());
+        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar a sua propria disponibilidade.");
         validarPapelAtendente(usuario);
         validarHorarios(dto.horarioInicio(), dto.horarioFim());
 
@@ -53,7 +57,9 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
     @Override
     public DisponibilidadeResponseDTO atualizar(Long id, DisponibilidadeRequestDTO dto) {
         Disponibilidade entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(), "Voce so pode gerenciar a sua propria disponibilidade.");
         Usuario usuario = buscarUsuario(dto.idUsuario());
+        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar a sua propria disponibilidade.");
         validarPapelAtendente(usuario);
         validarHorarios(dto.horarioInicio(), dto.horarioFim());
 
@@ -65,6 +71,7 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
     @Override
     public void deletar(Long id) {
         Disponibilidade entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(), "Voce so pode gerenciar a sua propria disponibilidade.");
         disponibilidadeRepository.delete(entidade);
     }
 

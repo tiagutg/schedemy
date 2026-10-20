@@ -1,5 +1,8 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+import br.edu.unisales.schedemy.exception.AcessoNegadoNegocioException;
+
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.AvaliacaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
@@ -25,16 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class AvaliacaoServiceImpl implements AvaliacaoService {
-
     private final AvaliacaoReuniaoRepository avaliacaoRepository;
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
     private final AvaliacaoMapper avaliacaoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public AvaliacaoResponseDTO criar(AvaliacaoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(dto.idAgendamento());
         Usuario aluno = buscarUsuario(dto.idAluno());
+        usuarioAutenticado.exigirProprioOuAdmin(aluno.getId(), "Voce so pode avaliar em seu proprio nome.");
 
         validarPapelAluno(aluno);
         validarReuniaoConcluida(agendamento);
@@ -52,12 +56,18 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     @Override
     @Transactional(readOnly = true)
     public AvaliacaoResponseDTO buscarPorId(Long id) {
-        return avaliacaoMapper.paraResponseDTO(buscarEntidadePorId(id));
+        AvaliacaoReuniao avaliacao = buscarEntidadePorId(id);
+        exigirPodeVer(avaliacao);
+        return avaliacaoMapper.paraResponseDTO(avaliacao);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<AvaliacaoResponseDTO> listarPorAluno(Long alunoId, Pageable pageable) {
+        Usuario logado = usuarioAutenticado.obter();
+        if (logado.getTipoUsuario() == TipoUsuario.ALUNO && !logado.getId().equals(alunoId)) {
+            throw new AcessoNegadoNegocioException("Voce so pode consultar as suas proprias avaliacoes.");
+        }
         return avaliacaoRepository.findByAlunoId(alunoId, pageable)
                 .map(avaliacaoMapper::paraResponseDTO);
     }
@@ -82,6 +92,21 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     @Override
     public void deletar(Long id) {
         avaliacaoRepository.delete(buscarEntidadePorId(id));
+    }
+
+    /** RNF 15 - o aluno so ve a propria avaliacao; a docencia, as das reunioes de que participa. */
+    private void exigirPodeVer(AvaliacaoReuniao avaliacao) {
+        if (usuarioAutenticado.ehAdmin()) {
+            return;
+        }
+        Usuario logado = usuarioAutenticado.obter();
+        boolean autorizado = logado.getTipoUsuario() == TipoUsuario.ALUNO
+                ? avaliacao.getAluno().getId().equals(logado.getId())
+                : avaliacao.getAgendamento().getParticipantes().stream()
+                .anyMatch(p -> p.getUsuario().getId().equals(logado.getId()));
+        if (!autorizado) {
+            throw new AcessoNegadoNegocioException("Voce nao tem permissao para ver esta avaliacao.");
+        }
     }
 
     /** RF 24 - a avaliacao e do aluno. */

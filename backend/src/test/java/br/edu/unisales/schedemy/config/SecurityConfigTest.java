@@ -90,8 +90,9 @@ class SecurityConfigTest {
             "admin,         GET,    /api/v1/usuarios",
 
             // Agendamentos: RF 13, 15, 20 valem para todos os perfis.
-            "aluno,         GET,    /api/v1/agendamentos",
-            "recepcionista, GET,    /api/v1/agendamentos",
+            "admin,         GET,    /api/v1/agendamentos",
+            "aluno,         GET,    /api/v1/agendamentos/1",
+            "aluno,         GET,    /api/v1/agendamentos/usuarios/1",
             "aluno,         POST,   /api/v1/agendamentos",
             "recepcionista, POST,   /api/v1/agendamentos",
             "professor,     POST,   /api/v1/agendamentos",
@@ -191,6 +192,12 @@ class SecurityConfigTest {
             // Notificacoes: log operacional da docencia/administracao.
             "aluno,         GET,    /api/v1/notificacoes",
             "recepcionista, GET,    /api/v1/notificacoes",
+
+            // Listagem global de agendamentos: visao administrativa (RNF 15).
+            "aluno,         GET,    /api/v1/agendamentos",
+            "professor,     GET,    /api/v1/agendamentos",
+            "coordenador,   GET,    /api/v1/agendamentos",
+            "recepcionista, GET,    /api/v1/agendamentos",
 
             // Avaliacoes: RF 24 restringe a criacao ao aluno.
             "professor,     POST,   /api/v1/avaliacoes",

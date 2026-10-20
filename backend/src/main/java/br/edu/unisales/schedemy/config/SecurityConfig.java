@@ -6,6 +6,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -25,10 +26,10 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * - RECEPCIONISTA  agendamentos, sem aceitar/recusar convite (RN 03)
  * - ADMIN          acesso total
  */
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
     private static final String ADMIN = "ADMIN";
     private static final String COORDENADOR = "COORDENADOR";
     private static final String PROFESSOR = "PROFESSOR";
@@ -48,6 +49,7 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(withDefaults())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Documentacao OpenAPI/Swagger e Health livre
                         .requestMatchers(
@@ -56,9 +58,6 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
-                    
-                        // Console H2 livre
-                        .requestMatchers("/h2-console/**").permitAll()
 
                         // --- Usuarios ---
                         // A LEITURA fica aberta a qualquer autenticado de proposito: o login
@@ -88,7 +87,11 @@ public class SecurityConfig {
                         .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
+                        // Listagem global: visao administrativa. Os demais perfis usam
+                        // /agendamentos/usuarios/{id} (somente o proprio id - RNF 15).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/agendamentos").hasRole(ADMIN)
                         // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21.
+                        // A posse do recurso e verificada nos services (UsuarioAutenticado.java).
                         .requestMatchers("/api/v1/agendamentos", "/api/v1/agendamentos/**").authenticated()
 
                         // --- Avaliacoes (RF 24) ---
@@ -109,11 +112,10 @@ public class SecurityConfig {
 
                         // Qualquer outro endpoint da API exige ao menos autenticacao
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
                 .httpBasic(withDefaults())
-                .exceptionHandling(ex -> ex.accessDeniedHandler(accessDeniedHandler))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+                .exceptionHandling(ex -> ex.accessDeniedHandler(accessDeniedHandler));
 
         return http.build();
     }

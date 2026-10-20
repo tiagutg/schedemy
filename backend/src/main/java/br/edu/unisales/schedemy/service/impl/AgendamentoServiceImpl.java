@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+
 import br.edu.unisales.schedemy.domain.entity.*;
 import br.edu.unisales.schedemy.domain.enums.*;
 import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
@@ -47,10 +49,13 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private final SalaVirtualRepository salaVirtualRepository;
     private final RegistroMotivoRepository registroMotivoRepository;
     private final AgendamentoMapper agendamentoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
         Usuario organizador = buscarUsuario(dto.idOrganizador());
+        usuarioAutenticado.exigirProprioOuAdmin(organizador.getId(),
+                "Voce so pode criar agendamentos em seu proprio nome.");
         DuracaoReuniao duracao = buscarDuracao(dto.idDuracao());
 
         validarDuracao(duracao);
@@ -113,13 +118,17 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     @Transactional(readOnly = true)
     public AgendamentoResponseDTO buscarPorId(Long id) {
-        return agendamentoMapper.paraResponseDTO(buscarAgendamento(id));
+        Agendamento agendamento = buscarAgendamento(id);
+        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
+        return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, StatusAgendamento status,
                                                          LocalDate dataInicio, LocalDate dataFim, Pageable pageable) {
+        usuarioAutenticado.exigirProprioOuAdmin(usuarioId,
+                "Voce so pode listar os seus proprios agendamentos.");
         buscarUsuario(usuarioId);
         return agendamentoRepository.buscarPorUsuarioComFiltros(usuarioId, status, dataInicio, dataFim, pageable)
                 .map(agendamentoMapper::paraResponseDTO);
@@ -129,6 +138,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Transactional(readOnly = true)
     public Page<AgendamentoResponseDTO> listarTodos(StatusAgendamento status, LocalDate dataInicio, LocalDate dataFim,
                                                     Pageable pageable) {
+        if (!usuarioAutenticado.ehAdmin()) {
+            throw new AcessoNegadoNegocioException("Somente administradores podem listar todos os agendamentos.");
+        }
         return agendamentoRepository.buscarComFiltros(status, dataInicio, dataFim, pageable)
                 .map(agendamentoMapper::paraResponseDTO);
     }
@@ -136,6 +148,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     public AgendamentoResponseDTO atualizar(Long id, AgendamentoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(id);
+        usuarioAutenticado.exigirProprioOuAdmin(agendamento.getOrganizador().getId(),
+                "Somente o organizador pode editar este agendamento.");
 
         if (agendamento.getStatus() != StatusAgendamento.PENDENTE) {
             throw new RegraDeNegocioException(
@@ -181,7 +195,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     public AgendamentoResponseDTO responder(Long id, RespostaAgendamentoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(id);
-        Usuario usuario = buscarUsuario(dto.idUsuario());
+        Usuario usuario = usuarioAutenticado.obter();
+        if (!usuario.getId().equals(dto.idUsuario())) {
+            throw new AcessoNegadoNegocioException("Voce so pode responder a um agendamento em seu proprio nome.");
+        }
 
         AgendamentoParticipante participante = agendamento.getParticipantes().stream()
                 .filter(p -> p.getUsuario().getId().equals(usuario.getId()))
@@ -208,6 +225,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     public AgendamentoResponseDTO cancelar(Long id, CancelamentoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(id);
+        Usuario usuario = usuarioAutenticado.obter();
+        if (!usuario.getId().equals(dto.idUsuario())) {
+            throw new AcessoNegadoNegocioException("Voce so pode cancelar um agendamento em seu proprio nome.");
+        }
+        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
 
         if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO) {
             throw new RegraDeNegocioException("Nao e possivel cancelar um agendamento que ja esta " + agendamento.getStatus() + ".");
@@ -218,7 +240,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         validarAntecedenciaMinima(agendamento.getDataReuniao(), agendamento.getHorarioInicio(),
                 LIMITE_MIN_HORAS_CANCELAMENTO, "cancelado"); // RN 05
 
-        Usuario usuario = buscarUsuario(dto.idUsuario());
         agendamento.setStatus(StatusAgendamento.CANCELADO);
         registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.CANCELAMENTO, dto.motivo()); // RF 11
 

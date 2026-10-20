@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
@@ -33,10 +35,12 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     private final AgendamentoRepository agendamentoRepository;
     private final BloqueioPeriodoMapper bloqueioPeriodoMapper;
     private final AgendamentoMapper agendamentoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public BloqueioPeriodoResponseDTO criar(BloqueioPeriodoRequestDTO dto) {
         Usuario usuario = buscarUsuario(dto.idUsuario());
+        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         validarPeriodo(dto);
 
         BloqueioPeriodo entidade = bloqueioPeriodoMapper.paraEntidade(dto, usuario);
@@ -47,21 +51,25 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     @Override
     @Transactional(readOnly = true)
     public BloqueioPeriodoResponseDTO buscarPorId(Long id) {
-        return bloqueioPeriodoMapper.paraResponseDTO(buscarEntidadePorId(id));
+        BloqueioPeriodo bloqueio = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(bloqueio.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
+        return bloqueioPeriodoMapper.paraResponseDTO(bloqueio);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<BloqueioPeriodoResponseDTO> listar(Long usuarioId, LocalDate dataInicio, LocalDate dataFim,
                                                    Pageable pageable) {
-        return bloqueioPeriodoRepository.buscarComFiltros(usuarioId, dataInicio, dataFim, pageable)
+        return bloqueioPeriodoRepository.buscarComFiltros(usuarioAutenticado.escopoDoUsuario(usuarioId), dataInicio, dataFim, pageable)
                 .map(bloqueioPeriodoMapper::paraResponseDTO);
     }
 
     @Override
     public BloqueioPeriodoResponseDTO atualizar(Long id, BloqueioPeriodoRequestDTO dto) {
         BloqueioPeriodo entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         Usuario usuario = buscarUsuario(dto.idUsuario());
+        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         validarPeriodo(dto);
 
         bloqueioPeriodoMapper.atualizarEntidade(entidade, dto, usuario);
@@ -72,6 +80,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     @Override
     public void deletar(Long id) {
         BloqueioPeriodo entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         bloqueioPeriodoRepository.delete(entidade);
     }
 
@@ -79,6 +88,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     @Transactional(readOnly = true)
     public List<AgendamentoResponseDTO> listarAgendamentosImpactados(Long id) {
         BloqueioPeriodo bloqueio = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(bloqueio.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         List<Agendamento> impactados = agendamentoRepository.buscarImpactadosPorPeriodo(
                 bloqueio.getUsuario().getId(), bloqueio.getDataInicio(), bloqueio.getDataFim());
         return impactados.stream().map(agendamentoMapper::paraResponseDTO).toList();
