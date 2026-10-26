@@ -38,7 +38,7 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Usuario", dto.idUsuario()));
 
         usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode registrar motivos em seu proprio nome.");
-        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
 
         RegistroMotivo entidade = registroMotivoMapper.paraEntidade(dto, agendamento, usuario);
         entidade = registroMotivoRepository.save(entidade);
@@ -50,7 +50,7 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
     public RegistroMotivoResponseDTO buscarPorId(Long id) {
         RegistroMotivo entidade = registroMotivoRepository.findById(id)
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("RegistroMotivo", id));
-        usuarioAutenticado.exigirParticipanteOuAdmin(entidade.getAgendamento());
+        usuarioAutenticado.exigirParticipanteOuGestor(entidade.getAgendamento());
         return registroMotivoMapper.paraResponseDTO(entidade);
     }
 
@@ -59,7 +59,7 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
     public Page<RegistroMotivoResponseDTO> listarPorAgendamento(Long agendamentoId, Pageable pageable) {
         Agendamento agendamento = agendamentoRepository.findById(agendamentoId)
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Agendamento", agendamentoId));
-        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
         return registroMotivoRepository.findByAgendamentoId(agendamentoId, pageable)
                 .map(registroMotivoMapper::paraResponseDTO);
     }

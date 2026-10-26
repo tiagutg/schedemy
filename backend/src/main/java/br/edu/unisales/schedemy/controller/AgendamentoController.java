@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
 import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.service.AgendamentoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/agendamentos")
@@ -34,6 +36,18 @@ public class AgendamentoController {
     public ResponseEntity<AgendamentoResponseDTO> criar(@Valid @RequestBody AgendamentoRequestDTO dto) {
         AgendamentoResponseDTO criado = agendamentoService.criar(dto);
         return ResponseEntity.created(URI.create("/api/v1/agendamentos/" + criado.id())).body(criado);
+    }
+
+    @GetMapping("/horarios-livres")
+    @Operation(summary = "Horarios livres para todos os envolvidos",
+            description = "RF 14: horarios de inicio (passo de 15 min) em que todos os usuarios informados estao livres. "
+                    + "Nao expoe reunioes nem bloqueios de ninguem.")
+    public ResponseEntity<HorariosLivresResponseDTO> buscarHorariosLivres(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data,
+            @RequestParam Long idDuracao,
+            @RequestParam List<Long> idsUsuarios,
+            @RequestParam(required = false) Long ignorarAgendamentoId) {
+        return ResponseEntity.ok(agendamentoService.buscarHorariosLivres(data, idDuracao, idsUsuarios, ignorarAgendamentoId));
     }
 
     @GetMapping("/{id}")
@@ -54,7 +68,7 @@ public class AgendamentoController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar todos os agendamentos", description = "Visao administrativa, com filtros de status e periodo.")
+    @Operation(summary = "Listar todos os agendamentos", description = "Visao da recepcao e da administracao, com filtros de status e periodo.")
     public ResponseEntity<PageResponseDTO<AgendamentoResponseDTO>> listarTodos(
             @RequestParam(required = false) StatusAgendamento status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,

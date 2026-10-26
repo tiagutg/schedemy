@@ -99,6 +99,17 @@ class SecurityConfigTest {
             "aluno,         PATCH,  /api/v1/agendamentos/1/cancelamento",
             "recepcionista, PATCH,  /api/v1/agendamentos/1/cancelamento",
 
+            // RF 13, 20, 21: a recepcao ve todos os agendamentos, consulta, edita e cancela.
+            "recepcionista, GET,    /api/v1/agendamentos",
+            "recepcionista, GET,    /api/v1/agendamentos/1",
+            "recepcionista, PUT,    /api/v1/agendamentos/1",
+            "recepcionista, GET,    /api/v1/registros-motivo/agendamentos/1",
+
+            // RF 14: horarios livres para todos os envolvidos, sem expor a agenda de ninguem.
+            "aluno,         GET,    /api/v1/agendamentos/horarios-livres",
+            "professor,     GET,    /api/v1/agendamentos/horarios-livres",
+            "recepcionista, GET,    /api/v1/agendamentos/horarios-livres",
+
             // RF 19: convidados respondem ao convite.
             "aluno,         PATCH,  /api/v1/agendamentos/1/resposta",
             "professor,     PATCH,  /api/v1/agendamentos/1/resposta",
@@ -193,11 +204,10 @@ class SecurityConfigTest {
             "aluno,         GET,    /api/v1/notificacoes",
             "recepcionista, GET,    /api/v1/notificacoes",
 
-            // Listagem global de agendamentos: visao administrativa (RNF 15).
+            // Listagem global de agendamentos: so recepcao e administracao (RNF 15).
             "aluno,         GET,    /api/v1/agendamentos",
             "professor,     GET,    /api/v1/agendamentos",
             "coordenador,   GET,    /api/v1/agendamentos",
-            "recepcionista, GET,    /api/v1/agendamentos",
 
             // Avaliacoes: RF 24 restringe a criacao ao aluno.
             "professor,     POST,   /api/v1/avaliacoes",
@@ -216,7 +226,8 @@ class SecurityConfigTest {
     @CsvSource({
             "GET,  /api/v1/usuarios",
             "GET,  /api/v1/agendamentos",
-            "POST, /api/v1/agendamentos"
+            "POST, /api/v1/agendamentos",
+            "GET,  /api/v1/agendamentos/horarios-livres"
     })
     void deveExigirAutenticacao(String metodo, String caminho) throws Exception {
         int status = mockMvc.perform(request(HttpMethod.valueOf(metodo), caminho))

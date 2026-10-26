@@ -117,12 +117,17 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   const candidatosConvidado = form.idOrganizador
     ? usuarios.filter((u) => String(u.id) !== form.idOrganizador)
     : [];
-  const docentesConvidados = usuarios
-    .filter((u) => convidadosSelecionados.includes(String(u.id)) && DOCENTES.includes(u.tipoUsuario))
-    .map((u) => ({ id: u.id, nome: u.nome }));
   const duracaoMinutos = duracoes.find((d) => String(d.id) === idDuracao)?.minutos ?? 0;
-  // Os docentes convidados já têm a agenda no painel; os avisos cobrem os demais envolvidos.
   const organizadorUsuario = todos.find((u) => String(u.id) === form.idOrganizador) ?? null;
+  // RF 14: o horário precisa estar livre para todos os envolvidos (organizador e convidados).
+  const envolvidos = [
+    ...(organizadorUsuario ? [organizadorUsuario] : []),
+    ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && String(u.id) !== form.idOrganizador),
+  ];
+  const docentesEnvolvidos = envolvidos
+    .filter((u) => DOCENTES.includes(u.tipoUsuario))
+    .map((u) => ({ id: u.id, nome: u.nome }));
+  // Os avisos antecipam o choque de horário de quem não é docente e o limite de agendamentos do aluno.
   const pessoasSemPainel = [
     ...(organizadorUsuario ? [organizadorUsuario] : []),
     ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && !DOCENTES.includes(u.tipoUsuario)),
@@ -181,7 +186,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
 
   const subtitulo =
     modo === "criar"
-      ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade dos professores."
+      ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade de todos os envolvidos."
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
         : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
@@ -272,9 +277,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           />
         </FieldGrid>
 
-        {docentesConvidados.length > 0 ? (
+        {docentesEnvolvidos.length > 0 ? (
           <AgendaDocentes
-            docentes={docentesConvidados}
+            docentes={docentesEnvolvidos}
+            idsEnvolvidos={envolvidos.map((u) => u.id)}
+            idDuracao={idDuracao}
             dataISO={form.dataReuniao}
             duracaoMinutos={duracaoMinutos}
             horario={form.horarioInicio}
@@ -283,7 +290,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           />
         ) : (
           <p className="text-xs text-muted-foreground">
-            Convide um professor ou coordenador para ver os horários em que ele atende.
+            Convide um professor ou coordenador para ver os horários livres.
           </p>
         )}
 

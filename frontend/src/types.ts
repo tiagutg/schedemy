@@ -57,6 +57,13 @@ export interface Agendamento {
   criadoEm?: string;
 }
 
+/** RF 14: horários de início em que todos os envolvidos estão livres ("HH:mm:ss"). */
+export interface HorariosLivres {
+  data: string;
+  duracaoMinutos: number;
+  horarios: string[];
+}
+
 export interface Duracao {
   id: number;
   minutos: number;

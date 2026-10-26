@@ -13,12 +13,17 @@ import java.util.List;
 public interface BloqueioPeriodoRepository extends JpaRepository<BloqueioPeriodo, Long> {
     List<BloqueioPeriodo> findByUsuarioId(Long usuarioId);
 
+    // RF 04/RF 05 - bloqueios do usuario que cobrem a data; o recorrente so vale no dia da semana configurado
+    // (1 = domingo ... 7 = sabado). O filtro por horario fica na CalculadoraDeAgenda.
     @Query("""
             SELECT b FROM BloqueioPeriodo b
             WHERE b.usuario.id = :usuarioId
               AND b.dataInicio <= :data AND b.dataFim >= :data
+              AND (b.eRecorrente = false OR b.diaSemanaRecorrente = :diaSemana)
             """)
-    List<BloqueioPeriodo> buscarQueImpactamData(@Param("usuarioId") Long usuarioId, @Param("data") LocalDate data);
+    List<BloqueioPeriodo> buscarQueImpactamData(@Param("usuarioId") Long usuarioId,
+                                                @Param("data") LocalDate data,
+                                                @Param("diaSemana") Integer diaSemana);
 
     @Query("""
             SELECT b FROM BloqueioPeriodo b

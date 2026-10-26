@@ -5,10 +5,12 @@ import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
+import java.util.List;
 
 public interface AgendamentoService {
 
@@ -17,6 +19,10 @@ public interface AgendamentoService {
 
     // Visualizacao detalhada.
     AgendamentoResponseDTO buscarPorId(Long id);
+
+    // RF 14 - horarios de inicio em que todos os usuarios informados estao livres.
+    HorariosLivresResponseDTO buscarHorariosLivres(LocalDate data, Long idDuracao, List<Long> idsUsuarios,
+                                                   Long ignorarAgendamentoId);
 
     // Listagem, filtro e ordenacao dos agendamentos de um usuario.
     Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, StatusAgendamento status,

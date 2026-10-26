@@ -36,6 +36,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     private final BloqueioPeriodoMapper bloqueioPeriodoMapper;
     private final AgendamentoMapper agendamentoMapper;
     private final UsuarioAutenticado usuarioAutenticado;
+    private final CalculadoraDeAgenda calculadoraDeAgenda;
 
     @Override
     public BloqueioPeriodoResponseDTO criar(BloqueioPeriodoRequestDTO dto) {
@@ -89,9 +90,14 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     public List<AgendamentoResponseDTO> listarAgendamentosImpactados(Long id) {
         BloqueioPeriodo bloqueio = buscarEntidadePorId(id);
         usuarioAutenticado.exigirProprioOuAdmin(bloqueio.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
+        // RF 06/RF 07 - o docente costuma ser convidado (quem organiza e o aluno); a calculadora
+        // descarta as reunioes fora do dia da semana recorrente ou do horario bloqueado.
         List<Agendamento> impactados = agendamentoRepository.buscarImpactadosPorPeriodo(
                 bloqueio.getUsuario().getId(), bloqueio.getDataInicio(), bloqueio.getDataFim());
-        return impactados.stream().map(agendamentoMapper::paraResponseDTO).toList();
+        return impactados.stream()
+                .filter(a -> calculadoraDeAgenda.bloqueioAfetaReuniao(bloqueio, a))
+                .map(agendamentoMapper::paraResponseDTO)
+                .toList();
     }
 
     private void validarPeriodo(BloqueioPeriodoRequestDTO dto) {

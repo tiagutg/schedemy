@@ -8,6 +8,7 @@ import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
 import br.edu.unisales.schedemy.exception.AcessoNegadoNegocioException;
 import br.edu.unisales.schedemy.exception.RecursoNaoEncontradoException;
 import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
@@ -24,7 +25,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /**
@@ -41,21 +44,25 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private static final int LIMITE_MIN_HORAS_EDICAO = 24;        // RN 14
     private static final int LIMITE_MAX_AGENDAMENTOS_ALUNO_24H = 2; // RN 13
     private static final int LIMITE_MAX_DURACAO_MINUTOS = 60;     // RN 17
+    private static final int PASSO_HORARIOS_LIVRES_MINUTOS = 15;  // RF 14
 
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
     private final DuracaoReuniaoRepository duracaoReuniaoRepository;
-    private final DisponibilidadeRepository disponibilidadeRepository;
     private final SalaVirtualRepository salaVirtualRepository;
     private final RegistroMotivoRepository registroMotivoRepository;
     private final AgendamentoMapper agendamentoMapper;
     private final UsuarioAutenticado usuarioAutenticado;
+    private final CalculadoraDeAgenda calculadoraDeAgenda;
 
     @Override
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
         Usuario organizador = buscarUsuario(dto.idOrganizador());
-        usuarioAutenticado.exigirProprioOuAdmin(organizador.getId(),
-                "Voce so pode criar agendamentos em seu proprio nome.");
+        // RF 13 - a recepcao agenda em nome de alunos e docentes; os demais perfis, so em nome proprio.
+        if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
+                && !usuarioAutenticado.id().equals(organizador.getId())) {
+            throw new AcessoNegadoNegocioException("Voce so pode criar agendamentos em seu proprio nome.");
+        }
         DuracaoReuniao duracao = buscarDuracao(dto.idDuracao());
 
         validarDuracao(duracao);
@@ -65,9 +72,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         validarComposicaoDeParticipantes(organizador, convidados);
 
         LocalTime horarioFim = dto.horarioInicio().plusMinutes(duracao.getMinutos());
-        validarDentroDaDisponibilidade(convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim);
-
-        validarSemSobreposicao(organizador, convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim, null);
+        validarHorarioLivreParaTodos(organizador, convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim, null);
 
         if (organizador.getTipoUsuario() == TipoUsuario.ALUNO) {
             validarLimiteDeAgendamentosDoAluno(organizador.getId());
@@ -119,8 +124,35 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Transactional(readOnly = true)
     public AgendamentoResponseDTO buscarPorId(Long id) {
         Agendamento agendamento = buscarAgendamento(id);
-        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
         return agendamentoMapper.paraResponseDTO(agendamento);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public HorariosLivresResponseDTO buscarHorariosLivres(LocalDate data, Long idDuracao, List<Long> idsUsuarios,
+                                                          Long ignorarAgendamentoId) {
+        DuracaoReuniao duracao = buscarDuracao(idDuracao);
+        validarDuracao(duracao);
+        if (ignorarAgendamentoId != null) {
+            usuarioAutenticado.exigirParticipanteOuGestor(buscarAgendamento(ignorarAgendamentoId));
+        }
+        List<Usuario> usuarios = idsUsuarios.stream().distinct().map(this::buscarUsuario).toList();
+
+        LocalDate hoje = LocalDate.now();
+        // RN 16 - fora da janela de agendamento nao ha horario a oferecer.
+        boolean foraDoPrazo = data.isBefore(hoje)
+                || ChronoUnit.DAYS.between(hoje, data) > LIMITE_MAX_DIAS_ANTECEDENCIA;
+        // RN 15 - sem professor/coordenador nao ha disponibilidade cadastrada para basear a sugestao.
+        if (foraDoPrazo || usuarios.stream().noneMatch(CalculadoraDeAgenda::ehDocente)) {
+            return new HorariosLivresResponseDTO(data, duracao.getMinutos(), List.of());
+        }
+
+        // RF 14 - so os horarios livres para TODOS; nunca expoe reunioes ou bloqueios de ninguem.
+        LocalTime naoAntesDe = data.equals(hoje) ? LocalTime.now() : null;
+        List<LocalTime> horarios = calculadoraDeAgenda.horariosLivres(usuarios, data, duracao.getMinutos(),
+                PASSO_HORARIOS_LIVRES_MINUTOS, ignorarAgendamentoId, naoAntesDe);
+        return new HorariosLivresResponseDTO(data, duracao.getMinutos(), horarios);
     }
 
     @Override
@@ -138,8 +170,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Transactional(readOnly = true)
     public Page<AgendamentoResponseDTO> listarTodos(StatusAgendamento status, LocalDate dataInicio, LocalDate dataFim,
                                                     Pageable pageable) {
-        if (!usuarioAutenticado.ehAdmin()) {
-            throw new AcessoNegadoNegocioException("Somente administradores podem listar todos os agendamentos.");
+        // RF 20/RF 21 - a recepcao acompanha todos os agendamentos para poder cancela-los ou altera-los.
+        if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()) {
+            throw new AcessoNegadoNegocioException("Somente a recepcao e a administracao podem listar todos os agendamentos.");
         }
         return agendamentoRepository.buscarComFiltros(status, dataInicio, dataFim, pageable)
                 .map(agendamentoMapper::paraResponseDTO);
@@ -148,8 +181,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     public AgendamentoResponseDTO atualizar(Long id, AgendamentoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(id);
-        usuarioAutenticado.exigirProprioOuAdmin(agendamento.getOrganizador().getId(),
-                "Somente o organizador pode editar este agendamento.");
+        // RF 21 - o organizador ou a recepcao alteram reunioes ainda nao aceitas.
+        if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
+                && !usuarioAutenticado.id().equals(agendamento.getOrganizador().getId())) {
+            throw new AcessoNegadoNegocioException("Somente o organizador pode editar este agendamento.");
+        }
 
         if (agendamento.getStatus() != StatusAgendamento.PENDENTE) {
             throw new RegraDeNegocioException(
@@ -167,8 +203,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         validarComposicaoDeParticipantes(agendamento.getOrganizador(), convidados);
 
         LocalTime horarioFim = dto.horarioInicio().plusMinutes(duracao.getMinutos());
-        validarDentroDaDisponibilidade(convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim);
-        validarSemSobreposicao(agendamento.getOrganizador(), convidados, dto.dataReuniao(), dto.horarioInicio(),
+        validarHorarioLivreParaTodos(agendamento.getOrganizador(), convidados, dto.dataReuniao(), dto.horarioInicio(),
                 horarioFim, agendamento.getId());
 
         agendamento.setDuracao(duracao);
@@ -229,7 +264,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         if (!usuario.getId().equals(dto.idUsuario())) {
             throw new AcessoNegadoNegocioException("Voce so pode cancelar um agendamento em seu proprio nome.");
         }
-        usuarioAutenticado.exigirParticipanteOuAdmin(agendamento);
+        // RF 20 - participantes ou a recepcao; o motivo fica registrado em nome de quem cancelou.
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
 
         if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO) {
             throw new RegraDeNegocioException("Nao e possivel cancelar um agendamento que ja esta " + agendamento.getStatus() + ".");
@@ -267,6 +303,14 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         if (convidados.isEmpty()) {
             throw new RegraDeNegocioException("E necessario informar ao menos um convidado para o agendamento.");
         }
+        // RN 03 - recepcao e administracao agendam para outros, mas nao participam da reuniao.
+        for (Usuario envolvido : envolvidos(organizador, convidados)) {
+            if (envolvido.getTipoUsuario() != TipoUsuario.ALUNO && !CalculadoraDeAgenda.ehDocente(envolvido)) {
+                throw new RegraDeNegocioException(
+                        "O usuario '%s' nao pode participar de reunioes: apenas alunos, professores e coordenadores."
+                                .formatted(envolvido.getNome()));
+            }
+        }
         boolean temAluno = organizador.getTipoUsuario() == TipoUsuario.ALUNO
                 || convidados.stream().anyMatch(u -> u.getTipoUsuario() == TipoUsuario.ALUNO);
         boolean temDocente = organizador.getTipoUsuario() == TipoUsuario.PROFESSOR
@@ -279,47 +323,36 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
-    /** RN 15 - o horario da reuniao deve estar dentro da disponibilidade cadastrada de ao menos um professor/coordenador. */
-    private void validarDentroDaDisponibilidade(List<Usuario> convidados, LocalDate data, LocalTime inicio, LocalTime fim) {
-        int diaSemana = data.getDayOfWeek().getValue() % 7 + 1; // ajusta para o padrao 1=domingo...7=sabado do banco
-
-        List<Usuario> docentes = convidados.stream()
-                .filter(u -> u.getTipoUsuario() == TipoUsuario.PROFESSOR || u.getTipoUsuario() == TipoUsuario.COORDENADOR)
-                .toList();
-        if (docentes.isEmpty()) {
-            return;
-        }
-        boolean algumDisponivel = docentes.stream().anyMatch(docente ->
-                disponibilidadeRepository.findByUsuarioIdAndAtivoTrue(docente.getId()).stream()
-                        .anyMatch(disp -> disp.getDiaSemana().equals(diaSemana)
-                                && !inicio.isBefore(disp.getHorarioInicio())
-                                && !fim.isAfter(disp.getHorarioFim())));
-        if (!algumDisponivel) {
-            throw new RegraDeNegocioException(
-                    "O horario solicitado esta fora da disponibilidade cadastrada pelo(s) professor(es)/coordenador(es) convidado(s).");
+    /**
+     * RN 01/RN 15/RF 04/RF 14 - o horario precisa estar livre para TODOS os envolvidos (organizador e convidados):
+     * docentes dentro da disponibilidade e fora de bloqueios; ninguem com outra reuniao no intervalo.
+     * Usa a mesma CalculadoraDeAgenda da sugestao de horarios livres.
+     */
+    private void validarHorarioLivreParaTodos(Usuario organizador, List<Usuario> convidados, LocalDate data,
+                                              LocalTime inicio, LocalTime fim, Long agendamentoIgnoradoId) {
+        for (Usuario envolvido : envolvidos(organizador, convidados)) {
+            calculadoraDeAgenda.verificar(envolvido, data, inicio, fim, agendamentoIgnoradoId)
+                    .ifPresent(impedimento -> {
+                        if (impedimento.tipo() == CalculadoraDeAgenda.TipoImpedimento.REUNIAO_CONFLITANTE) {
+                            Agendamento existente = impedimento.conflitante();
+                            throw new RegraDeNegocioException(
+                                    "O usuario '%s' ja possui um agendamento conflitante em %s entre %s e %s."
+                                            .formatted(envolvido.getNome(), data, existente.getHorarioInicio(),
+                                                    existente.getHorarioFim()));
+                        }
+                        // Indisponibilidade ou bloqueio: o motivo do bloqueio nao e revelado.
+                        throw new RegraDeNegocioException("O %s %s nao esta disponivel neste horario."
+                                .formatted(envolvido.getTipoUsuario().name().toLowerCase(), envolvido.getNome()));
+                    });
         }
     }
 
-    /** RN 01 - impede que organizador ou convidados fiquem com horarios sobrepostos. */
-    private void validarSemSobreposicao(Usuario organizador, List<Usuario> convidados, LocalDate data,
-                                        LocalTime inicio, LocalTime fim, Long agendamentoIgnoradoId) {
-        List<Usuario> envolvidos = new java.util.ArrayList<>(convidados);
-        envolvidos.add(organizador);
-
-        for (Usuario envolvido : envolvidos) {
-            List<Agendamento> agendamentosNaData = agendamentoRepository
-                    .buscarAgendamentosAtivosDoUsuarioNaData(envolvido.getId(), data, agendamentoIgnoradoId);
-            for (Agendamento existente : agendamentosNaData) {
-                LocalTime existenteInicio = existente.getHorarioInicio();
-                LocalTime existenteFim = existente.getHorarioFim();
-                boolean sobrepoe = inicio.isBefore(existenteFim) && fim.isAfter(existenteInicio);
-                if (sobrepoe) {
-                    throw new RegraDeNegocioException(
-                            "O usuario '%s' ja possui um agendamento conflitante em %s entre %s e %s."
-                                    .formatted(envolvido.getNome(), data, existenteInicio, existenteFim));
-                }
-            }
-        }
+    /** Organizador seguido dos convidados, sem repetir usuarios. */
+    private List<Usuario> envolvidos(Usuario organizador, List<Usuario> convidados) {
+        Map<Long, Usuario> porId = new LinkedHashMap<>();
+        porId.put(organizador.getId(), organizador);
+        convidados.forEach(c -> porId.putIfAbsent(c.getId(), c));
+        return List.copyOf(porId.values());
     }
 
     /** RN 13 - um aluno pode ter no maximo 2 agendamentos ativos criados nas ultimas 24 horas. */
@@ -370,14 +403,14 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         List<AgendamentoParticipante> participantes = agendamento.getParticipantes();
 
         boolean docenteRecusou = participantes.stream().anyMatch(p ->
-                ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.RECUSADO);
+                CalculadoraDeAgenda.ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.RECUSADO);
         if (docenteRecusou) {
             agendamento.setStatus(StatusAgendamento.CANCELADO);
             return;
         }
 
         boolean temDocenteAceito = participantes.stream().anyMatch(p ->
-                ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.ACEITO);
+                CalculadoraDeAgenda.ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.ACEITO);
         boolean temAlunoAceito = participantes.stream().anyMatch(p ->
                 p.getUsuario().getTipoUsuario() == TipoUsuario.ALUNO && p.getStatusResposta() == StatusResposta.ACEITO);
 
@@ -386,10 +419,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         } else {
             agendamento.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
         }
-    }
-
-    private boolean ehDocente(Usuario usuario) {
-        return usuario.getTipoUsuario() == TipoUsuario.PROFESSOR || usuario.getTipoUsuario() == TipoUsuario.COORDENADOR;
     }
 
     /** RF 27 - cria automaticamente uma sala virtual para reunioes online/hibridas. */

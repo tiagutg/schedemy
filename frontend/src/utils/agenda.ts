@@ -1,8 +1,8 @@
 // Cálculo da agenda de um docente num dia: janelas de atendimento, horários
 // ocupados e sugestões de início para uma reunião de duração conhecida.
-// Espelha as regras que o back-end valida ao criar/editar um agendamento:
-// o horário precisa caber numa disponibilidade ativa do dia (RN 06) e não
-// pode sobrepor outra reunião (RN 01). Bloqueios entram como ocupação.
+// Serve só para exibir a agenda do próprio docente: os horários livres para
+// todos os envolvidos (RF 14) vêm do back-end (GET /agendamentos/horarios-livres),
+// que usa a mesma regra da validação ao salvar.
 
 import { hojeISO, paraDataLocal } from "./format";
 import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";

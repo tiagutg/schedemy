@@ -23,7 +23,8 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * - ALUNO          agendamentos (criar/ver/cancelar/responder) e avaliacoes
  * - PROFESSOR      o mesmo do coordenador (a secao 5.3 trata os dois como um ator)
  * - COORDENADOR    + disponibilidades, bloqueios, duracoes e notificacoes
- * - RECEPCIONISTA  agendamentos, sem aceitar/recusar convite (RN 03)
+ * - RECEPCIONISTA  agendamentos de todos (criar por terceiros, ver, editar, cancelar),
+ *                  sem aceitar/recusar convite (RN 03)
  * - ADMIN          acesso total
  */
 
@@ -87,10 +88,11 @@ public class SecurityConfig {
                         .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
-                        // Listagem global: visao administrativa. Os demais perfis usam
-                        // /agendamentos/usuarios/{id} (somente o proprio id - RNF 15).
-                        .requestMatchers(HttpMethod.GET, "/api/v1/agendamentos").hasRole(ADMIN)
-                        // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21.
+                        // Listagem global: a recepcao agenda, altera e cancela por terceiros (RF 13, 20, 21).
+                        // Os demais perfis usam /agendamentos/usuarios/{id} (somente o proprio id - RNF 15).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/agendamentos").hasAnyRole(RECEPCIONISTA, ADMIN)
+                        // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21. Inclui
+                        // GET /agendamentos/horarios-livres (RF 14), que nao expoe a agenda de ninguem.
                         // A posse do recurso e verificada nos services (UsuarioAutenticado.java).
                         .requestMatchers("/api/v1/agendamentos", "/api/v1/agendamentos/**").authenticated()
 

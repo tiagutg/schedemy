@@ -20,6 +20,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class UsuarioAutenticado {
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String ROLE_RECEPCIONISTA = "ROLE_RECEPCIONISTA";
 
     private final UsuarioRepository usuarioRepository;
 
@@ -43,8 +44,20 @@ public class UsuarioAutenticado {
     }
 
     public boolean ehAdmin() {
+        return temPapel(ROLE_ADMIN);
+    }
+
+    /**
+     * RF 13, RF 20, RF 21 - a recepcao (e a administracao) agenda, altera e cancela reunioes
+     * de terceiros, sem participar delas (RN 03).
+     */
+    public boolean podeGerirAgendamentosDeTerceiros() {
+        return temPapel(ROLE_ADMIN) || temPapel(ROLE_RECEPCIONISTA);
+    }
+
+    private boolean temPapel(String papel) {
         return autenticacao().getAuthorities().stream()
-                .anyMatch(a -> ROLE_ADMIN.equals(a.getAuthority()));
+                .anyMatch(a -> papel.equals(a.getAuthority()));
     }
 
     /** Permite a operacao apenas se o id informado for o do usuario logado (ou se for ADMIN). */
@@ -77,6 +90,18 @@ public class UsuarioAutenticado {
         if (ehAdmin()) {
             return;
         }
+        exigirParticipante(agendamento);
+    }
+
+    /** RNF 15 com a excecao da recepcao, que acompanha todos os agendamentos (RF 20, RF 21). */
+    public void exigirParticipanteOuGestor(Agendamento agendamento) {
+        if (podeGerirAgendamentosDeTerceiros()) {
+            return;
+        }
+        exigirParticipante(agendamento);
+    }
+
+    private void exigirParticipante(Agendamento agendamento) {
         Long logado = id();
         boolean envolvido = agendamento.getOrganizador().getId().equals(logado)
                 || agendamento.getParticipantes().stream()

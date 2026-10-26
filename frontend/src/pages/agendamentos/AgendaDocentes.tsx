@@ -2,26 +2,28 @@ import { useEffect, useState } from "react";
 import { IconAlertTriangle, IconCircleCheck } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
 import { bloqueiosApi } from "@/api/bloqueios";
+import type { ApiError } from "@/api/client";
 import { disponibilidadesApi } from "@/api/disponibilidades";
 import Spinner from "@/components/common/Spinner";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-import { calcularAgendaDoDia, diaSemanaDe, horarioCabe, paraHora } from "@/utils/agenda";
+import { calcularAgendaDoDia, diaSemanaDe, paraHora } from "@/utils/agenda";
 import { formatarData } from "@/utils/format";
 import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";
 
 interface DadosDocente {
   disponibilidades: Disponibilidade[];
-  /**
-   * Bloqueios e reuniões marcadas: a API só mostra os do próprio usuário (ou
-   * todos, para a administração). null quando não podem ser consultados.
-   */
-  bloqueios: Bloqueio[] | null;
-  agendamentos: Agendamento[] | null;
+  /** Só da agenda do próprio docente logado: a dos outros não é exposta (RNF 15). */
+  bloqueios: Bloqueio[];
+  agendamentos: Agendamento[];
 }
 
 interface AgendaDocentesProps {
+  /** Professores e coordenadores envolvidos (organizador e convidados). */
   docentes: { id: number; nome: string }[];
+  /** Todos os envolvidos: o horário precisa estar livre para cada um deles (RF 14). */
+  idsEnvolvidos: number[];
+  idDuracao: string;
   dataISO: string;
   duracaoMinutos: number;
   horario: string;
@@ -33,185 +35,207 @@ interface AgendaDocentesProps {
 const MAX_SUGESTOES = 16;
 
 /**
- * Mostra, para cada docente convidado, quando ele atende no dia escolhido, o que
- * já está ocupado e os horários livres para a duração escolhida. Evita que a
- * pessoa só descubra no envio que o horário está fora da disponibilidade.
+ * Mostra os horários em que todos os envolvidos estão livres (RF 14), calculados
+ * pelo back-end com a mesma regra que valida o agendamento ao salvar. Para cada
+ * docente aparece o horário de atendimento (público); reuniões e bloqueios só
+ * aparecem na agenda do próprio docente logado.
  */
 export default function AgendaDocentes({
   docentes,
+  idsEnvolvidos,
+  idDuracao,
   dataISO,
   duracaoMinutos,
   horario,
   ignorarAgendamentoId,
   onEscolherHorario,
 }: AgendaDocentesProps) {
-  const { perfilVinculado: eu, perfil } = useAuth();
-  const [expandidos, setExpandidos] = useState<Record<number, boolean>>({});
-  // A disponibilidade de qualquer docente é pública; a agenda (reuniões e bloqueios), não.
-  const veAgendaDeTodos = perfil === "ADMIN";
+  const { perfilVinculado: eu } = useAuth();
+  const [expandido, setExpandido] = useState(false);
   const meuId = eu?.id ?? null;
+
+  // Horários livres para todos: recarrega quando muda quem participa, a data ou a duração.
+  const chaveLivres = `${idsEnvolvidos.join(",")}|${dataISO}|${idDuracao}|${ignorarAgendamentoId ?? ""}`;
+  const [livres, setLivres] = useState<{ chave: string; horarios: string[]; erro: string }>({
+    chave: "",
+    horarios: [],
+    erro: "",
+  });
+  const carregandoLivres = !!idDuracao && livres.chave !== chaveLivres;
+
+  useEffect(() => {
+    if (!dataISO || !idDuracao || idsEnvolvidos.length === 0) return;
+    const controle = new AbortController();
+    const chave = chaveLivres;
+    agendamentosApi
+      .horariosLivres(
+        { data: dataISO, idDuracao, idsUsuarios: idsEnvolvidos, ignorarAgendamentoId },
+        controle.signal
+      )
+      .then((r) => setLivres({ chave, horarios: r.horarios.map((h) => h.slice(0, 5)), erro: "" }))
+      .catch((e) => {
+        if (!controle.signal.aborted) setLivres({ chave, horarios: [], erro: (e as ApiError).message });
+      });
+    return () => controle.abort();
+    // chaveLivres resume idsEnvolvidos, dataISO, idDuracao e ignorarAgendamentoId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveLivres]);
+
+  // Horário de atendimento de cada docente e, para o próprio docente, a agenda do dia.
   const chaveDocentes = docentes.map((d) => d.id).join(",");
-  // Guarda para quais docentes/data os dados foram carregados; enquanto não bate, está carregando.
-  const chave = `${chaveDocentes}|${dataISO}`;
-  const [resultado, setResultado] = useState<{ chave: string; dados: Record<number, DadosDocente> }>({
+  const chaveAgendas = `${chaveDocentes}|${dataISO}`;
+  const [agendas, setAgendas] = useState<{ chave: string; dados: Record<number, DadosDocente> }>({
     chave: "",
     dados: {},
   });
-  const carregando = resultado.chave !== chave;
-  const dados = resultado.dados;
 
   useEffect(() => {
     if (!dataISO || !chaveDocentes) return;
     let cancelado = false;
     const ids = chaveDocentes.split(",").map(Number);
-    const chaveBusca = `${chaveDocentes}|${dataISO}`;
+    const chave = `${chaveDocentes}|${dataISO}`;
     Promise.all(
       ids.map(async (id) => {
-        const podeVerAgenda = veAgendaDeTodos || id === meuId;
+        const ehEu = id === meuId;
         const [disponibilidades, bloqueios, agendamentos] = await Promise.all([
           disponibilidadesApi
             .listar({ usuarioId: id, diaSemana: diaSemanaDe(dataISO), ativo: true, size: 50 })
             .then((p) => p.conteudo),
-          podeVerAgenda
+          ehEu
             ? bloqueiosApi
                 .listar({ usuarioId: id, size: 200 })
                 .then((p) => p.conteudo)
-                .catch(() => null)
-            : null,
-          podeVerAgenda
+                .catch(() => [])
+            : [],
+          ehEu
             ? agendamentosApi
                 .listarPorUsuario(id, { dataInicio: dataISO, dataFim: dataISO, size: 50 })
                 .then((p) => p.conteudo)
-                .catch(() => null)
-            : null,
+                .catch(() => [])
+            : [],
         ]);
         return [id, { disponibilidades, bloqueios, agendamentos }] as const;
       })
     )
-      .then((porDocente) => !cancelado && setResultado({ chave: chaveBusca, dados: Object.fromEntries(porDocente) }))
-      .catch(() => !cancelado && setResultado({ chave: chaveBusca, dados: {} }));
+      .then((porDocente) => !cancelado && setAgendas({ chave, dados: Object.fromEntries(porDocente) }))
+      .catch(() => !cancelado && setAgendas({ chave, dados: {} }));
     return () => {
       cancelado = true;
     };
-  }, [chaveDocentes, dataISO, veAgendaDeTodos, meuId]);
+  }, [chaveDocentes, dataISO, meuId]);
 
   if (docentes.length === 0) return null;
 
-  const agendas = docentes.map((d) => {
-    const info = dados[d.id];
-    const agenda = info
-      ? calcularAgendaDoDia({
-          dataISO,
-          duracaoMinutos,
-          disponibilidades: info.disponibilidades,
-          bloqueios: info.bloqueios ?? [],
-          agendamentos: info.agendamentos ?? [],
-          ignorarAgendamentoId,
-          passoMinutos: 30,
-        })
-      : null;
-    const encaixe = agenda && horario && duracaoMinutos ? horarioCabe(agenda, horario, duracaoMinutos) : null;
-    return { docente: d, info, agenda, encaixe };
-  });
-
-  // O back-end aceita se ao menos um docente convidado atende no horário (RN 06).
-  const algumAtende = agendas.some((a) => a.encaixe?.dentroDaJanela && !a.encaixe.conflito);
-  const podeAvaliar = !carregando && !!horario && duracaoMinutos > 0 && agendas.every((a) => a.agenda);
-  const agendaOculta = agendas.some((a) => a.info && (a.info.bloqueios === null || a.info.agendamentos === null));
-  // Sem ver a agenda, só dá para afirmar que o horário está dentro do atendimento.
-  const textoLivre = agendaOculta
-    ? `O horário ${horario} está dentro do horário de atendimento de pelo menos um docente.`
-    : `O horário ${horario} está livre na agenda de pelo menos um docente.`;
+  const carregandoAgendas = agendas.chave !== chaveAgendas;
+  const sugestoes = livres.chave === chaveLivres ? livres.horarios : [];
+  const erroLivres = livres.chave === chaveLivres ? livres.erro : "";
+  const podeAvaliar = !carregandoLivres && !erroLivres && !!horario && duracaoMinutos > 0;
+  const horarioLivre = sugestoes.includes(horario);
 
   return (
     <section aria-label="Agenda dos docentes" className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-brand-900">Agenda dos docentes em {formatarData(dataISO)}</p>
-        {carregando && <Spinner className="size-4 text-brand-700" />}
+        <p className="text-sm font-medium text-brand-900">Horários livres em {formatarData(dataISO)}</p>
+        {(carregandoLivres || carregandoAgendas) && <Spinner className="size-4 text-brand-700" />}
       </div>
 
       {podeAvaliar && (
         <p
           className={cn(
             "flex items-start gap-1.5 text-sm",
-            algumAtende ? "text-sage-700" : "text-amber-700 dark:text-amber-300"
+            horarioLivre ? "text-sage-700" : "text-amber-700 dark:text-amber-300"
           )}
         >
-          {algumAtende ? (
+          {horarioLivre ? (
             <IconCircleCheck className="mt-0.5 size-4 shrink-0" />
           ) : (
             <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
           )}
-          {algumAtende
-            ? textoLivre
-            : `O horário ${horario} (${duracaoMinutos} min) não está livre para nenhum docente convidado. Escolha um horário sugerido abaixo.`}
+          {horarioLivre
+            ? `O horário ${horario} está livre para todos os envolvidos.`
+            : `O horário ${horario} (${duracaoMinutos} min) não está livre para todos os envolvidos. Escolha um horário sugerido abaixo.`}
         </p>
       )}
 
-      {!duracaoMinutos && <p className="text-xs text-muted-foreground">Escolha a duração para ver os horários livres.</p>}
+      {!idDuracao ? (
+        <p className="text-xs text-muted-foreground">Escolha a duração para ver os horários livres.</p>
+      ) : erroLivres ? (
+        <p className="text-xs text-destructive">{erroLivres}</p>
+      ) : (
+        !carregandoLivres &&
+        (sugestoes.length === 0 ? (
+          <p className="text-xs text-amber-700 dark:text-amber-300">
+            Nenhum horário livre para todos os envolvidos neste dia. Tente outra data.
+          </p>
+        ) : (
+          <div className="flex flex-wrap gap-1">
+            {sugestoes.slice(0, expandido ? undefined : MAX_SUGESTOES).map((h) => (
+              <button
+                key={h}
+                type="button"
+                onClick={() => onEscolherHorario(h)}
+                className={cn(
+                  "rounded-md border px-2 py-0.5 text-xs tabular-nums transition-colors",
+                  h === horario
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-brand-200 bg-card text-brand-700 hover:bg-brand-100"
+                )}
+              >
+                {h}
+              </button>
+            ))}
+            {sugestoes.length > MAX_SUGESTOES && (
+              <button
+                type="button"
+                onClick={() => setExpandido((atual) => !atual)}
+                className="self-center px-1 text-xs font-medium text-brand-600 hover:underline"
+              >
+                {expandido ? "mostrar menos" : `+${sugestoes.length - MAX_SUGESTOES} horários`}
+              </button>
+            )}
+          </div>
+        ))
+      )}
 
-      <ul className="flex flex-col gap-3">
-        {agendas.map(({ docente, agenda }) => (
-          <li key={docente.id} className="flex flex-col gap-1.5 rounded-md bg-card p-2.5 text-sm shadow-xs">
-            <p className="font-medium">{docente.nome}</p>
-            {!agenda ? (
-              <p className="text-xs text-muted-foreground">Carregando…</p>
-            ) : agenda.janelas.length === 0 ? (
-              <p className="text-xs text-amber-700 dark:text-amber-300">Não atende neste dia da semana.</p>
-            ) : (
-              <>
+      <ul className="flex flex-col gap-2">
+        {docentes.map((docente) => {
+          const info = carregandoAgendas ? undefined : agendas.dados[docente.id];
+          const agenda = info
+            ? calcularAgendaDoDia({
+                dataISO,
+                duracaoMinutos,
+                disponibilidades: info.disponibilidades,
+                bloqueios: info.bloqueios,
+                agendamentos: info.agendamentos,
+                ignorarAgendamentoId,
+              })
+            : null;
+          return (
+            <li key={docente.id} className="flex flex-col gap-1 rounded-md bg-card p-2.5 text-sm shadow-xs">
+              <p className="font-medium">
+                {docente.nome}
+                {docente.id === meuId && <span className="font-normal text-muted-foreground"> (você)</span>}
+              </p>
+              {!agenda ? (
+                <p className="text-xs text-muted-foreground">Carregando…</p>
+              ) : agenda.janelas.length === 0 ? (
+                <p className="text-xs text-amber-700 dark:text-amber-300">Não atende neste dia da semana.</p>
+              ) : (
                 <p className="text-xs text-muted-foreground">
                   Atende: {agenda.janelas.map((j) => `${paraHora(j.inicio)}–${paraHora(j.fim)}`).join(", ")}
                   {agenda.ocupados.length > 0 &&
                     ` · Ocupado: ${agenda.ocupados.map((o) => `${paraHora(o.inicio)}–${paraHora(o.fim)}${o.rotulo?.startsWith("Bloqueio") ? " (bloqueio)" : ""}`).join(", ")}`}
                 </p>
-                {duracaoMinutos > 0 &&
-                  (agenda.horariosLivres.length === 0 ? (
-                    <p className="text-xs text-amber-700 dark:text-amber-300">Sem horários livres para {duracaoMinutos} min neste dia.</p>
-                  ) : (
-                    <div className="flex flex-wrap gap-1">
-                      {agenda.horariosLivres
-                        .slice(0, expandidos[docente.id] ? undefined : MAX_SUGESTOES)
-                        .map((h) => (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => onEscolherHorario(h)}
-                          className={cn(
-                            "rounded-md border px-2 py-0.5 text-xs tabular-nums transition-colors",
-                            h === horario
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-brand-200 bg-card text-brand-700 hover:bg-brand-100"
-                          )}
-                        >
-                          {h}
-                        </button>
-                      ))}
-                      {agenda.horariosLivres.length > MAX_SUGESTOES && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            setExpandidos((atual) => ({ ...atual, [docente.id]: !atual[docente.id] }))
-                          }
-                          className="self-center px-1 text-xs font-medium text-brand-600 hover:underline"
-                        >
-                          {expandidos[docente.id] ? "mostrar menos" : `+${agenda.horariosLivres.length - MAX_SUGESTOES} horários`}
-                        </button>
-                      )}
-                    </div>
-                  ))}
-              </>
-            )}
-          </li>
-        ))}
+              )}
+            </li>
+          );
+        })}
       </ul>
 
-      {agendaOculta && (
-        <p className="text-xs text-muted-foreground">
-          As reuniões já marcadas e os bloqueios dos professores não aparecem para o seu perfil: os horários
-          sugeridos seguem só o horário de atendimento. Se houver conflito, o sistema avisa ao salvar.
-        </p>
-      )}
+      <p className="text-xs text-muted-foreground">
+        Os horários sugeridos já descontam reuniões marcadas e períodos bloqueados de todos os envolvidos, sem
+        mostrar a agenda de ninguém.
+      </p>
     </section>
   );
 }

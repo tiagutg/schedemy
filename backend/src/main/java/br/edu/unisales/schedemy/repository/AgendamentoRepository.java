@@ -50,14 +50,18 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
                                                               @Param("data") LocalDate data,
                                                               @Param("agendamentoIgnoradoId") Long agendamentoIgnoradoId);
 
+    // RF 06 - reunioes ativas em que o usuario participa (como organizador ou convidado) no periodo.
+    // Recorrencia e horario do bloqueio sao aplicados depois, na CalculadoraDeAgenda.
     @Query("""
-            SELECT a FROM Agendamento a
-            WHERE a.organizador.id = :professorId
+            SELECT DISTINCT a FROM Agendamento a
+            JOIN a.participantes p
+            WHERE p.usuario.id = :usuarioId
               AND a.dataReuniao BETWEEN :dataInicio AND :dataFim
-              AND a.status IN (br.edu.unisales.schedemy.domain.enums.StatusAgendamento.PENDENTE,
-                                br.edu.unisales.schedemy.domain.enums.StatusAgendamento.CONFIRMADO)
+              AND a.status NOT IN (br.edu.unisales.schedemy.domain.enums.StatusAgendamento.CANCELADO,
+                                   br.edu.unisales.schedemy.domain.enums.StatusAgendamento.CONCLUIDO)
+            ORDER BY a.dataReuniao, a.horarioInicio
             """)
-    List<Agendamento> buscarImpactadosPorPeriodo(@Param("professorId") Long professorId,
+    List<Agendamento> buscarImpactadosPorPeriodo(@Param("usuarioId") Long usuarioId,
                                                  @Param("dataInicio") LocalDate dataInicio,
                                                  @Param("dataFim") LocalDate dataFim);
 

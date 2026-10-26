@@ -9,6 +9,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -70,6 +72,15 @@ public class GlobalExceptionHandler {
                 erros
         );
         return ResponseEntity.badRequest().body(corpo);
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class, MethodArgumentTypeMismatchException.class})
+    public ResponseEntity<ErrorResponseDTO> tratarParametroInvalido(Exception ex, HttpServletRequest request) {
+        String parametro = ex instanceof MissingServletRequestParameterException faltando
+                ? faltando.getParameterName()
+                : ((MethodArgumentTypeMismatchException) ex).getName();
+        return construirResposta(HttpStatus.BAD_REQUEST, "Requisicao invalida",
+                "Parametro '%s' ausente ou invalido.".formatted(parametro), request);
     }
 
     @ExceptionHandler(IllegalArgumentException.class)
