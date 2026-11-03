@@ -7,6 +7,11 @@ import {
   paraHora,
   paraMinutos,
   situacaoLimiteAluno,
+  diasDeAtendimentoEmComum,
+  resumirSemana,
+  rotuloDia,
+  temHorarioEmComumNaSemana,
+  quemImpedeHorarioEmComum,
 } from "./agenda";
 import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";
 
@@ -226,5 +231,57 @@ describe("situacaoLimiteAluno", () => {
     const situacao = situacaoLimiteAluno([criado(1, 1), criado(2, 4), criado(3, 10)], 1, agora);
     // É preciso que os dois mais antigos (10 h e 4 h) saiam; o de 4 h sai em 20 h.
     expect(situacao.liberaEm?.getTime()).toBe(agora + 20 * 3_600_000);
+  });
+});
+
+describe("diasDeAtendimentoEmComum", () => {
+  // 2026-10-19 é segunda; terça = 3 e quinta = 5 no padrão do banco.
+  const hoje = new Date(2026, 9, 19);
+
+  it("lista só os dias em que todos os docentes atendem", () => {
+    const terEQui = [disponibilidade("08:00", "12:00", 3), disponibilidade("14:00", "18:00", 5)];
+    const soQui = [disponibilidade("15:00", "16:00", 5)];
+    expect(diasDeAtendimentoEmComum([terEQui], hoje, 7)).toEqual(["2026-10-20", "2026-10-22"]);
+    expect(diasDeAtendimentoEmComum([terEQui, soQui], hoje, 7)).toEqual(["2026-10-22"]);
+  });
+
+  it("exige horário em comum que caiba a reunião", () => {
+    const manhaTer = [disponibilidade("08:00", "12:00", 3), disponibilidade("08:00", "12:00", 5)];
+    const tardeTer = [disponibilidade("14:00", "17:00", 3), disponibilidade("09:00", "10:00", 5)];
+    expect(diasDeAtendimentoEmComum([manhaTer, tardeTer], hoje, 7, 30)).toEqual(["2026-10-22"]);
+    expect(diasDeAtendimentoEmComum([manhaTer, tardeTer], hoje, 7, 90)).toEqual([]);
+  });
+
+  it("ignora horários inativos e docente sem grade", () => {
+    expect(diasDeAtendimentoEmComum([[disponibilidade("08:00", "12:00", 3, false)]], hoje, 7)).toEqual([]);
+    expect(diasDeAtendimentoEmComum([[disponibilidade("08:00", "12:00", 3)], []], hoje, 7)).toEqual([]);
+  });
+});
+
+describe("resumirSemana e rotuloDia", () => {
+  it("resume a grade em ordem de dia e horário", () => {
+    const grade = [disponibilidade("14:00", "17:00", 4), disponibilidade("08:00", "12:00", 2), disponibilidade("08:00", "09:00", 4)];
+    expect(resumirSemana(grade)).toBe("Seg 08:00–12:00 · Qua 08:00–09:00 · Qua 14:00–17:00");
+  });
+
+  it("mostra o dia da semana com a data", () => {
+    expect(rotuloDia("2026-11-03")).toBe("Ter, 03/11");
+  });
+});
+
+describe("temHorarioEmComumNaSemana e quemImpedeHorarioEmComum", () => {
+  const manhaTer = [disponibilidade("08:00", "12:00", 3)];
+  const tardeTer = [disponibilidade("14:00", "17:00", 3)];
+  const terInteira = [disponibilidade("08:00", "18:00", 3)];
+
+  it("acha o horário em comum só quando cabe a reunião", () => {
+    expect(temHorarioEmComumNaSemana([manhaTer, terInteira], 30)).toBe(true);
+    expect(temHorarioEmComumNaSemana([manhaTer, tardeTer], 30)).toBe(false);
+    expect(temHorarioEmComumNaSemana([[disponibilidade("08:00", "08:20", 3)], terInteira], 30)).toBe(false);
+  });
+
+  it("aponta quem, saindo, libera horário para os demais", () => {
+    expect(quemImpedeHorarioEmComum([manhaTer, terInteira, tardeTer], 30)).toEqual([0, 2]);
+    expect(quemImpedeHorarioEmComum([manhaTer, terInteira], 30)).toEqual([]);
   });
 });

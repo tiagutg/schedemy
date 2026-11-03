@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { CONTAS, entrar } from "./apoio";
+import { CONTAS, entrar, semHorariosDeAtendimento } from "./apoio";
 
 test("recusa e-mail ou senha inválidos", async ({ page }) => {
   await page.goto("/login");
@@ -15,7 +15,9 @@ test("aluno vê só o próprio menu e os próprios agendamentos", async ({ page 
   const menu = page.locator("[data-sidebar=content]");
   await expect(menu.getByRole("link", { name: "Agendamentos" })).toBeVisible();
   await expect(menu.getByRole("link", { name: "Usuários" })).toHaveCount(0);
-  await expect(menu.getByRole("link", { name: "Disponibilidades" })).toHaveCount(0);
+  await expect(menu.getByRole("link", { name: "Horários de atendimento" })).toHaveCount(0);
+  // RF 23: todos os perfis recebem avisos das próprias reuniões.
+  await expect(menu.getByRole("link", { name: "Notificações" })).toBeVisible();
 
   await page.goto("/agendamentos");
   await expect(page.getByRole("heading", { name: "Meus agendamentos" })).toBeVisible();
@@ -30,7 +32,7 @@ test("aluno vê só o próprio menu e os próprios agendamentos", async ({ page 
 test("recepção vê a agenda geral e escolhe o organizador", async ({ page }) => {
   await entrar(page, CONTAS.recepcao);
   await page.goto("/agendamentos");
-  await expect(page.getByRole("heading", { name: "Agendamentos", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Agendamentos", exact: true, level: 2 })).toBeVisible();
   await expect(page.getByLabel("Usuário envolvido")).toBeVisible();
 
   await page.getByRole("button", { name: "Novo agendamento" }).first().click();
@@ -43,8 +45,8 @@ test("recepção vê a agenda geral e escolhe o organizador", async ({ page }) =
 test("professor gerencia só a própria disponibilidade", async ({ page }) => {
   await entrar(page, CONTAS.professor);
   await page.goto("/disponibilidades");
-  await expect(page.getByRole("heading", { name: "Minhas disponibilidades" })).toBeVisible();
-  await page.getByRole("button", { name: "Nova disponibilidade" }).click();
+  await expect(page.getByRole("heading", { name: "Meus horários de atendimento" })).toBeVisible();
+  await page.getByRole("button", { name: "Novo horário" }).click();
   await expect(page.getByLabel("Professor / coordenador")).toHaveValue(CONTAS.professor.nome);
   await expect(page.getByLabel("Professor / coordenador")).toBeDisabled();
 });
@@ -61,12 +63,16 @@ test("sessão com senha que deixou de valer volta para o login", async ({ page }
 });
 
 test("professor sem horários cadastrados é avisado no painel", async ({ page }) => {
-  // Éberte não tem disponibilidade no dump.
-  await entrar(page, { email: "ebert.professor@unisales.edu.br", senha: "Senha123@" });
-  const aviso = page.getByRole("status").filter({ hasText: "Você ainda não cadastrou seus horários" });
-  await expect(aviso).toBeVisible();
-  await aviso.getByRole("link", { name: "Cadastrar horários" }).click();
-  await expect(page.getByRole("heading", { name: "Minhas disponibilidades" })).toBeVisible();
+  const restaurar = await semHorariosDeAtendimento(CONTAS.semHorario);
+  try {
+    await entrar(page, CONTAS.semHorario);
+    const aviso = page.getByRole("status").filter({ hasText: "Você ainda não cadastrou seus horários" });
+    await expect(aviso).toBeVisible();
+    await aviso.getByRole("link", { name: "Cadastrar horários" }).click();
+    await expect(page.getByRole("heading", { name: "Meus horários de atendimento" })).toBeVisible();
+  } finally {
+    await restaurar();
+  }
 });
 
 test("meu perfil mostra os dados do usuário logado", async ({ page }) => {

@@ -54,6 +54,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private final AgendamentoMapper agendamentoMapper;
     private final UsuarioAutenticado usuarioAutenticado;
     private final CalculadoraDeAgenda calculadoraDeAgenda;
+    private final Notificador notificador;
+    private final NotificacaoRepository notificacaoRepository;
 
     @Override
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
@@ -114,9 +116,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         agendamento = agendamentoRepository.save(agendamento);
 
         if (agendamento.getFormato() != FormatoReuniao.PRESENCIAL) {
-            criarSalaVirtual(agendamento); // RF 27
+            criarSalaVirtual(agendamento, dto.linkReuniao()); // RF 27
         }
 
+        notificador.novoAgendamento(agendamento, usuarioAutenticado.obter()); // RF 23
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -157,25 +160,37 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, StatusAgendamento status,
-                                                         LocalDate dataInicio, LocalDate dataFim, Pageable pageable) {
+    public Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, List<StatusAgendamento> status,
+                                                         LocalDate dataInicio, LocalDate dataFim, String busca,
+                                                         Pageable pageable) {
         usuarioAutenticado.exigirProprioOuAdmin(usuarioId,
                 "Voce so pode listar os seus proprios agendamentos.");
         buscarUsuario(usuarioId);
-        return agendamentoRepository.buscarPorUsuarioComFiltros(usuarioId, status, dataInicio, dataFim, pageable)
+        return agendamentoRepository.buscarPorUsuarioComFiltros(usuarioId, statusOuTodos(status), dataInicio, dataFim,
+                        termoDeBusca(busca), pageable)
                 .map(agendamentoMapper::paraResponseDTO);
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Page<AgendamentoResponseDTO> listarTodos(StatusAgendamento status, LocalDate dataInicio, LocalDate dataFim,
-                                                    Pageable pageable) {
+    public Page<AgendamentoResponseDTO> listarTodos(List<StatusAgendamento> status, LocalDate dataInicio, LocalDate dataFim,
+                                                    String busca, Pageable pageable) {
         // RF 20/RF 21 - a recepcao acompanha todos os agendamentos para poder cancela-los ou altera-los.
         if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()) {
             throw new AcessoNegadoNegocioException("Somente a recepcao e a administracao podem listar todos os agendamentos.");
         }
-        return agendamentoRepository.buscarComFiltros(status, dataInicio, dataFim, pageable)
+        return agendamentoRepository.buscarComFiltros(statusOuTodos(status), dataInicio, dataFim, termoDeBusca(busca), pageable)
                 .map(agendamentoMapper::paraResponseDTO);
+    }
+
+    /** Sem busca, usa "" (casa com tudo): o PostgreSQL nao aceita LOWER(null) sem tipo. */
+    private static String termoDeBusca(String busca) {
+        return busca == null ? "" : busca.trim();
+    }
+
+    /** Sem filtro de status, considera todos (ex.: "aguardando resposta" = PENDENTE + AGUARDANDO_RESPOSTA). */
+    private static List<StatusAgendamento> statusOuTodos(List<StatusAgendamento> status) {
+        return status == null || status.isEmpty() ? List.of(StatusAgendamento.values()) : status;
     }
 
     @Override
@@ -222,8 +237,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                     .statusResposta(StatusResposta.PENDENTE)
                     .build());
         }
+        sincronizarSalaVirtual(agendamento, dto.linkReuniao());
 
         agendamento = agendamentoRepository.save(agendamento);
+        notificador.alteracao(agendamento, usuarioAutenticado.obter()); // RF 23
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -252,8 +269,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
             registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.RECUSA_AGENDAMENTO, dto.motivo());
         }
 
+        StatusAgendamento statusAnterior = agendamento.getStatus();
         recalcularStatus(agendamento);
         agendamento = agendamentoRepository.save(agendamento);
+        notificador.resposta(agendamento, usuario, Boolean.TRUE.equals(dto.aceitar()), statusAnterior); // RF 23
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -280,6 +299,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.CANCELAMENTO, dto.motivo()); // RF 11
 
         agendamento = agendamentoRepository.save(agendamento);
+        // Na remarcacao (RF 28) os envolvidos ja receberam o convite da nova reuniao: nao avisa o cancelamento da antiga.
+        if (!agendamentoRepository.existsByAgendamentoOrigemIdAndStatusNot(agendamento.getId(), StatusAgendamento.CANCELADO)) {
+            notificador.cancelamento(agendamento, usuario); // RF 23
+        }
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -291,6 +314,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                     "Somente agendamentos PENDENTES ou CANCELADOS podem ser removidos definitivamente. " +
                             "Para os demais casos, utilize o cancelamento.");
         }
+        notificacaoRepository.removerDoAgendamento(agendamento.getId());
         agendamentoRepository.delete(agendamento);
     }
 
@@ -421,16 +445,36 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
-    /** RF 27 - cria automaticamente uma sala virtual para reunioes online/hibridas. */
-    private void criarSalaVirtual(Agendamento agendamento) {
-        String linkSimulado = "https://teams.microsoft.com/l/meetup-join/schedemy/%s"
-                .formatted(UUID.randomUUID());
+    /**
+     * RF 27 - sala virtual para reunioes online/hibridas: usa o link informado pelo organizador
+     * (Teams, Meet...) ou gera um automaticamente.
+     */
+    private void criarSalaVirtual(Agendamento agendamento, String linkInformado) {
         SalaVirtual sala = SalaVirtual.builder()
                 .agendamento(agendamento)
-                .linkTeams(linkSimulado)
+                .linkTeams(linkOuSimulado(linkInformado))
                 .build();
         salaVirtualRepository.save(sala);
         agendamento.setSalaVirtual(sala);
+    }
+
+    /** Mantem a sala virtual coerente com o formato depois de uma edicao. */
+    private void sincronizarSalaVirtual(Agendamento agendamento, String linkInformado) {
+        SalaVirtual sala = agendamento.getSalaVirtual();
+        if (agendamento.getFormato() == FormatoReuniao.PRESENCIAL) {
+            agendamento.setSalaVirtual(null); // orphanRemoval apaga a sala
+        } else if (sala == null) {
+            criarSalaVirtual(agendamento, linkInformado);
+        } else if (linkInformado != null && !linkInformado.isBlank()) {
+            sala.setLinkTeams(linkInformado.trim());
+        }
+    }
+
+    private static String linkOuSimulado(String linkInformado) {
+        if (linkInformado != null && !linkInformado.isBlank()) {
+            return linkInformado.trim();
+        }
+        return "https://teams.microsoft.com/l/meetup-join/schedemy/%s".formatted(UUID.randomUUID());
     }
 
     /** RF 11 - toda operacao sensivel (cancelamento, recusa) precisa registrar uma justificativa. */

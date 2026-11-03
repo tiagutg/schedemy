@@ -28,8 +28,8 @@ public interface BloqueioPeriodoRepository extends JpaRepository<BloqueioPeriodo
     @Query("""
             SELECT b FROM BloqueioPeriodo b
             WHERE (:usuarioId IS NULL OR b.usuario.id = :usuarioId)
-              AND (:dataInicio IS NULL OR b.dataFim >= :dataInicio)
-              AND (:dataFim IS NULL OR b.dataInicio <= :dataFim)
+              AND (CAST(:dataInicio AS LocalDate) IS NULL OR b.dataFim >= :dataInicio)
+              AND (CAST(:dataFim AS LocalDate) IS NULL OR b.dataInicio <= :dataFim)
             """)
     Page<BloqueioPeriodo> buscarComFiltros(@Param("usuarioId") Long usuarioId,
                                            @Param("dataInicio") LocalDate dataInicio,

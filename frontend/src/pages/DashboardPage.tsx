@@ -2,91 +2,95 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   IconArrowRight,
-  IconCalendarCheck,
-  IconCalendarX,
-  IconCircleCheckFilled,
-  IconClockHour4,
-  IconLoader,
+  IconBan,
+  IconChevronRight,
+  IconHourglassHigh,
   IconPlus,
+  IconStar,
   IconUserPlus,
-  type Icon,
 } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
+import { avaliacoesApi } from "@/api/avaliacoes";
 import { usuariosApi } from "@/api/usuarios";
 import { useAuth } from "@/context/AuthContext";
 import Spinner from "@/components/common/Spinner";
 import AvisoSemDisponibilidade from "./AvisoSemDisponibilidade";
 import ConvitesPendentes from "./ConvitesPendentes";
+import CartoesResumo from "./painel/CartoesResumo";
+import GraficoReunioes from "./painel/GraficoReunioes";
 import Pill from "@/components/common/Pill";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora, hojeISO } from "@/utils/format";
-import type { Agendamento, Params } from "@/types";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatarData, formatarHora } from "@/utils/format";
+import { intervaloDoPainel, proximasReunioes, resumoDoMes } from "@/utils/painel";
+import { descreverEnvolvidos, situacaoDaReuniao } from "@/utils/reuniao";
+import type { Agendamento } from "@/types";
 
-const STATUS_RESUMO = ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO", "CONCLUIDO", "CANCELADO"];
+// Teto da busca do painel: 3 meses para trás e 30 dias à frente cabem com folga.
+const LIMITE_REUNIOES = 2000;
 
-// Ícone e legenda de cada cartão de resumo (apenas apresentação).
-const VISUAL_STATUS: Record<string, { icone: Icon; legenda: string }> = {
-  PENDENTE: { icone: IconLoader, legenda: "Aguardando análise" },
-  AGUARDANDO_RESPOSTA: { icone: IconClockHour4, legenda: "Convites sem resposta" },
-  CONFIRMADO: { icone: IconCalendarCheck, legenda: "Reuniões confirmadas" },
-  CONCLUIDO: { icone: IconCircleCheckFilled, legenda: "Reuniões realizadas" },
-  CANCELADO: { icone: IconCalendarX, legenda: "Reuniões canceladas" },
-};
+interface DadosPainel {
+  /** Reuniões do intervalo do painel (base dos cartões, do gráfico e das próximas). */
+  reunioes: Agendamento[];
+  paraAvaliar: number;
+  totalUsuarios: number | null;
+}
 
 export default function DashboardPage() {
-  const { perfilVinculado, pode } = useAuth();
-  const [contagens, setContagens] = useState<Record<string, number> | null>(null);
-  const [totalUsuarios, setTotalUsuarios] = useState<number | null>(null);
-  const [proximos, setProximos] = useState<Agendamento[]>([]);
-  const [carregando, setCarregando] = useState(true);
+  const { perfilVinculado: eu, pode } = useAuth();
+  const [dados, setDados] = useState<DadosPainel | null>(null);
   // Incrementada quando um convite é respondido, para atualizar os números.
   const [versao, setVersao] = useState(0);
 
   // Quem não acompanha a agenda geral vê os números dos próprios agendamentos.
-  const meuId = pode("agendamentos.verTodos") ? null : (perfilVinculado?.id ?? null);
+  const meuId = pode("agendamentos.verTodos") ? null : (eu?.id ?? null);
+  const ehAluno = pode("avaliacoes.criar") && !!eu;
+  const ehDocente = pode("disponibilidades.gerenciar");
 
   useEffect(() => {
     let cancelado = false;
-    const listar = (params: Params) =>
-      meuId ? agendamentosApi.listarPorUsuario(meuId, params) : agendamentosApi.listarTodos(params);
+    const intervaloPainel = () => {
+      const { inicio, fim } = intervaloDoPainel();
+      return { dataInicio: inicio, dataFim: fim };
+    };
+
+    async function avaliacoesPendentes(): Promise<number> {
+      if (!ehAluno || !eu) return 0;
+      const [concluidas, avaliadas] = await Promise.all([
+        agendamentosApi.listarPorUsuario(eu.id, { status: "CONCLUIDO", size: 100 }),
+        avaliacoesApi.listarPorAluno(eu.id, { size: 200 }),
+      ]);
+      const jaAvaliadas = new Set(avaliadas.conteudo.map((a) => a.idAgendamento));
+      return concluidas.conteudo.filter((a) => !jaAvaliadas.has(a.id)).length;
+    }
+
     async function carregar() {
-      setCarregando(true);
       try {
-        const [porStatus, usuariosPagina, agendamentosPagina] = await Promise.all([
-          Promise.all(
-            STATUS_RESUMO.map((status) =>
-              listar({ status, page: 0, size: 1 }).then((p) => [status, p.totalElementos] as const)
-            )
-          ),
-          usuariosApi.listar({ page: 0, size: 1 }),
-          listar({ dataInicio: hojeISO(), page: 0, size: 6, sort: "dataReuniao,asc" }),
+        const [pagina, paraAvaliar, usuarios] = await Promise.all([
+          meuId
+            ? agendamentosApi.listarPorUsuario(meuId, { ...intervaloPainel(), size: LIMITE_REUNIOES })
+            : agendamentosApi.listarTodos({ ...intervaloPainel(), size: LIMITE_REUNIOES }),
+          avaliacoesPendentes(),
+          pode("usuarios.gerenciar") ? usuariosApi.listar({ page: 0, size: 1 }) : null,
         ]);
         if (cancelado) return;
-        setContagens(Object.fromEntries(porStatus));
-        setTotalUsuarios(usuariosPagina.totalElementos);
-        setProximos(agendamentosPagina.conteudo);
+        setDados({ reunioes: pagina.conteudo, paraAvaliar, totalUsuarios: usuarios?.totalElementos ?? null });
       } catch {
         // painel é apenas informativo — erros de rede já aparecem em outras telas
-      } finally {
-        if (!cancelado) setCarregando(false);
+        if (!cancelado) setDados({ reunioes: [], paraAvaliar: 0, totalUsuarios: null });
       }
     }
     carregar();
     return () => {
       cancelado = true;
     };
-  }, [meuId, versao]);
+  }, [meuId, versao, ehAluno, eu, pode]);
+
+  const proximas = dados ? proximasReunioes(dados.reunioes, 5) : [];
+
+  const subtitulo = meuId
+    ? "Suas reuniões, convites e pendências em um só lugar."
+    : "Acompanhe as reuniões marcadas entre alunos, professores e coordenadores.";
 
   return (
     <>
@@ -100,9 +104,9 @@ export default function DashboardPage() {
         />
         <div className="relative flex flex-col gap-1">
           <h2 className="text-xl font-semibold tracking-tight break-words sm:text-2xl">
-            {`Olá${perfilVinculado?.nome ? ", " + perfilVinculado.nome.split(" ")[0] : ""}!`}
+            {`Olá${eu?.nome ? ", " + eu.nome.split(" ")[0] : ""}!`}
           </h2>
-          <p className="max-w-2xl text-sm text-white/85">Visão geral dos agendamentos e cadastros do Schedemy.</p>
+          <p className="max-w-2xl text-sm text-white/85">{subtitulo}</p>
         </div>
       </div>
 
@@ -110,50 +114,50 @@ export default function DashboardPage() {
 
       <ConvitesPendentes onRespondido={() => setVersao((v) => v + 1)} />
 
-      {carregando ? (
+      {dados?.paraAvaliar ? (
+        <Link
+          to="/avaliacoes?nova=1"
+          className="flex items-center gap-3 rounded-xl border border-amber-300 bg-amber-50 p-4 text-amber-900 transition-colors hover:bg-amber-100 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100 dark:hover:bg-amber-500/20"
+        >
+          <IconStar className="size-6 shrink-0 text-amber-600 dark:text-amber-300" />
+          <span className="flex-1 text-sm">
+            <span className="font-medium">
+              {dados.paraAvaliar === 1
+                ? "Você tem 1 reunião para avaliar."
+                : `Você tem ${dados.paraAvaliar} reuniões para avaliar.`}
+            </span>{" "}
+            Conte como foi: leva menos de um minuto.
+          </span>
+          <IconChevronRight className="size-5 shrink-0" />
+        </Link>
+      ) : null}
+
+      {!dados ? (
         <div className="flex justify-center py-16 text-muted-foreground">
           <Spinner />
         </div>
       ) : (
         <>
-          {/* 2 colunas no celular (o último cartão ocupa a linha), 3 em telas médias e 5 nas largas */}
-          <div className="grid grid-cols-2 gap-3 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:from-primary/5 *:data-[slot=card]:to-card *:data-[slot=card]:shadow-xs sm:gap-4 @5xl/main:grid-cols-3 @7xl/main:grid-cols-5">
-            {STATUS_RESUMO.map((status) => {
-              const { icone: Icone, legenda } = VISUAL_STATUS[status];
-              return (
-                <Card key={status} className="@container/card border-t-2 border-t-brand-600 last:col-span-2 @5xl/main:last:col-span-1">
-                  {/* Sem o rodapé (cartão estreito), o espaçamento inferior fica no cabeçalho */}
-                  <CardHeader className="grid-cols-1! pb-(--card-spacing) @[220px]/card:grid-cols-[1fr_auto]! @[220px]/card:pb-0">
-                    <CardDescription>{rotularEnum(status)}</CardDescription>
-                    <CardTitle className="text-2xl font-semibold text-brand-700 tabular-nums @[250px]/card:text-3xl">
-                      {contagens?.[status] ?? "—"}
-                    </CardTitle>
-                    <CardAction className="hidden @[220px]/card:block">
-                      <Badge variant="outline" className="border-brand-200 bg-brand-100 text-brand-700">
-                        <Icone />
-                        Status
-                      </Badge>
-                    </CardAction>
-                  </CardHeader>
-                  <CardFooter className="hidden flex-col items-start gap-1.5 border-t-0 bg-transparent pt-0 text-sm @[220px]/card:flex">
-                    <div className="line-clamp-1 flex gap-2 font-medium">{legenda}</div>
-                    <div className="text-muted-foreground">{meuId ? "Seus agendamentos neste status" : "Total de agendamentos neste status"}</div>
-                  </CardFooter>
-                </Card>
-              );
-            })}
-          </div>
+          <CartoesResumo
+            resumo={resumoDoMes(dados.reunioes)}
+            meusNumeros={!!meuId}
+            aguardandoVoce={
+              meuId ? dados.reunioes.filter((a) => situacaoDaReuniao(a, eu?.id).suaVez).length : null
+            }
+          />
+
+          <GraficoReunioes agendamentos={dados.reunioes} meusNumeros={!!meuId} />
 
           <div className="grid grid-cols-1 gap-4 md:gap-6 @5xl/main:grid-cols-3">
             <Card className="@5xl/main:col-span-2">
               <CardHeader>
-                <CardTitle>Próximos agendamentos</CardTitle>
-                <CardDescription>As próximas reuniões pela data marcada</CardDescription>
+                <CardTitle>Próximas reuniões</CardTitle>
+                <CardDescription>Confirmadas e aguardando resposta, a partir de hoje</CardDescription>
                 {pode("agendamentos.ver") && (
                   <CardAction>
                     <Button asChild variant="outline" size="sm">
                       <Link to="/agendamentos">
-                        Ver todos
+                        Ver todas
                         <IconArrowRight />
                       </Link>
                     </Button>
@@ -161,21 +165,29 @@ export default function DashboardPage() {
                 )}
               </CardHeader>
               <CardContent className="px-0">
-                {proximos.length === 0 ? (
+                {proximas.length === 0 ? (
                   <p className="px-4 py-8 text-sm text-muted-foreground">Nenhuma reunião marcada a partir de hoje.</p>
                 ) : (
                   <ul className="divide-y border-t">
-                    {proximos.map((a) => (
-                      <li key={a.id} className="flex items-center justify-between gap-3 px-4 py-3">
-                        <div className="min-w-0">
-                          <p className="truncate text-sm font-medium">{a.topico}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {formatarData(a.dataReuniao)} às {formatarHora(a.horarioInicio)} · {a.nomeOrganizador}
-                          </p>
-                        </div>
-                        <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
-                      </li>
-                    ))}
+                    {proximas.map((a) => {
+                      const situacao = situacaoDaReuniao(a, eu?.id);
+                      return (
+                        <li key={a.id}>
+                          <Link
+                            to={`/agendamentos?abrir=${a.id}`}
+                            className="flex items-center justify-between gap-3 px-4 py-3 transition-colors hover:bg-muted/50"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium">{a.topico}</p>
+                              <p className="truncate text-xs text-muted-foreground">
+                                {formatarData(a.dataReuniao)} às {formatarHora(a.horarioInicio)} · {descreverEnvolvidos(a, eu?.id)}
+                              </p>
+                            </div>
+                            <Pill className={situacao.cor}>{situacao.rotulo}</Pill>
+                          </Link>
+                        </li>
+                      );
+                    })}
                   </ul>
                 )}
               </CardContent>
@@ -183,34 +195,56 @@ export default function DashboardPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Ações rápidas</CardTitle>
-                <CardDescription>Atalhos para os cadastros mais usados</CardDescription>
+                <CardTitle>Atalhos</CardTitle>
+                <CardDescription>O que você mais faz por aqui</CardDescription>
               </CardHeader>
-              <CardContent className="flex flex-col gap-4">
+              <CardContent className="flex flex-col gap-2">
                 {pode("usuarios.gerenciar") && (
-                  <div className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm">
+                  <div className="flex items-center justify-between rounded-lg border border-brand-200 bg-brand-50 px-3 py-2.5 text-sm dark:bg-brand-100">
                     <span className="text-brand-900">Usuários cadastrados</span>
-                    <span className="text-lg font-semibold text-brand-700 tabular-nums">{totalUsuarios ?? "—"}</span>
+                    <span className="text-lg font-semibold text-brand-700 tabular-nums">{dados.totalUsuarios ?? "—"}</span>
                   </div>
                 )}
-                <div className="flex flex-wrap gap-2">
-                  {pode("agendamentos.criar") && (
-                    <Button asChild className="flex-1">
-                      <Link to="/agendamentos?novo=1">
-                        <IconPlus />
-                        Agendamento
+                {pode("agendamentos.criar") && (
+                  <Button asChild className="justify-start">
+                    <Link to="/agendamentos?novo=1">
+                      <IconPlus />
+                      Novo agendamento
+                    </Link>
+                  </Button>
+                )}
+                {ehAluno && (
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link to="/avaliacoes?nova=1">
+                      <IconStar />
+                      Avaliar uma reunião
+                    </Link>
+                  </Button>
+                )}
+                {ehDocente && (
+                  <>
+                    <Button asChild variant="outline" className="justify-start">
+                      <Link to="/disponibilidades">
+                        <IconHourglassHigh />
+                        Meus horários de atendimento
                       </Link>
                     </Button>
-                  )}
-                  {pode("usuarios.gerenciar") && (
-                    <Button asChild variant="outline" className="flex-1">
-                      <Link to="/usuarios">
-                        <IconUserPlus />
-                        Usuário
+                    <Button asChild variant="outline" className="justify-start">
+                      <Link to="/bloqueios?novo=1">
+                        <IconBan />
+                        Bloquear um período
                       </Link>
                     </Button>
-                  )}
-                </div>
+                  </>
+                )}
+                {pode("usuarios.gerenciar") && (
+                  <Button asChild variant="outline" className="justify-start">
+                    <Link to="/usuarios">
+                      <IconUserPlus />
+                      Cadastrar usuário
+                    </Link>
+                  </Button>
+                )}
               </CardContent>
             </Card>
           </div>

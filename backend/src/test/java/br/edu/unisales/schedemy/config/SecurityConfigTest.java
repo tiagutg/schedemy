@@ -145,7 +145,11 @@ class SecurityConfigTest {
             "professor,     GET,    /api/v1/avaliacoes/alunos/1",
             "coordenador,   GET,    /api/v1/avaliacoes/alunos/1",
 
-            // RF 23: log de notificacoes para a docencia e a administracao.
+            // RF 23: cada perfil le e marca como lidos os proprios avisos (escopo no service).
+            "aluno,         GET,    /api/v1/notificacoes",
+            "recepcionista, GET,    /api/v1/notificacoes",
+            "aluno,         PATCH,  /api/v1/notificacoes/1/lida",
+            "recepcionista, PATCH,  /api/v1/notificacoes/lidas",
             "professor,     GET,    /api/v1/notificacoes",
             "coordenador,   GET,    /api/v1/notificacoes",
             "admin,         GET,    /api/v1/notificacoes",
@@ -200,9 +204,10 @@ class SecurityConfigTest {
             "coordenador,   DELETE, /api/v1/agendamentos/1",
             "recepcionista, DELETE, /api/v1/agendamentos/1",
 
-            // Notificacoes: log operacional da docencia/administracao.
-            "aluno,         GET,    /api/v1/notificacoes",
-            "recepcionista, GET,    /api/v1/notificacoes",
+            // Notificacoes: criar, enviar e remover sao da administracao.
+            "aluno,         POST,   /api/v1/notificacoes",
+            "professor,     DELETE, /api/v1/notificacoes/1",
+            "recepcionista, PATCH,  /api/v1/notificacoes/1/enviar",
 
             // Listagem global de agendamentos: so recepcao e administracao (RNF 15).
             "aluno,         GET,    /api/v1/agendamentos",

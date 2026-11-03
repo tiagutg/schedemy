@@ -9,6 +9,8 @@ import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
+import org.springframework.web.context.request.RequestAttributes;
+import org.springframework.web.context.request.RequestContextHolder;
 
 /**
  * Acesso ao usuario autenticado na requisicao e verificacoes de "dono" do recurso.
@@ -21,6 +23,7 @@ import org.springframework.stereotype.Component;
 public class UsuarioAutenticado {
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
     private static final String ROLE_RECEPCIONISTA = "ROLE_RECEPCIONISTA";
+    private static final String ATRIBUTO_USUARIO = UsuarioAutenticado.class.getName() + ".usuario";
 
     private final UsuarioRepository usuarioRepository;
 
@@ -32,11 +35,27 @@ public class UsuarioAutenticado {
         return auth;
     }
 
-    /** Usuario dono da credencial usada na requisicao. */
+    /**
+     * Usuario dono da credencial usada na requisicao.
+     *
+     * Fica guardado na propria requisicao HTTP: as varias verificacoes de uma mesma chamada
+     * (id(), exigirProprioOuAdmin, exigirParticipante...) consultam o banco uma vez so.
+     * Fora de uma requisicao HTTP (ex.: testes), consulta sempre.
+     */
     public Usuario obter() {
         String email = autenticacao().getName();
-        return usuarioRepository.findByEmail(email)
+        RequestAttributes requisicao = RequestContextHolder.getRequestAttributes();
+        if (requisicao != null
+                && requisicao.getAttribute(ATRIBUTO_USUARIO, RequestAttributes.SCOPE_REQUEST) instanceof Usuario guardado
+                && email.equals(guardado.getEmail())) {
+            return guardado;
+        }
+        Usuario usuario = usuarioRepository.findByEmail(email)
                 .orElseThrow(() -> new AcessoNegadoNegocioException("Usuario autenticado nao encontrado."));
+        if (requisicao != null) {
+            requisicao.setAttribute(ATRIBUTO_USUARIO, usuario, RequestAttributes.SCOPE_REQUEST);
+        }
+        return usuario;
     }
 
     public Long id() {

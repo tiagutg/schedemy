@@ -27,7 +27,7 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * - duracoes → RF 01 / RN 17: durações são definidas pela instituição
  * - usuarios → gestão administrativa de cadastros
  * - avaliacoes → RF 24 (aluno avalia) e RNF 11 (coordenação acompanha)
- * - notificacoes → RF 23: o envio é do ator Sistema; a tela é um log operacional
+ * - notificacoes → RF 23: o sistema gera os avisos; cada perfil lê os seus
  *
  * Por padrão cada pessoa age em nome próprio (organiza, cancela, responde e
  * avalia como o usuário logado). As permissões abaixo liberam agir por outros:
@@ -58,6 +58,7 @@ const PERMISSOES_POR_PERFIL: Record<string, string[]> = {
     "agendamentos.responder",
     "avaliacoes.ver",
     "avaliacoes.criar",
+    "notificacoes.ver",
   ],
   [PERFIS.PROFESSOR]: PERMISSOES_DOCENTE,
   [PERFIS.COORDENADOR]: PERMISSOES_DOCENTE,
@@ -68,6 +69,7 @@ const PERMISSOES_POR_PERFIL: Record<string, string[]> = {
     "agendamentos.criar",
     "agendamentos.organizarPorOutros",
     "agendamentos.cancelar",
+    "notificacoes.ver",
   ],
   [PERFIS.ADMIN]: ["*"],
 };

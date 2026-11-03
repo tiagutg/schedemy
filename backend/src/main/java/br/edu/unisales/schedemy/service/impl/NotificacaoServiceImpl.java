@@ -81,6 +81,24 @@ public class NotificacaoServiceImpl implements NotificacaoService {
     }
 
     @Override
+    public NotificacaoResponseDTO marcarComoLida(Long id) {
+        Notificacao entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(),
+                "Voce so pode marcar as suas proprias notificacoes.");
+        if (entidade.getStatusEnvio() == StatusEnvio.PENDENTE) {
+            entidade.setStatusEnvio(StatusEnvio.ENVIADO);
+            entidade.setEnviadoEm(LocalDateTime.now());
+            entidade = notificacaoRepository.save(entidade);
+        }
+        return notificacaoMapper.paraResponseDTO(entidade);
+    }
+
+    @Override
+    public int marcarTodasComoLidas() {
+        return notificacaoRepository.marcarTodasComoLidas(usuarioAutenticado.id(), LocalDateTime.now());
+    }
+
+    @Override
     public void deletar(Long id) {
         notificacaoRepository.delete(buscarEntidadePorId(id));
     }

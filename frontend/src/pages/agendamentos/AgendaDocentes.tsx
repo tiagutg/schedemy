@@ -1,13 +1,23 @@
-import { useEffect, useState } from "react";
-import { IconAlertTriangle, IconCircleCheck } from "@tabler/icons-react";
+import { useEffect, useMemo, useState } from "react";
+import { IconAlertTriangle, IconCalendarSearch, IconCircleCheck } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
 import { bloqueiosApi } from "@/api/bloqueios";
 import type { ApiError } from "@/api/client";
 import { disponibilidadesApi } from "@/api/disponibilidades";
 import Spinner from "@/components/common/Spinner";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/context/AuthContext";
 import { cn } from "@/lib/utils";
-import { calcularAgendaDoDia, diaSemanaDe, paraHora } from "@/utils/agenda";
+import {
+  calcularAgendaDoDia,
+  diaSemanaDe,
+  diasDeAtendimentoEmComum,
+  paraHora,
+  quemImpedeHorarioEmComum,
+  resumirSemana,
+  rotuloDia,
+  temHorarioEmComumNaSemana,
+} from "@/utils/agenda";
 import { formatarData } from "@/utils/format";
 import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";
 
@@ -30,9 +40,18 @@ interface AgendaDocentesProps {
   /** Na edição, a própria reunião não conta como ocupação. */
   ignorarAgendamentoId?: number | null;
   onEscolherHorario: (horario: string) => void;
+  /** Escolhe outro dia (e já o primeiro horário livre nele). */
+  onEscolherData?: (dataISO: string, horario: string) => void;
+  /** Tira um convidado da reunião (oferecido para docente sem horário de atendimento). */
+  onRemoverConvidado?: (id: number) => void;
+  /** O organizador não pode ser tirado da própria reunião. */
+  idOrganizador?: number | null;
 }
 
 const MAX_SUGESTOES = 16;
+// Dias consultados no back-end para achar os próximos dias livres para todos.
+const DIAS_CONSULTADOS = 10;
+const DIAS_EXIBIDOS = 6;
 
 /**
  * Mostra os horários em que todos os envolvidos estão livres (RF 14), calculados
@@ -49,6 +68,9 @@ export default function AgendaDocentes({
   horario,
   ignorarAgendamentoId,
   onEscolherHorario,
+  onEscolherData,
+  onRemoverConvidado,
+  idOrganizador,
 }: AgendaDocentesProps) {
   const { perfilVinculado: eu } = useAuth();
   const [expandido, setExpandido] = useState(false);
@@ -124,20 +146,181 @@ export default function AgendaDocentes({
     };
   }, [chaveDocentes, dataISO, meuId]);
 
+  // Grade semanal de cada docente (pública): mostra em que dias atende e indica os dias candidatos.
+  const [grades, setGrades] = useState<{ chave: string; dados: Record<number, Disponibilidade[]> }>({
+    chave: "",
+    dados: {},
+  });
+  useEffect(() => {
+    if (!chaveDocentes) return;
+    let cancelado = false;
+    const chave = chaveDocentes;
+    Promise.all(
+      chaveDocentes.split(",").map(async (id) => {
+        const p = await disponibilidadesApi.listar({ usuarioId: id, ativo: true, size: 50 });
+        return [Number(id), p.conteudo] as const;
+      })
+    )
+      .then((lista) => !cancelado && setGrades({ chave, dados: Object.fromEntries(lista) }))
+      .catch(() => !cancelado && setGrades({ chave, dados: {} }));
+    return () => {
+      cancelado = true;
+    };
+  }, [chaveDocentes]);
+  const gradesProntas = grades.chave === chaveDocentes;
+
+  // Próximos dias em que todos atendem, confirmados no back-end (descontando reuniões e bloqueios).
+  const candidatos = useMemo(
+    () =>
+      gradesProntas
+        ? diasDeAtendimentoEmComum(
+            chaveDocentes.split(",").map((id) => grades.dados[Number(id)] ?? []),
+            new Date(),
+            30,
+            Math.max(duracaoMinutos, 1)
+          ).slice(
+            0,
+            DIAS_CONSULTADOS
+          )
+        : [],
+    [gradesProntas, grades, chaveDocentes, duracaoMinutos]
+  );
+  const chaveDias = `${idsEnvolvidos.join(",")}|${idDuracao}|${ignorarAgendamentoId ?? ""}|${candidatos.join(",")}`;
+  const [diasLivres, setDiasLivres] = useState<{ chave: string; dias: { data: string; horarios: string[] }[] }>({
+    chave: "",
+    dias: [],
+  });
+  useEffect(() => {
+    if (!idDuracao || idsEnvolvidos.length === 0 || !gradesProntas) return;
+    const controle = new AbortController();
+    const chave = chaveDias;
+    Promise.all(
+      candidatos.map((data) =>
+        agendamentosApi
+          .horariosLivres({ data, idDuracao, idsUsuarios: idsEnvolvidos, ignorarAgendamentoId }, controle.signal)
+          .then((r) => ({ data, horarios: r.horarios.map((h) => h.slice(0, 5)) }))
+          .catch(() => ({ data, horarios: [] as string[] }))
+      )
+    ).then((dias) => {
+      if (!controle.signal.aborted) setDiasLivres({ chave, dias: dias.filter((d) => d.horarios.length > 0) });
+    });
+    return () => controle.abort();
+    // chaveDias resume idsEnvolvidos, idDuracao, ignorarAgendamentoId e os candidatos.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveDias, gradesProntas]);
+  const carregandoDias = !!idDuracao && (!gradesProntas || diasLivres.chave !== chaveDias);
+  const semGrade = gradesProntas ? docentes.filter((d) => (grades.dados[d.id] ?? []).length === 0) : [];
+  // Nenhum dia serve para todos: explica o motivo e quem trava, em vez de mandar trocar a data.
+  const nenhumDiaLivre =
+    !!onEscolherData && !!idDuracao && !carregandoDias && semGrade.length === 0 && diasLivres.dias.length === 0;
+  const gradesDosDocentes = docentes.map((d) => grades.dados[d.id] ?? []);
+  const semComumNaSemana =
+    nenhumDiaLivre && docentes.length > 1 && !temHorarioEmComumNaSemana(gradesDosDocentes, duracaoMinutos);
+  const quemImpede = semComumNaSemana
+    ? quemImpedeHorarioEmComum(gradesDosDocentes, duracaoMinutos).map((i) => docentes[i])
+    : [];
+  const ocultarDia = semGrade.length > 0 || nenhumDiaLivre;
+
   if (docentes.length === 0) return null;
 
   const carregandoAgendas = agendas.chave !== chaveAgendas;
   const sugestoes = livres.chave === chaveLivres ? livres.horarios : [];
   const erroLivres = livres.chave === chaveLivres ? livres.erro : "";
-  const podeAvaliar = !carregandoLivres && !erroLivres && !!horario && duracaoMinutos > 0;
+  // Com docente sem grade, o aviso de cima já explica: não repete "horário não está livre".
+  const podeAvaliar = !carregandoLivres && !erroLivres && !!horario && duracaoMinutos > 0 && !ocultarDia;
   const horarioLivre = sugestoes.includes(horario);
 
   return (
     <section aria-label="Agenda dos docentes" className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm font-medium text-brand-900">Horários livres em {formatarData(dataISO)}</p>
-        {(carregandoLivres || carregandoAgendas) && <Spinner className="size-4 text-brand-700" />}
-      </div>
+      {onEscolherData && idDuracao && (
+        <div className="flex flex-col gap-2 border-b border-brand-200 pb-3" aria-label="Próximos dias livres" role="group">
+          <p className="flex items-center gap-1.5 text-sm font-medium text-brand-900">
+            <IconCalendarSearch className="size-4" />
+            Próximos dias com horário livre para todos
+            {carregandoDias && <Spinner className="size-3.5 text-brand-700" />}
+          </p>
+          {semGrade.length > 0 ? (
+            <ul className="flex flex-col gap-1.5">
+              {semGrade.map((d) => (
+                <li
+                  key={d.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
+                >
+                  <span>
+                    <span className="font-medium">{d.nome}</span> ainda não cadastrou horários de atendimento, então
+                    não dá para agendar com essa pessoa.
+                  </span>
+                  {onRemoverConvidado && d.id !== idOrganizador && (
+                    <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => onRemoverConvidado(d.id)}>
+                      Tirar da reunião
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : carregandoDias ? (
+            <p className="text-xs text-muted-foreground">Procurando dias livres…</p>
+          ) : diasLivres.dias.length === 0 ? (
+            <div className="flex flex-col gap-1.5 text-xs text-amber-700 dark:text-amber-300">
+              <p>
+                {semComumNaSemana
+                  ? `Esses ${docentes.length} docentes não têm horário de atendimento em comum na semana, então nenhum dia serve para todos.`
+                  : "Os horários em comum já estão ocupados ou bloqueados nos próximos 30 dias. Tente outra duração ou outros convidados."}
+              </p>
+              {quemImpede.length > 0 ? (
+                <ul className="flex flex-col gap-1.5">
+                  {quemImpede.map((d) => (
+                    <li
+                      key={d.id}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-amber-900 dark:border-amber-500/40 dark:bg-amber-500/10 dark:text-amber-100"
+                    >
+                      <span>
+                        Sem <span className="font-medium">{d.nome}</span>, os demais têm horário em comum.
+                      </span>
+                      {onRemoverConvidado && d.id !== idOrganizador && (
+                        <Button type="button" variant="outline" size="sm" className="h-7" onClick={() => onRemoverConvidado(d.id)}>
+                          Tirar da reunião
+                        </Button>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                semComumNaSemana && <p>Tente convidar menos docentes de uma vez: veja abaixo quando cada um atende.</p>
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
+              {diasLivres.dias.slice(0, DIAS_EXIBIDOS).map((d) => (
+                <button
+                  key={d.data}
+                  type="button"
+                  aria-pressed={d.data === dataISO}
+                  onClick={() => onEscolherData(d.data, d.horarios[0])}
+                  className={cn(
+                    "flex min-w-0 flex-col items-start rounded-md border px-2.5 py-1.5 text-left transition-colors",
+                    d.data === dataISO
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-brand-200 bg-card text-brand-900 hover:bg-brand-100"
+                  )}
+                >
+                  <span className="text-xs font-medium">{rotuloDia(d.data)}</span>
+                  <span className={cn("text-[11px]", d.data === dataISO ? "opacity-90" : "text-muted-foreground")}>
+                    {d.horarios.length} {d.horarios.length === 1 ? "horário" : "horários"}, das {d.horarios[0]}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!ocultarDia && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <p className="text-sm font-medium text-brand-900">Horários livres em {formatarData(dataISO)}</p>
+          {(carregandoLivres || carregandoAgendas) && <Spinner className="size-4 text-brand-700" />}
+        </div>
+      )}
 
       {podeAvaliar && (
         <p
@@ -159,13 +342,14 @@ export default function AgendaDocentes({
 
       {!idDuracao ? (
         <p className="text-xs text-muted-foreground">Escolha a duração para ver os horários livres.</p>
-      ) : erroLivres ? (
+      ) : ocultarDia ? null : erroLivres ? (
         <p className="text-xs text-destructive">{erroLivres}</p>
       ) : (
         !carregandoLivres &&
         (sugestoes.length === 0 ? (
           <p className="text-xs text-amber-700 dark:text-amber-300">
-            Nenhum horário livre para todos os envolvidos neste dia. Tente outra data.
+            Nenhum horário livre para todos os envolvidos neste dia.{" "}
+            {onEscolherData && diasLivres.dias.length > 0 ? "Escolha um dos dias acima." : "Tente outra data."}
           </p>
         ) : (
           <div className="flex flex-wrap gap-1">
@@ -200,6 +384,8 @@ export default function AgendaDocentes({
       <ul className="flex flex-col gap-2">
         {docentes.map((docente) => {
           const info = carregandoAgendas ? undefined : agendas.dados[docente.id];
+          const grade = gradesProntas ? (grades.dados[docente.id] ?? []) : null;
+          const semana = grade && grade.length > 0 ? resumirSemana(grade) : "";
           const agenda = info
             ? calcularAgendaDoDia({
                 dataISO,
@@ -219,14 +405,19 @@ export default function AgendaDocentes({
               {!agenda ? (
                 <p className="text-xs text-muted-foreground">Carregando…</p>
               ) : agenda.janelas.length === 0 ? (
-                <p className="text-xs text-amber-700 dark:text-amber-300">Não atende neste dia da semana.</p>
+                <p className="text-xs text-amber-700 dark:text-amber-300">
+                  {grade && grade.length === 0
+                    ? "Ainda não cadastrou horários de atendimento."
+                    : "Não atende neste dia da semana."}
+                </p>
               ) : (
                 <p className="text-xs text-muted-foreground">
-                  Atende: {agenda.janelas.map((j) => `${paraHora(j.inicio)}–${paraHora(j.fim)}`).join(", ")}
+                  Neste dia: {agenda.janelas.map((j) => `${paraHora(j.inicio)}–${paraHora(j.fim)}`).join(", ")}
                   {agenda.ocupados.length > 0 &&
                     ` · Ocupado: ${agenda.ocupados.map((o) => `${paraHora(o.inicio)}–${paraHora(o.fim)}${o.rotulo?.startsWith("Bloqueio") ? " (bloqueio)" : ""}`).join(", ")}`}
                 </p>
               )}
+              {semana && <p className="text-xs text-muted-foreground">Na semana: {semana}</p>}
             </li>
           );
         })}

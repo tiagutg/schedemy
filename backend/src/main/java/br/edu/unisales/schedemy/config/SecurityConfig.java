@@ -20,6 +20,7 @@ import org.springframework.security.web.access.AccessDeniedHandler;
  * RN 06), a mesma aplicada no front-end em src/utils/permissoes.js.
  *
  * Resumo:
+ * - TODOS          os proprios avisos (notificacoes do sistema)
  * - ALUNO          agendamentos (criar/ver/cancelar/responder) e avaliacoes
  * - PROFESSOR      o mesmo do coordenador (a secao 5.3 trata os dois como um ator)
  * - COORDENADOR    + disponibilidades, bloqueios, duracoes e notificacoes
@@ -104,8 +105,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/avaliacoes", "/api/v1/avaliacoes/**").hasRole(ADMIN)
 
                         // --- Notificacoes (RF 23) ---
-                        // O envio e do ator Sistema; a tela e um log operacional.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/notificacoes", "/api/v1/notificacoes/**").hasAnyRole(DOCENTES)
+                        // O sistema gera os avisos; cada usuario le e marca como lidos os SEUS
+                        // (o escopo e verificado no service). Criar, enviar e remover: administracao.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notificacoes", "/api/v1/notificacoes/**").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/notificacoes/lidas", "/api/v1/notificacoes/*/lida").authenticated()
                         .requestMatchers("/api/v1/notificacoes", "/api/v1/notificacoes/**").hasRole(ADMIN)
 
                         // --- Registros de motivo (RF 11) ---

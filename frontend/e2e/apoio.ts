@@ -9,6 +9,8 @@ export const CONTAS = {
   outroAluno: { email: "pedro.aluno@unisales.edu.br", senha: "Senha123@" },
   professor: { email: "lucas.professor@unisales.edu.br", senha: "Senha123@", nome: "Lucas Daniel Barboza" },
   recepcao: { email: "mariana.recepcao@unisales.edu.br", senha: "Senha123@" },
+  /** Docente que os testes deixam sem horário de atendimento (ver semHorariosDeAtendimento). */
+  semHorario: { email: "ebert.professor@unisales.edu.br", senha: "Senha123@", nome: "Éberte Valter da Silva Freitas" },
 } as const;
 
 type Conta = { email: string; senha: string };
@@ -95,4 +97,40 @@ export async function removerAgendamentosComTopico(prefixo: string) {
     expect(resposta.ok(), `remover #${a.id}: ${await resposta.text()}`).toBeTruthy();
   }
   await admin.dispose();
+}
+
+interface DisponibilidadeApi {
+  id: number;
+  idUsuario: number;
+  diaSemana: number;
+  horarioInicio: string;
+  horarioFim: string;
+  ativo: boolean;
+}
+
+async function marcarHorarios(conta: Conta, lista: DisponibilidadeApi[], ativo: boolean) {
+  const cliente = await api(conta);
+  for (const d of lista) {
+    const resposta = await cliente.put(`/api/v1/disponibilidades/${d.id}`, {
+      data: { idUsuario: d.idUsuario, diaSemana: d.diaSemana, horarioInicio: d.horarioInicio, horarioFim: d.horarioFim, ativo },
+    });
+    expect(resposta.ok(), await resposta.text()).toBeTruthy();
+  }
+  await cliente.dispose();
+}
+
+/**
+ * Simula um docente que ainda não cadastrou horários: desativa os horários dele durante o
+ * teste e devolve a função que os reativa (chame no finally/afterAll).
+ */
+export async function semHorariosDeAtendimento(conta: Conta): Promise<() => Promise<void>> {
+  const cliente = await api(conta);
+  const usuarios = await (await cliente.get("/api/v1/usuarios", { params: { size: 200 } })).json();
+  const eu = usuarios.conteudo.find((u: { email: string }) => u.email === conta.email);
+  const ativos: DisponibilidadeApi[] = (
+    await (await cliente.get("/api/v1/disponibilidades", { params: { usuarioId: eu.id, ativo: true, size: 100 } })).json()
+  ).conteudo;
+  await cliente.dispose();
+  await marcarHorarios(conta, ativos, false);
+  return () => marcarHorarios(conta, ativos, true);
 }

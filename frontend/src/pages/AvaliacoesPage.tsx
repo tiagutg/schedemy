@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { IconPlus } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
 import { avaliacoesApi } from "@/api/avaliacoes";
@@ -16,6 +17,7 @@ import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
 import { FieldError, SelectField, TextAreaField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
+import { Estrelas, EscolhaDeEstrelas } from "@/components/common/Estrelas";
 import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
 import type { Agendamento, Avaliacao, Pagina, Params } from "@/types";
 
@@ -68,7 +70,7 @@ export default function AvaliacoesPage() {
   // Reuniões concluídas do aluno que ele ainda não avaliou (null = carregando).
   const [paraAvaliar, setParaAvaliar] = useState<Agendamento[] | null>(null);
 
-  async function abrirCriacao() {
+  async function abrirCriacao(idPreferido?: number) {
     if (!alunoId) return toast.info("Selecione um aluno para avaliar uma reunião.");
     setForm({ idAgendamento: "", nota: 5, comentario: "" });
     setErro("");
@@ -82,7 +84,11 @@ export default function AvaliacoesPage() {
       const jaAvaliadas = new Set(avaliadas.conteudo.map((av) => av.idAgendamento));
       const pendentes = concluidas.conteudo.filter((ag) => !jaAvaliadas.has(ag.id));
       setParaAvaliar(pendentes);
-      if (pendentes.length === 1) setForm((atual) => ({ ...atual, idAgendamento: String(pendentes[0].id) }));
+      if (idPreferido && !pendentes.some((ag) => ag.id === idPreferido)) {
+        toast.info("Essa reunião já foi avaliada ou ainda não foi concluída.");
+      }
+      const escolhida = pendentes.find((ag) => ag.id === idPreferido) ?? (pendentes.length === 1 ? pendentes[0] : null);
+      if (escolhida) setForm((atual) => ({ ...atual, idAgendamento: String(escolhida.id) }));
     } catch (e) {
       setParaAvaliar([]);
       setErro((e as ApiError).message);
@@ -111,6 +117,19 @@ export default function AvaliacoesPage() {
     }
   }
 
+  // Atalhos do painel e do detalhe da reunião: ?nova=1 abre o formulário; ?avaliar=<id> já escolhe a reunião.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const atalhoTratado = useRef(false);
+  useEffect(() => {
+    if (atalhoTratado.current || !pode("avaliacoes.criar") || !alunoId) return;
+    const avaliar = Number(searchParams.get("avaliar")) || undefined;
+    if (!avaliar && searchParams.get("nova") !== "1") return;
+    atalhoTratado.current = true;
+    setSearchParams({}, { replace: true });
+    abrirCriacao(avaliar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alunoId, searchParams]);
+
   return (
     <>
       <PageHeader
@@ -123,7 +142,7 @@ export default function AvaliacoesPage() {
         acao={
           // RF 24: apenas o aluno avalia a reunião; a coordenação só acompanha.
           pode("avaliacoes.criar") ? (
-            <Button onClick={abrirCriacao}>
+            <Button onClick={() => abrirCriacao()}>
               <IconPlus />
               Nova avaliação
             </Button>
@@ -175,7 +194,7 @@ export default function AvaliacoesPage() {
                     `#${a.idAgendamento}`
                   );
                 } },
-              { chave: "nota", titulo: "Nota", render: (a) => "⭐".repeat(a.nota) || "0" },
+              { chave: "nota", titulo: "Nota", render: (a) => <Estrelas nota={a.nota} /> },
               { chave: "comentario", titulo: "Comentário", render: (a) => a.comentario || "—" },
               { chave: "data", titulo: "Registrada em", render: (a) => formatarDataHora(a.criadoEm) },
             ]}
@@ -206,12 +225,7 @@ export default function AvaliacoesPage() {
               onChange={(e) => setForm({ ...form, idAgendamento: e.target.value })}
             />
           )}
-          <SelectField
-            label="Nota"
-            options={[0, 1, 2, 3, 4, 5].map((n) => ({ valor: n, rotulo: `${n} estrela${n === 1 ? "" : "s"}` }))}
-            value={form.nota}
-            onChange={(e) => setForm({ ...form, nota: e.target.value })}
-          />
+          <EscolhaDeEstrelas nota={Number(form.nota)} onChange={(nota) => setForm({ ...form, nota })} />
           <TextAreaField
             label="Comentário (opcional)"
             value={form.comentario}

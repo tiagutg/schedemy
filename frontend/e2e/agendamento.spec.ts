@@ -6,6 +6,7 @@ import {
   garantirDisponibilidade,
   paraISO,
   proximoDiaUtil,
+  semHorariosDeAtendimento,
 } from "./apoio";
 
 // Ciclo completo de uma reunião: criar, editar, aceitar o convite, remarcar.
@@ -103,13 +104,13 @@ test("professor aceita o convite pelo painel inicial", async ({ page }) => {
   await expect(convite).toBeVisible();
   await convite.getByRole("button", { name: "Aceitar" }).click();
   await expect(page.getByText("Convite aceito.")).toBeVisible();
-  await expect(page.getByRole("listitem").filter({ hasText: topico })).toHaveCount(0);
+  await expect(convites.getByRole("listitem").filter({ hasText: topico })).toHaveCount(0);
 });
 
 test("aluno remarca a reunião confirmada e o histórico registra o motivo", async ({ page }) => {
   await entrar(page, CONTAS.aluno);
   const detalhe = await abrirDetalhe(page, topico);
-  await expect(detalhe).toContainText("Confirmado");
+  await expect(detalhe).toContainText("Confirmada");
   await detalhe.getByRole("button", { name: "Remarcar" }).click();
 
   const modal = page.getByRole("dialog", { name: "Remarcar reunião" });
@@ -120,7 +121,7 @@ test("aluno remarca a reunião confirmada e o histórico registra o motivo", asy
   await modal.getByRole("button", { name: "Remarcar" }).click();
   await expect(page.getByText("Reunião remarcada.")).toBeVisible();
 
-  const original = await abrirDetalhe(page, topico, "Cancelado");
+  const original = await abrirDetalhe(page, topico, "Cancelada");
   await expect(original).toContainText("Histórico");
   await expect(original).toContainText("Remarcada para");
   await expect(original).toContainText("Choque com prova");
@@ -141,4 +142,37 @@ test("a visão semanal mostra a reunião no dia certo", async ({ page }) => {
   for (let i = 0; i < semanas; i++) await page.getByRole("button", { name: "Próxima semana" }).click();
   await expect(semana.getByText(topico).first()).toBeVisible();
   await page.getByRole("button", { name: "Lista" }).click();
+});
+
+test("sugere os próximos dias livres e preenche data e horário ao escolher", async ({ page }) => {
+  const restaurar = await semHorariosDeAtendimento(CONTAS.semHorario);
+  try {
+    await entrar(page, CONTAS.aluno);
+    await page.goto("/agendamentos?novo=1");
+    const modal = page.getByRole("dialog");
+    await modal.locator("label", { hasText: CONTAS.professor.nome }).getByRole("checkbox").click();
+
+    // Professor sem horário de atendimento: o painel oferece tirá-lo da reunião.
+    await modal.locator("label", { hasText: CONTAS.semHorario.nome }).getByRole("checkbox").click();
+    const proximos = page.getByRole("group", { name: "Próximos dias livres" });
+    await expect(proximos).toContainText("ainda não cadastrou horários de atendimento");
+    await expect(agendaDocentes(page)).not.toContainText("Horários livres em");
+    await proximos.getByRole("button", { name: "Tirar da reunião" }).click();
+    await expect(modal.locator("label", { hasText: CONTAS.semHorario.nome }).getByRole("checkbox")).not.toBeChecked();
+
+    const dias = proximos.getByRole("button");
+    await expect(dias.first()).toBeVisible({ timeout: 20_000 });
+    const ultimo = dias.last();
+    // "Qui, 12/11" + "N horários, das 08:00"
+    const [rotulo, detalhe] = (await ultimo.innerText()).split("\n");
+    await ultimo.click();
+    await expect(ultimo).toHaveAttribute("aria-pressed", "true");
+
+    const [dia, mes] = rotulo.split(", ")[1].split("/");
+    await expect(modal.getByLabel("Data")).toHaveValue(new RegExp(`-${mes}-${dia}$`));
+    await expect(modal.getByLabel("Horário")).toHaveValue(detalhe.split(", das ")[1].trim());
+    await expect(agendaDocentes(page)).toContainText("está livre para todos os envolvidos");
+  } finally {
+    await restaurar();
+  }
 });

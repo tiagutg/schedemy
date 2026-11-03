@@ -15,5 +15,10 @@ public interface NotificacaoService {
 
     NotificacaoResponseDTO marcarComoEnviada(Long id);
 
+    // Avisos do sistema: o dono marca como lidos (PENDENTE -> ENVIADO).
+    NotificacaoResponseDTO marcarComoLida(Long id);
+
+    int marcarTodasComoLidas();
+
     void deletar(Long id);
 }

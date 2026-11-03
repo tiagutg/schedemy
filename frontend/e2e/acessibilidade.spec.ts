@@ -56,6 +56,10 @@ for (const tema of ["claro", "escuro"] as const) {
       await expect(page.getByRole("heading", { name: "Minhas avaliações" })).toBeVisible();
       await semViolacoes(page, "avaliações");
 
+      await page.goto("/notificacoes");
+      await expect(page.getByRole("heading", { name: "Notificações", level: 2 })).toBeVisible();
+      await semViolacoes(page, "notificações");
+
       await page.goto("/perfil");
       await expect(page.getByRole("heading", { name: "Meu perfil", level: 2 })).toBeVisible();
       await semViolacoes(page, "meu perfil");
@@ -68,10 +72,14 @@ for (const tema of ["claro", "escuro"] as const) {
       await expect(page.getByRole("heading", { name: "Meus bloqueios de período" })).toBeVisible();
       await semViolacoes(page, "bloqueios");
 
+      await page.goto("/disponibilidades");
+      await expect(page.getByRole("figure", { name: "Grade semanal de atendimento" })).toBeVisible();
+      await semViolacoes(page, "horários de atendimento");
+
       await entrar(page, CONTAS.admin);
       await usarTema(page, tema);
       await page.goto("/usuarios");
-      await expect(page.getByRole("heading", { name: "Usuários", exact: true })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Usuários", exact: true, level: 2 })).toBeVisible();
       await semViolacoes(page, "usuários");
     });
   });

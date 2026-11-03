@@ -1,5 +1,15 @@
 import { useEffect, useState } from "react";
-import { IconCalendarRepeat, IconCheck, IconExternalLink, IconPencil, IconX } from "@tabler/icons-react";
+import { useNavigate } from "react-router-dom";
+import {
+  IconCalendarPlus,
+  IconCalendarRepeat,
+  IconCheck,
+  IconExternalLink,
+  IconPencil,
+  IconStar,
+  IconVideo,
+  IconX,
+} from "@tabler/icons-react";
 import Modal from "@/components/common/Modal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormActions from "@/components/common/FormActions";
@@ -11,7 +21,8 @@ import { registrosMotivoApi } from "@/api/registrosMotivo";
 import type { ApiError } from "@/api/client";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
-import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
+import { rotularEnum } from "@/utils/domain";
+import { baixarIcs, situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
 import type { Agendamento, Participante, RegistroMotivo } from "@/types";
 
@@ -25,6 +36,7 @@ interface AgendamentoDetailModalProps {
 
 export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado, onAlterar }: AgendamentoDetailModalProps) {
   const toast = useToast();
+  const navigate = useNavigate();
   const { pode, perfilVinculado: eu } = useAuth();
   const [participanteRecusando, setParticipanteRecusando] = useState<Participante | null>(null);
   const [motivoRecusa, setMotivoRecusa] = useState("");
@@ -75,6 +87,12 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador),
   // e cada um responde só o próprio convite (a API não aceita responder por outra pessoa).
   const podeResponderPor = (p: Participante) => pode("agendamentos.responder") && p.idUsuario === eu?.id;
+  const situacao = situacaoDaReuniao(a, eu?.id);
+  const participo = a.participantes.some((p) => p.idUsuario === eu?.id);
+  // RF 24: o aluno participante avalia a reunião concluída.
+  const podeAvaliar = a.status === "CONCLUIDO" && participo && pode("avaliacoes.criar");
+  const podeExportar = ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) && horasAteReuniao > 0;
+  const linkSala = a.salaVirtual?.linkTeams;
 
   async function responder(participante: Participante, aceitar: boolean, motivo?: string) {
     setRespondendo(true);
@@ -133,7 +151,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
       <Modal aberto={!!agendamento} onFechar={onFechar} titulo={a.topico} subtitulo={`Agendamento #${a.id}`} largura="max-w-2xl">
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+            <Pill className={situacao.cor}>{situacao.rotulo}</Pill>
             <Pill className="bg-ink-100 text-ink-800">{rotularEnum(a.formato)}</Pill>
             <Pill className="bg-ink-100 text-ink-800">{a.duracaoMinutos} min</Pill>
           </div>
@@ -169,18 +187,45 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           )}
 
-          {a.salaVirtual && (
-            <div className="rounded-lg border p-3.5">
-              <p className="text-xs text-muted-foreground">Sala virtual</p>
-              <a
-                href={a.salaVirtual.linkTeams}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 flex items-center gap-1.5 truncate text-sm font-medium underline-offset-4 hover:underline"
-              >
-                <IconExternalLink className="size-4 shrink-0" />
-                <span className="truncate">{a.salaVirtual.linkTeams}</span>
-              </a>
+          {linkSala && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Sala online</p>
+                <a
+                  href={linkSala}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 flex items-center gap-1.5 truncate text-sm underline-offset-4 hover:underline"
+                >
+                  <IconExternalLink className="size-4 shrink-0" />
+                  <span className="truncate">{linkSala}</span>
+                </a>
+              </div>
+              {situacao.rotulo !== "Cancelada" && a.status !== "CONCLUIDO" && (
+                <Button asChild size="sm">
+                  <a href={linkSala} target="_blank" rel="noreferrer">
+                    <IconVideo />
+                    Entrar na reunião
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+
+          {(podeExportar || podeAvaliar) && (
+            <div className="flex flex-wrap gap-2">
+              {podeExportar && (
+                <Button variant="outline" size="sm" onClick={() => baixarIcs(a)}>
+                  <IconCalendarPlus />
+                  Adicionar ao calendário
+                </Button>
+              )}
+              {podeAvaliar && (
+                <Button size="sm" onClick={() => navigate(`/avaliacoes?avaliar=${a.id}`)}>
+                  <IconStar />
+                  Avaliar reunião
+                </Button>
+              )}
             </div>
           )}
 

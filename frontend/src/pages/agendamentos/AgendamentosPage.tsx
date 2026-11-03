@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { IconCalendarWeek, IconEye, IconList, IconPlus } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
@@ -11,17 +11,34 @@ import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
 import Pill from "@/components/common/Pill";
+import EmptyState from "@/components/common/EmptyState";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import { SelectField, TextField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
-import { STATUS_AGENDAMENTO, CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora } from "@/utils/format";
+import { rotularEnum } from "@/utils/domain";
+import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import { FILTROS_STATUS, descreverEnvolvidos, situacaoDaReuniao } from "@/utils/reuniao";
 import type { Agendamento, Params } from "@/types";
 import NovoAgendamentoModal, { type ModoAgendamento } from "./NovoAgendamentoModal";
 import AgendamentoDetailModal from "./AgendamentoDetailModal";
 import AgendaSemanal from "./AgendaSemanal";
 
 type Visao = "lista" | "semana";
+
+// Período da lista: as próximas primeiro (a agenda do dia a dia), as anteriores da mais recente para trás.
+const PERIODOS = [
+  { valor: "proximas", rotulo: "Próximas" },
+  { valor: "anteriores", rotulo: "Anteriores" },
+  { valor: "todas", rotulo: "Todas" },
+];
+const ORDEM_CRESCENTE = ["dataReuniao,asc", "horarioInicio,asc"];
+const ORDEM_DECRESCENTE = ["dataReuniao,desc", "horarioInicio,desc"];
+
+function ontemISO(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
 const CHAVE_VISAO = "schedemy.agendamentos.visao";
 
 function visaoSalva(): Visao {
@@ -44,8 +61,18 @@ export default function AgendamentosPage() {
 
   const buscar = useCallback(
     (params: Params) => {
-      const { usuarioId, ...resto } = params;
+      const { usuarioId, periodo, ...resto } = params;
       const alvo = meuId ?? usuarioId;
+      // O período só completa as datas que o usuário não escolheu.
+      if (periodo === "proximas") {
+        resto.dataInicio ||= hojeISO();
+        resto.sort = ORDEM_CRESCENTE;
+      } else if (periodo === "anteriores") {
+        resto.dataFim ||= ontemISO();
+        resto.sort = ORDEM_DECRESCENTE;
+      } else if (periodo === "todas") {
+        resto.sort = ORDEM_DECRESCENTE;
+      }
       return alvo
         ? agendamentosApi.listarPorUsuario(alvo as string, resto)
         : agendamentosApi.listarTodos(resto);
@@ -53,8 +80,20 @@ export default function AgendamentosPage() {
     [meuId]
   );
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar, {
-    ordenarPor: "dataReuniao,desc",
+    // Os cartões do painel abrem a lista já filtrada (?status=...).
+    filtrosIniciais: {
+      periodo: searchParams.get("status") ? "todas" : "proximas",
+      status: searchParams.get("status") ?? undefined,
+    },
   });
+
+  // Busca por tópico ou nome, aplicada quando a pessoa para de digitar.
+  const [textoBusca, setTextoBusca] = useState("");
+  useEffect(() => {
+    if ((filtros.busca ?? "") === textoBusca.trim()) return;
+    const espera = setTimeout(() => aplicarFiltros({ ...filtros, busca: textoBusca.trim() }), 400);
+    return () => clearTimeout(espera);
+  }, [textoBusca, filtros, aplicarFiltros]);
 
   const [modalNovoAberto, setModalNovoAberto] = useState(
     searchParams.get("novo") === "1" && pode("agendamentos.criar")
@@ -77,10 +116,16 @@ export default function AgendamentosPage() {
 
   const buscarSemana = useCallback(
     (dataInicio: string, dataFim: string) =>
-      buscar({ usuarioId: filtros.usuarioId, status: filtros.status, dataInicio, dataFim, page: 0, size: 200 }).then(
-        (p) => p.conteudo
-      ),
-    [buscar, filtros.usuarioId, filtros.status]
+      buscar({
+        usuarioId: filtros.usuarioId,
+        status: filtros.status,
+        busca: filtros.busca,
+        dataInicio,
+        dataFim,
+        page: 0,
+        size: 200,
+      }).then((p) => p.conteudo),
+    [buscar, filtros.usuarioId, filtros.status, filtros.busca]
   );
   // Edição/remarcação abertas a partir do detalhe.
   const [alteracao, setAlteracao] = useState<{ modo: ModoAgendamento; base: Agendamento } | null>(null);
@@ -120,6 +165,18 @@ export default function AgendamentosPage() {
       toast.erro((e as ApiError).message);
     }
   }
+  // Os avisos abrem a reunião direto (?abrir=<id>).
+  const idParaAbrir = searchParams.get("abrir");
+  useEffect(() => {
+    if (!idParaAbrir) return;
+    searchParams.delete("abrir");
+    setSearchParams(searchParams, { replace: true });
+    agendamentosApi
+      .buscarPorId(idParaAbrir)
+      .then(setDetalhe)
+      .catch((e) => toast.erro((e as ApiError).message));
+  }, [idParaAbrir, searchParams, setSearchParams, toast]);
+
   async function recarregarDetalhe() {
     if (!detalhe) return;
     try {
@@ -165,12 +222,27 @@ export default function AgendamentosPage() {
           label="Status"
           className="w-full sm:w-52"
           placeholder="Todos os status"
-          options={STATUS_AGENDAMENTO.map((s) => ({ valor: s, rotulo: rotularEnum(s) }))}
+          options={FILTROS_STATUS}
           value={filtros.status || ""}
           onChange={(e) => aplicarFiltros({ ...filtros, status: e.target.value })}
         />
+        <TextField
+          label="Buscar"
+          type="search"
+          className="w-full sm:w-56"
+          placeholder="Tópico ou nome"
+          value={textoBusca}
+          onChange={(e) => setTextoBusca(e.target.value)}
+        />
         {visao === "lista" && (
           <>
+            <SelectField
+              label="Período"
+              className="w-full sm:w-36"
+              options={PERIODOS}
+              value={filtros.periodo || "todas"}
+              onChange={(e) => aplicarFiltros({ ...filtros, periodo: e.target.value })}
+            />
             <TextField
               label="De"
               type="date"
@@ -219,7 +291,7 @@ export default function AgendamentosPage() {
         <AgendaSemanal
           buscarSemana={buscarSemana}
           onAbrir={abrirDetalhe}
-          versao={`${versaoSemana}|${filtros.usuarioId ?? ""}|${filtros.status ?? ""}`}
+          versao={`${versaoSemana}|${filtros.usuarioId ?? ""}|${filtros.status ?? ""}|${filtros.busca ?? ""}`}
         />
       ) : (
         <>
@@ -227,21 +299,45 @@ export default function AgendamentosPage() {
             carregando={carregando}
             chaveLinha={(a) => a.id}
             linhas={linhas}
+            linhaVazia={
+              <EmptyState
+                titulo={filtros.periodo === "proximas" ? "Nenhuma reunião pela frente" : "Nenhuma reunião encontrada"}
+                descricao={
+                  filtros.periodo === "proximas"
+                    ? "Para ver o histórico, troque o período para \"Anteriores\" ou \"Todas\"."
+                    : "Ajuste os filtros para ver outras reuniões."
+                }
+              />
+            }
             colunas={[
-              { chave: "topico", titulo: "Tópico", render: (a) => (
-                  <div>
+              { chave: "topico", titulo: "Reunião", render: (a) => (
+                  <div className="min-w-0">
                     <p className="font-medium">{a.topico}</p>
-                    <p className="text-xs text-muted-foreground">{a.nomeOrganizador}</p>
+                    <p className="text-xs text-muted-foreground">{descreverEnvolvidos(a, eu?.id)}</p>
                   </div>
                 ) },
-              { chave: "data", titulo: "Data / hora", render: (a) => `${formatarData(a.dataReuniao)} · ${formatarHora(a.horarioInicio)}` },
-              { chave: "formato", titulo: "Formato", render: (a) => rotularEnum(a.formato) },
-              { chave: "status", titulo: "Status", render: (a) => (
-                  <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+              { chave: "data", titulo: "Quando", render: (a) => (
+                  <div>
+                    <p className="tabular-nums">{`${formatarData(a.dataReuniao)} · ${formatarHora(a.horarioInicio)}`}</p>
+                    <p className="text-xs text-muted-foreground">{rotularEnum(a.formato)}</p>
+                  </div>
                 ) },
+              { chave: "status", titulo: "Situação", render: (a) => {
+                  const situacao = situacaoDaReuniao(a, eu?.id);
+                  return <Pill className={situacao.cor}>{situacao.rotulo}</Pill>;
+                } },
             ]}
+            aoClicarLinha={abrirDetalhe}
+            ocultarAcoesNoCartao
             acoes={(a) => (
-              <Button variant="ghost" size="sm" onClick={() => abrirDetalhe(a)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  abrirDetalhe(a);
+                }}
+              >
                 <IconEye />
                 Ver detalhes
               </Button>

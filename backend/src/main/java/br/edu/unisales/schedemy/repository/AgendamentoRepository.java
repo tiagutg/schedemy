@@ -10,6 +10,7 @@ import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 
 public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> {
@@ -17,26 +18,41 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
             SELECT DISTINCT a FROM Agendamento a
             LEFT JOIN a.participantes p
             WHERE (a.organizador.id = :usuarioId OR p.usuario.id = :usuarioId)
-              AND (:status IS NULL OR a.status = :status)
-              AND (:dataInicio IS NULL OR a.dataReuniao >= :dataInicio)
-              AND (:dataFim IS NULL OR a.dataReuniao <= :dataFim)
+              AND a.status IN :status
+              AND (CAST(:dataInicio AS LocalDate) IS NULL OR a.dataReuniao >= :dataInicio)
+              AND (CAST(:dataFim AS LocalDate) IS NULL OR a.dataReuniao <= :dataFim)
+              AND (LOWER(a.topico) LIKE LOWER(CONCAT('%', :busca, '%'))
+                   OR EXISTS (SELECT 1 FROM AgendamentoParticipante b
+                              WHERE b.agendamento = a AND LOWER(b.usuario.nome) LIKE LOWER(CONCAT('%', :busca, '%'))))
             """)
     Page<Agendamento> buscarPorUsuarioComFiltros(@Param("usuarioId") Long usuarioId,
-                                                 @Param("status") StatusAgendamento status,
+                                                 @Param("status") Collection<StatusAgendamento> status,
                                                  @Param("dataInicio") LocalDate dataInicio,
                                                  @Param("dataFim") LocalDate dataFim,
+                                                 @Param("busca") String busca,
                                                  Pageable pageable);
 
+    // "busca" vazia casa com tudo; com texto, procura no topico e no nome de qualquer envolvido.
     @Query("""
             SELECT a FROM Agendamento a
-            WHERE (:status IS NULL OR a.status = :status)
-              AND (:dataInicio IS NULL OR a.dataReuniao >= :dataInicio)
-              AND (:dataFim IS NULL OR a.dataReuniao <= :dataFim)
+            WHERE a.status IN :status
+              AND (CAST(:dataInicio AS LocalDate) IS NULL OR a.dataReuniao >= :dataInicio)
+              AND (CAST(:dataFim AS LocalDate) IS NULL OR a.dataReuniao <= :dataFim)
+              AND (LOWER(a.topico) LIKE LOWER(CONCAT('%', :busca, '%'))
+                   OR EXISTS (SELECT 1 FROM AgendamentoParticipante b
+                              WHERE b.agendamento = a AND LOWER(b.usuario.nome) LIKE LOWER(CONCAT('%', :busca, '%'))))
             """)
-    Page<Agendamento> buscarComFiltros(@Param("status") StatusAgendamento status,
+    Page<Agendamento> buscarComFiltros(@Param("status") Collection<StatusAgendamento> status,
                                        @Param("dataInicio") LocalDate dataInicio,
                                        @Param("dataFim") LocalDate dataFim,
+                                       @Param("busca") String busca,
                                        Pageable pageable);
+
+    /** RF 28 - existe uma remarcacao ativa desta reuniao? */
+    boolean existsByAgendamentoOrigemIdAndStatusNot(Long agendamentoOrigemId, StatusAgendamento status);
+
+    /** Reunioes num status ate a data informada (rotina de conclusao e lembretes). */
+    List<Agendamento> findByStatusAndDataReuniaoLessThanEqual(StatusAgendamento status, LocalDate data);
 
     @Query("""
             SELECT a FROM Agendamento a

@@ -15,19 +15,25 @@ import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
 import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import { proximoDiaUtilISO } from "@/utils/reuniao";
 import type { Agendamento, Duracao } from "@/types";
 import AgendaDocentes from "./AgendaDocentes";
 import AvisosAgendamento from "./AvisosAgendamento";
 
-const FORM_VAZIO = {
+// Nasce no próximo dia útil: hoje, o horário padrão muitas vezes já passou.
+const formVazio = () => ({
   idOrganizador: "",
   idDuracao: "",
-  dataReuniao: hojeISO(),
+  dataReuniao: proximoDiaUtilISO(),
   horarioInicio: "10:00",
   formato: "PRESENCIAL",
   topico: "",
   resumo: "",
-};
+  linkReuniao: "",
+});
+
+// Duração sugerida num agendamento novo, se existir.
+const DURACAO_PADRAO_MINUTOS = 30;
 
 // RN 16: agendamentos com até 30 dias de antecedência.
 const MAX_DIAS_ANTECEDENCIA = 30;
@@ -62,6 +68,11 @@ const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando
   remarcar: { titulo: "Remarcar reunião", botao: "Remarcar", salvando: "Remarcando…" },
 };
 
+/** Compara nomes sem diferenciar maiúsculas e acentos ("romulo" acha "Rômulo"). */
+function normalizar(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
 export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
   const toast = useToast();
   const { perfilVinculado: eu, pode } = useAuth();
@@ -82,13 +93,15 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           formato: base.formato,
           topico: base.topico,
           resumo: base.resumo ?? "",
+          linkReuniao: "",
         }
-      : { ...FORM_VAZIO, idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") }
+      : { ...formVazio(), idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") }
   );
   const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>(() =>
     base ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
   );
   const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
+  const [buscaConvidado, setBuscaConvidado] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
@@ -106,7 +119,13 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
 
   // A resposta do agendamento traz só os minutos; sem escolha explícita, casa com a lista de durações.
   const idDuracao =
-    form.idDuracao || (base ? String(duracoes.find((d) => d.minutos === base.duracaoMinutos)?.id ?? "") : "");
+    form.idDuracao ||
+    String(
+      (base
+        ? duracoes.find((d) => d.minutos === base.duracaoMinutos)
+        : (duracoes.find((d) => d.minutos === DURACAO_PADRAO_MINUTOS) ?? duracoes[0])
+      )?.id ?? ""
+    );
 
   function alternarConvidado(id: string) {
     setConvidadosSelecionados((atual) =>
@@ -114,9 +133,23 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     );
   }
 
+  // Professores e coordenadores primeiro (toda reunião precisa de um), depois por nome.
   const candidatosConvidado = form.idOrganizador
-    ? usuarios.filter((u) => String(u.id) !== form.idOrganizador)
+    ? usuarios
+        .filter((u) => String(u.id) !== form.idOrganizador)
+        .sort(
+          (a, b) =>
+            Number(DOCENTES.includes(b.tipoUsuario)) - Number(DOCENTES.includes(a.tipoUsuario)) ||
+            a.nome.localeCompare(b.nome, "pt-BR")
+        )
     : [];
+  const termoConvidado = normalizar(buscaConvidado.trim());
+  const convidadosVisiveis = termoConvidado
+    ? candidatosConvidado.filter(
+        (u) => normalizar(u.nome).includes(termoConvidado) || convidadosSelecionados.includes(String(u.id))
+      )
+    : candidatosConvidado;
+  const nomesSelecionados = candidatosConvidado.filter((u) => convidadosSelecionados.includes(String(u.id)));
   const duracaoMinutos = duracoes.find((d) => String(d.id) === idDuracao)?.minutos ?? 0;
   const organizadorUsuario = todos.find((u) => String(u.id) === form.idOrganizador) ?? null;
   // RF 14: o horário precisa estar livre para todos os envolvidos (organizador e convidados).
@@ -141,6 +174,9 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     if (convidadosSelecionados.length === 0) return setErro("Selecione ao menos um convidado.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
     if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
+    if (form.formato !== "PRESENCIAL" && form.linkReuniao.trim() && !/^https?:\/\/\S+$/.test(form.linkReuniao.trim())) {
+      return setErro("O link da reunião deve começar com http:// ou https://.");
+    }
 
     setSalvando(true);
     setErro("");
@@ -154,6 +190,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       topico: form.topico,
       resumo: form.resumo || null,
       idAgendamentoOrigem: modo === "remarcar" ? base?.id : undefined,
+      linkReuniao: form.formato !== "PRESENCIAL" && form.linkReuniao.trim() ? form.linkReuniao.trim() : null,
     };
     try {
       let salvo: Agendamento;
@@ -221,14 +258,42 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
         </FieldGrid>
 
         <div className="flex flex-col gap-2">
-          <Label>
-            Convidados <span className="text-destructive">*</span>
+          <Label htmlFor="busca-convidado">
+            Com quem é a reunião? <span className="text-destructive">*</span>
           </Label>
+          {candidatosConvidado.length > 0 && (
+            <Input
+              id="busca-convidado"
+              type="search"
+              placeholder="Buscar pelo nome…"
+              value={buscaConvidado}
+              onChange={(e) => setBuscaConvidado(e.target.value)}
+            />
+          )}
+          {nomesSelecionados.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" aria-label="Convidados escolhidos">
+              {nomesSelecionados.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => alternarConvidado(String(u.id))}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-200"
+                  aria-label={`Remover ${u.nome}`}
+                >
+                  {u.nome}
+                  <span aria-hidden="true">×</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="max-h-44 overflow-y-auto rounded-lg border p-1">
             {candidatosConvidado.length === 0 && (
               <p className="p-2 text-xs text-muted-foreground">Selecione o organizador primeiro.</p>
             )}
-            {candidatosConvidado.map((u) => (
+            {candidatosConvidado.length > 0 && convidadosVisiveis.length === 0 && (
+              <p className="p-2 text-xs text-muted-foreground">Ninguém encontrado com esse nome.</p>
+            )}
+            {convidadosVisiveis.map((u) => (
               <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted">
                 <Checkbox
                   checked={convidadosSelecionados.includes(String(u.id))}
@@ -287,6 +352,9 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             horario={form.horarioInicio}
             ignorarAgendamentoId={modo === "editar" ? base?.id : null}
             onEscolherHorario={(horarioInicio) => setForm((atual) => ({ ...atual, horarioInicio }))}
+            onEscolherData={(dataReuniao, horarioInicio) => setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }))}
+            idOrganizador={organizadorUsuario?.id ?? null}
+            onRemoverConvidado={(id) => setConvidadosSelecionados((atual) => atual.filter((c) => c !== String(id)))}
           />
         ) : (
           <p className="text-xs text-muted-foreground">
@@ -309,6 +377,16 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           ignorarAgendamentoId={modo === "editar" ? base?.id : null}
           verificarLimite={modo !== "editar"}
         />
+
+        {form.formato !== "PRESENCIAL" && (
+          <TextField
+            label="Link da reunião (opcional)"
+            type="url"
+            placeholder="https://meet.google.com/… ou link do Teams"
+            value={form.linkReuniao}
+            onChange={(e) => setForm({ ...form, linkReuniao: e.target.value })}
+          />
+        )}
 
         <TextField
           label="Tópico"

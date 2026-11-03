@@ -103,11 +103,15 @@ export interface Avaliacao {
 
 export interface Notificacao {
   id: number;
+  idUsuario: number;
+  nomeUsuario: string;
   mensagem: string;
   tipoEvento: string;
   canalEnvio: string;
-  idAgendamento: number;
+  idAgendamento?: number | null;
+  /** Canal SISTEMA: PENDENTE = não lida, ENVIADO = lida. */
   statusEnvio: string;
+  enviadoEm?: string | null;
   criadoEm: string;
 }
 

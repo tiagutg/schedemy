@@ -163,3 +163,87 @@ export function situacaoLimiteAluno(
   // Libera quando sobrarem menos que `limite` criações dentro da janela de 24 h.
   return { recentes: criados.length, atingido: true, liberaEm: new Date(criados[criados.length - limite] + DIA_MS) };
 }
+
+const DIAS_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+/** Rótulo curto de uma data: "Ter, 03/11". */
+export function rotuloDia(dataISO: string): string {
+  const [, mes, dia] = dataISO.split("-");
+  return `${DIAS_CURTOS[diaSemanaDe(dataISO) - 1]}, ${dia}/${mes}`;
+}
+
+/** Horário de atendimento da semana em uma linha: "Seg 08:00–12:00 · Qua 08:00–12:00". */
+export function resumirSemana(disponibilidades: Disponibilidade[]): string {
+  return disponibilidades
+    .filter((d) => d.ativo)
+    .sort((a, b) => a.diaSemana - b.diaSemana || paraMinutos(a.horarioInicio) - paraMinutos(b.horarioInicio))
+    .map((d) => `${DIAS_CURTOS[d.diaSemana - 1]} ${d.horarioInicio.slice(0, 5)}–${d.horarioFim.slice(0, 5)}`)
+    .join(" · ");
+}
+
+/**
+ * Datas (yyyy-MM-dd) de hoje até `maxDias` em que todos os docentes atendem ao mesmo tempo
+ * por pelo menos `duracaoMinutos`, pela grade semanal. São só candidatas: reuniões e
+ * bloqueios quem confere é o back-end.
+ */
+export function diasDeAtendimentoEmComum(
+  grades: Disponibilidade[][],
+  hoje = new Date(),
+  maxDias = 30,
+  duracaoMinutos = 1
+): string[] {
+  if (grades.length === 0) return [];
+  const servem = new Set<number>();
+  for (let dia = 1; dia <= 7; dia++) {
+    if (comunsNoDia(grades, dia).some((i) => i.fim - i.inicio >= duracaoMinutos)) servem.add(dia);
+  }
+  const dias: string[] = [];
+  for (let i = 0; i <= maxDias; i++) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + i);
+    if (servem.has(d.getDay() + 1)) {
+      dias.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`);
+    }
+  }
+  return dias;
+}
+
+/** Interseção de dois conjuntos de intervalos (em minutos). */
+function cruzar(a: Intervalo[], b: Intervalo[]): Intervalo[] {
+  const comuns: Intervalo[] = [];
+  for (const x of a) {
+    for (const y of b) {
+      const inicio = Math.max(x.inicio, y.inicio);
+      const fim = Math.min(x.fim, y.fim);
+      if (fim > inicio) comuns.push({ inicio, fim });
+    }
+  }
+  return comuns;
+}
+
+/** Pela grade semanal, existe algum horário em que todos atendem por pelo menos `duracaoMinutos`? */
+export function temHorarioEmComumNaSemana(grades: Disponibilidade[][], duracaoMinutos: number): boolean {
+  if (grades.length === 0) return false;
+  for (let dia = 1; dia <= 7; dia++) {
+    if (comunsNoDia(grades, dia).some((i) => i.fim - i.inicio >= duracaoMinutos)) return true;
+  }
+  return false;
+}
+
+/** Intervalos de um dia da semana em que todas as grades atendem. */
+function comunsNoDia(grades: Disponibilidade[][], dia: number): Intervalo[] {
+  return grades
+    .map((grade) =>
+      grade
+        .filter((d) => d.ativo && d.diaSemana === dia)
+        .map((d) => ({ inicio: paraMinutos(d.horarioInicio), fim: paraMinutos(d.horarioFim) }))
+    )
+    .reduce((acc, atual) => cruzar(acc, atual));
+}
+
+/** Posições das grades que, se saírem, deixam os demais com horário em comum na semana. */
+export function quemImpedeHorarioEmComum(grades: Disponibilidade[][], duracaoMinutos: number): number[] {
+  if (grades.length < 2 || temHorarioEmComumNaSemana(grades, duracaoMinutos)) return [];
+  return grades
+    .map((_, i) => i)
+    .filter((i) => temHorarioEmComumNaSemana(grades.filter((_, j) => j !== i), duracaoMinutos));
+}

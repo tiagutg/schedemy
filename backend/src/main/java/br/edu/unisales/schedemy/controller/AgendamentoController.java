@@ -60,21 +60,25 @@ public class AgendamentoController {
     @Operation(summary = "Listar agendamentos de um usuario")
     public ResponseEntity<PageResponseDTO<AgendamentoResponseDTO>> listarPorUsuario(
             @PathVariable Long usuarioId,
-            @RequestParam(required = false) StatusAgendamento status,
+            @RequestParam(required = false) List<StatusAgendamento> status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(required = false) String busca,
             @ParameterObject @PageableDefault(size = 20, sort = "dataReuniao") Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarPorUsuario(usuarioId, status, dataInicio, dataFim, pageable)));
+        return ResponseEntity.ok(PageResponseDTO.de(
+                agendamentoService.listarPorUsuario(usuarioId, status, dataInicio, dataFim, busca, pageable)));
     }
 
     @GetMapping
-    @Operation(summary = "Listar todos os agendamentos", description = "Visao da recepcao e da administracao, com filtros de status e periodo.")
+    @Operation(summary = "Listar todos os agendamentos",
+            description = "Visao da recepcao e da administracao, com filtros de status, periodo e busca (topico ou nome).")
     public ResponseEntity<PageResponseDTO<AgendamentoResponseDTO>> listarTodos(
-            @RequestParam(required = false) StatusAgendamento status,
+            @RequestParam(required = false) List<StatusAgendamento> status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(required = false) String busca,
             @ParameterObject @PageableDefault(size = 20, sort = "dataReuniao") Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarTodos(status, dataInicio, dataFim, pageable)));
+        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarTodos(status, dataInicio, dataFim, busca, pageable)));
     }
 
     @PutMapping("/{id}")

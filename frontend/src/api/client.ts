@@ -74,8 +74,11 @@ export async function apiFetch<T = unknown>(
   const url = new URL(path.startsWith("http") ? path : `${BASE_URL}${path}`);
   if (params) {
     Object.entries(params).forEach(([chave, valor]) => {
-      if (valor !== undefined && valor !== null && valor !== "") {
-        url.searchParams.set(chave, String(valor));
+      // Listas viram parâmetros repetidos (ex.: sort=data,asc&sort=hora,asc).
+      for (const item of Array.isArray(valor) ? valor : [valor]) {
+        if (item !== undefined && item !== null && item !== "") {
+          url.searchParams.append(chave, String(item));
+        }
       }
     });
   }

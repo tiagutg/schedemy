@@ -56,32 +56,32 @@
     --card-foreground: #0d1e31;
     --popover: #ffffff;
     --popover-foreground: #0d1e31;
-    --primary: #1f5086;
+    --primary: #005295;
     --primary-foreground: #ffffff;
     --secondary: #eef4fa;
-    --secondary-foreground: #1a416c;
+    --secondary-foreground: #00437a;
     --muted: #f2f6fa;
     --muted-foreground: #586a7f;
-    --accent: #e6f0fa;
-    --accent-foreground: #1a416c;
+    --accent: #e3eff9;
+    --accent-foreground: #00437a;
     --destructive: oklch(0.577 0.245 27.325);
     --border: #dbe4ee;
     --input: #cfdae6;
-    --ring: #3f7cbd;
-    --chart-1: #c9def2;
-    --chart-2: #7fb0e0;
-    --chart-3: #2f6aa8;
-    --chart-4: #1f5086;
-    --chart-5: #142e49;
+    --ring: #2a7cc2;
+    --chart-1: #c4dcf1;
+    --chart-2: #79b2e2;
+    --chart-3: #1a6cb3;
+    --chart-4: #005295;
+    --chart-5: #002b52;
     --radius: 0.625rem;
-    --sidebar: #142e49;
+    --sidebar: #002b52;
     --sidebar-foreground: #e8f0f9;
     --sidebar-primary: #ffffff;
-    --sidebar-primary-foreground: #1a416c;
+    --sidebar-primary-foreground: #00437a;
     --sidebar-accent: oklch(1 0 0 / 12%);
     --sidebar-accent-foreground: #ffffff;
     --sidebar-border: oklch(1 0 0 / 12%);
-    --sidebar-ring: #7fb0e0;
+    --sidebar-ring: #79b2e2;
 }
 
 /* Tema escuro: fundo azul-noite, sidebar mais escura e azul da marca clareado para contraste. */
@@ -92,7 +92,7 @@
     --card-foreground: #e6eef7;
     --popover: #102033;
     --popover-foreground: #e6eef7;
-    --primary: #6ea8e6;
+    --primary: #5aa7e6;
     --primary-foreground: #0b1624;
     --secondary: #17304a;
     --secondary-foreground: #dbe9f7;
@@ -103,12 +103,12 @@
     --destructive: oklch(0.704 0.191 22.216);
     --border: #1f3550;
     --input: #2a4767;
-    --ring: #6ea8e6;
-    --chart-1: #23466f;
-    --chart-2: #3f72a8;
-    --chart-3: #6ea8e6;
-    --chart-4: #a3c9f1;
-    --chart-5: #d6e6f7;
+    --ring: #5aa7e6;
+    --chart-1: #13426d;
+    --chart-2: #2f75b5;
+    --chart-3: #5aa7e6;
+    --chart-4: #9ccaf0;
+    --chart-5: #d3e8f8;
     --sidebar: #07101b;
     --sidebar-foreground: #dbe7f3;
     --sidebar-primary: #e6eef7;
@@ -116,18 +116,18 @@
     --sidebar-accent: oklch(1 0 0 / 9%);
     --sidebar-accent-foreground: #ffffff;
     --sidebar-border: oklch(1 0 0 / 9%);
-    --sidebar-ring: #6ea8e6;
+    --sidebar-ring: #5aa7e6;
 
     /* Tons da marca e de status invertidos: fundos claros viram escuros e textos escuros viram claros. */
-    --color-brand-950: #eef5fc;
-    --color-brand-900: #d6e6f7;
-    --color-brand-700: #a3c9f1;
-    --color-brand-600: #7fb3ea;
-    --color-brand-500: #6ea8e6;
-    --color-brand-300: #3f72a8;
-    --color-brand-200: #234a73;
-    --color-brand-100: #15304d;
-    --color-brand-50: #0f2236;
+    --color-brand-950: #edf6fd;
+    --color-brand-900: #d3e8f8;
+    --color-brand-700: #9ccaf0;
+    --color-brand-600: #74b6ec;
+    --color-brand-500: #5aa7e6;
+    --color-brand-300: #2f6ea8;
+    --color-brand-200: #164a78;
+    --color-brand-100: #0d2f4f;
+    --color-brand-50: #08213a;
 
     --color-ink-950: #f5f7fa;
     --color-ink-900: #e9eef4;
@@ -153,27 +153,28 @@
   --color-ink-100: #f0f0f0;
   --color-ink-50: #f5f5f5;
 
-  /* Azul da logo do Schedemy. */
-  --color-brand-950: #0d1e31;
-  --color-brand-900: #142e49;
-  --color-brand-700: #1a416c;
-  --color-brand-600: #1f5086;
-  --color-brand-500: #2f6aa8;
-  --color-brand-300: #7fb0e0;
-  --color-brand-200: #c9def2;
-  --color-brand-100: #e6f0fa;
-  --color-brand-50: #f2f7fc;
+  /* Azul do Schedemy: #005295 (brand-600) e a escala no mesmo matiz. */
+  --color-brand-950: #001b33;
+  --color-brand-900: #002b52;
+  --color-brand-700: #00437a;
+  --color-brand-600: #005295;
+  --color-brand-500: #1a6cb3;
+  --color-brand-300: #79b2e2;
+  --color-brand-200: #c4dcf1;
+  --color-brand-100: #e3eff9;
+  --color-brand-50: #f1f7fc;
 
   /* Azul-marinho fixo: não muda no tema escuro (faixas e selos com texto branco). */
-  --color-marinho-950: #0d1e31;
-  --color-marinho-900: #142e49;
-  --color-marinho-700: #1a416c;
-  --color-marinho-600: #1f5086;
-  --color-marinho-500: #2f6aa8;
+  --color-marinho-950: #001b33;
+  --color-marinho-900: #002b52;
+  --color-marinho-700: #00437a;
+  --color-marinho-600: #005295;
+  --color-marinho-500: #1a6cb3;
 
   --color-sage-700: #15803d;
   --color-sage-100: #ecfdf3;
-  --color-brick-700: #dc2626;
+  /* #b91c1c: o #dc2626 sobre o brick-100 ficava abaixo do contraste AA (4,4:1). */
+  --color-brick-700: #b91c1c;
   --color-brick-100: #fef2f2;
 }
 

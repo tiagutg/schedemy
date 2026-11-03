@@ -25,12 +25,14 @@ public interface AgendamentoService {
                                                    Long ignorarAgendamentoId);
 
     // Listagem, filtro e ordenacao dos agendamentos de um usuario.
-    Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, StatusAgendamento status,
-                                                  LocalDate dataInicio, LocalDate dataFim, Pageable pageable);
+    // "busca" procura no topico e no nome dos envolvidos.
+    Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, List<StatusAgendamento> status,
+                                                  LocalDate dataInicio, LocalDate dataFim, String busca,
+                                                  Pageable pageable);
 
     // Listagem administrativa de todos os agendamentos (uso de recepcionista/coordenacao).
-    Page<AgendamentoResponseDTO> listarTodos(StatusAgendamento status, LocalDate dataInicio, LocalDate dataFim,
-                                             Pageable pageable);
+    Page<AgendamentoResponseDTO> listarTodos(List<StatusAgendamento> status, LocalDate dataInicio, LocalDate dataFim,
+                                             String busca, Pageable pageable);
 
     // Edicao permitida enquanto o agendamento ainda estiver pendente.
     AgendamentoResponseDTO atualizar(Long id, AgendamentoRequestDTO dto);

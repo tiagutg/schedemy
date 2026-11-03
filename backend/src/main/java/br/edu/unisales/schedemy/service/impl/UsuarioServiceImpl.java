@@ -78,7 +78,9 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     @Transactional(readOnly = true)
     public Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
-        return usuarioRepository.buscarComFiltros(tipo, nome, ativo, pageable)
+        // Sem filtro de nome, busca por "" (aceita todos): o PostgreSQL nao aceita LOWER(null) sem tipo.
+        String filtroNome = nome == null ? "" : nome;
+        return usuarioRepository.buscarComFiltros(tipo, filtroNome, ativo, pageable)
                 .map(usuarioMapper::paraResponseDTO);
     }
 

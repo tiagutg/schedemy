@@ -13,7 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ROTULOS_PERFIL } from "@/utils/permissoes";
 import { NavMain } from "./NavMain";
 import { NavUser } from "./NavUser";
-import { ITENS_GESTAO, ITENS_NAV } from "./navegacao";
+import { ITENS_AGENDA, ITENS_CONFIGURACAO, ITENS_NAV } from "./navegacao";
 
 type AppSidebarProps = ComponentProps<typeof Sidebar> & {
   onSair: () => void;
@@ -47,7 +47,8 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain itens={ITENS_NAV.filter(visivel)} criarAgendamento={pode("agendamentos.criar")} />
-        <NavMain itens={ITENS_GESTAO.filter(visivel)} rotulo="Gestão" />
+        <NavMain itens={ITENS_AGENDA.filter(visivel)} rotulo="Minha agenda" />
+        <NavMain itens={ITENS_CONFIGURACAO.filter(visivel)} rotulo="Configurações" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser

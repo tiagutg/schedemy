@@ -1,4 +1,5 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { IconAlertTriangle, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { bloqueiosApi } from "@/api/bloqueios";
 import type { ApiError } from "@/api/client";
@@ -19,7 +20,8 @@ import { TextField, SelectField, FieldGrid, CheckboxField, FieldError } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DIAS_SEMANA, CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
+import { DIAS_SEMANA, rotularEnum } from "@/utils/domain";
+import { situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, hojeISO } from "@/utils/format";
 import type { Agendamento, Bloqueio, Params } from "@/types";
 
@@ -67,6 +69,15 @@ export default function BloqueiosPage() {
     setErro("");
     setModalAberto(true);
   }
+
+  // Atalho do painel: /bloqueios?novo=1 já abre o formulário.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("novo") !== "1") return;
+    setSearchParams({}, { replace: true });
+    abrirCriacao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   function abrirEdicao(b: Bloqueio) {
     setEditando(b);
@@ -181,7 +192,10 @@ export default function BloqueiosPage() {
         chaveLinha={(b) => b.id}
         linhas={linhas}
         colunas={[
-          { chave: "usuario", titulo: "Professor / coordenador", render: (b) => b.nomeUsuario },
+          // A coluna do docente só faz sentido para quem vê os bloqueios de vários.
+          ...(gerenciaTodos
+            ? [{ chave: "usuario", titulo: "Professor / coordenador", render: (b: Bloqueio) => b.nomeUsuario }]
+            : []),
           { chave: "periodo", titulo: "Período", render: (b) =>
               b.dataInicio === b.dataFim ? formatarData(b.dataInicio) : `${formatarData(b.dataInicio)} – ${formatarData(b.dataFim)}` },
           { chave: "horario", titulo: "Horário", render: (b) =>
@@ -325,7 +339,7 @@ export default function BloqueiosPage() {
                     {formatarData(a.dataReuniao)} às {a.horarioInicio?.slice(0, 5)}
                   </p>
                 </div>
-                <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+                <Pill className={situacaoDaReuniao(a, eu?.id).cor}>{situacaoDaReuniao(a, eu?.id).rotulo}</Pill>
               </li>
             ))}
           </ul>

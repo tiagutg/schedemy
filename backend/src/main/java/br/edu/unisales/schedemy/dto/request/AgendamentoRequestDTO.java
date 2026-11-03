@@ -45,6 +45,12 @@ public record AgendamentoRequestDTO(
         String resumo,
 
         @Schema(description = "ID do agendamento anterior, quando reutilizado", example = "null")
-        Long idAgendamentoOrigem
+        Long idAgendamentoOrigem,
+
+        @Schema(description = "Link da sala online (Teams, Meet...). Opcional: sem ele, o sistema gera um.",
+                example = "https://meet.google.com/abc-defg-hij")
+        @Size(max = 1000)
+        @Pattern(regexp = "^\\s*$|^https?://\\S+$", message = "linkReuniao deve ser um endereco http(s) valido")
+        String linkReuniao
 ) {
 }

@@ -14,7 +14,7 @@ O projeto tem duas partes:
 | Camada | Tecnologias |
 | :--- | :--- |
 | **Back-end** | Java 21, Spring Boot 4, Spring Data JPA, Spring Security (Basic Auth), Springdoc OpenAPI (Swagger) |
-| **Banco de dados** | MySQL 8 |
+| **Banco de dados** | MySQL 8 (local) ou PostgreSQL no Supabase (opcional) |
 | **Front-end** | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, React Router |
 
 ---
@@ -26,8 +26,10 @@ O projeto tem duas partes:
 ├── backend/          # API REST (Spring Boot + Maven Wrapper)
 ├── frontend/         # Painel web (React + Vite)
 ├── db/
-│   ├── db_schedemy.sql     # Script de criação do banco (vazio)
-│   └── dump_schedemy.sql   # Banco completo com usuários de teste
+│   ├── db_schedemy.sql       # Script de criação do banco MySQL (vazio)
+│   ├── dump_schedemy.sql     # Banco MySQL completo com usuários de teste
+│   ├── supabase_schema.sql   # Estrutura do banco para PostgreSQL (Supabase)
+│   └── supabase_dados.sql    # Dados iniciais para PostgreSQL (Supabase)
 └── Documentacao/     # Coleção de requisições da API
 ```
 
@@ -38,7 +40,7 @@ O projeto tem duas partes:
 Instale e configure estas ferramentas na sua máquina:
 
 - **Java JDK 21**
-- **MySQL Server 8**, rodando na porta `3306`
+- **MySQL Server 8**, rodando na porta `3306` (dispensável se você usar o [banco no Supabase](#opção-banco-no-supabase))
 - **Node.js 20** ou superior (com o npm)
 
 > O Maven não precisa ser instalado: o back-end usa o **Maven Wrapper** (`mvnw`).
@@ -90,6 +92,31 @@ No Windows, troque `cp` por `copy`.
 
 O painel fica disponível em **http://localhost:5173**.
 
+### Opção: banco no Supabase
+
+Em vez do MySQL local, a API pode usar o banco PostgreSQL compartilhado no [Supabase](https://supabase.com). Assim não é preciso instalar o MySQL, e todos usam os mesmos dados.
+
+1. Peça os dados de conexão (host, usuário e senha) a quem administra o projeto no Supabase. Eles são passados por um canal seguro, **nunca pelo GitHub**.
+2. Na raiz do projeto, copie o `supabase.env.example` para `supabase.env` e preencha os dados. O `supabase.env` está no `.gitignore`: ele tem a senha e nunca vai para o GitHub. Não o envie junto se for compartilhar a pasta do projeto compactada.
+3. Defina a variável `JAVA_HOME` apontando para o JDK 21 e suba a API pelo script:
+
+   ```powershell
+   cd backend
+   .\subir-api-supabase.ps1
+   ```
+
+   O script usa o `supabase.env` da raiz do projeto. Se ele estiver em outro lugar, informe o caminho: `.\subir-api-supabase.ps1 -Arquivo C:\caminho\supabase.env`.
+
+4. Suba o front-end normalmente (passo 3 acima). Ele não muda: conversa com a API em `http://localhost:8080`, e é a API que acessa o banco.
+
+Para voltar ao MySQL local, suba a API com `mvnw.cmd spring-boot:run`, como no passo 2.
+
+> ⚠️ **Atenção:** o banco do Supabase é **compartilhado**. O que você cria, edita ou apaga aparece para todos. Rode os testes de ponta a ponta (`npm run test:e2e`) no MySQL local, porque eles criam e apagam agendamentos.
+>
+> No plano gratuito, o Supabase pausa o projeto depois de uma semana sem uso. Se a API não conectar, entre no painel do Supabase e clique em **Restore project**.
+
+**Para quem administra o Supabase:** para criar o banco do zero num projeto novo, abra o **SQL Editor** e rode `db/supabase_schema.sql` e depois `db/supabase_dados.sql`. O segundo pode ser rodado de novo sem duplicar dados. Ao criar o projeto, desmarque **Enable Data API**: o acesso aos dados deve ser só pela API do Schedemy.
+
 ---
 
 ## 🔧 Variáveis de ambiente
@@ -107,6 +134,7 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `DB_USER` | `root` | Usuário do MySQL |
 | `DB_PASSWORD` | *(vazio)* | Senha do MySQL |
 | `SHOW_SQL` | `false` | Exibe no log o SQL gerado pelo Hibernate |
+| `SPRING_PROFILES_ACTIVE` | *(vazio)* | `supabase` usa o banco PostgreSQL do Supabase (o script `subir-api-supabase.ps1` já define) |
 
 ### Front-end (`frontend/.env`)
 
