@@ -146,7 +146,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   const termoConvidado = normalizar(buscaConvidado.trim());
   const convidadosVisiveis = termoConvidado
     ? candidatosConvidado.filter(
-        (u) => normalizar(u.nome).includes(termoConvidado) || convidadosSelecionados.includes(String(u.id))
+        // RF 33: busca por nome ou RA.
+        (u) =>
+          normalizar(u.nome).includes(termoConvidado) ||
+          normalizar(u.matriculaRa ?? "").includes(termoConvidado) ||
+          convidadosSelecionados.includes(String(u.id))
       )
     : candidatosConvidado;
   const nomesSelecionados = candidatosConvidado.filter((u) => convidadosSelecionados.includes(String(u.id)));
@@ -265,7 +269,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             <Input
               id="busca-convidado"
               type="search"
-              placeholder="Buscar pelo nome…"
+              placeholder="Buscar pelo nome ou RA…"
               value={buscaConvidado}
               onChange={(e) => setBuscaConvidado(e.target.value)}
             />
@@ -406,6 +410,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             label="Motivo da remarcação"
             required
             placeholder="Ex.: Conflito com prova"
+            maxLength={450}
             value={motivoRemarcacao}
             onChange={(e) => setMotivoRemarcacao(e.target.value)}
           />

@@ -14,11 +14,15 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.EnumSet;
+import java.util.Set;
 
 /**
- * Tarefas periodicas do ciclo de vida da reuniao:
- * - reuniao CONFIRMADA cujo horario ja terminou passa a CONCLUIDO e o aluno e convidado a avaliar (RF 24);
- * - lembrete aos participantes que aceitaram, nas 24 horas antes do inicio (RF 23).
+ * Tarefas periodicas do ciclo de vida da reuniao (RN 08 - atualizacao automatica de status):
+ * - PENDENTE/AGUARDANDO_RESPOSTA cujo horario de inicio chegou sem confirmacao passa a CANCELADO (RN 18);
+ * - CONFIRMADO cujo horario comecou passa a EM_ANDAMENTO;
+ * - CONFIRMADO/EM_ANDAMENTO cujo horario terminou passa a CONCLUIDO e o aluno e convidado a avaliar (RF 24);
+ * - lembrete aos participantes que aceitaram, nas 24 horas antes do inicio (RN 11).
  *
  * Desligue com schedemy.rotina-agenda.ativa=false (ex.: em testes).
  */
@@ -28,6 +32,9 @@ import java.time.LocalDateTime;
 @ConditionalOnProperty(name = "schedemy.rotina-agenda.ativa", havingValue = "true", matchIfMissing = true)
 public class RotinaDeAgenda {
     private static final int HORAS_ANTES_DO_LEMBRETE = 24;
+    private static final Set<StatusAgendamento> ACOMPANHADOS = EnumSet.of(
+            StatusAgendamento.PENDENTE, StatusAgendamento.AGUARDANDO_RESPOSTA,
+            StatusAgendamento.CONFIRMADO, StatusAgendamento.EM_ANDAMENTO);
 
     private final AgendamentoRepository agendamentoRepository;
     private final NotificacaoRepository notificacaoRepository;
@@ -38,26 +45,61 @@ public class RotinaDeAgenda {
     @Transactional
     public void executar() {
         LocalDateTime agora = LocalDateTime.now();
+        int expiradas = 0;
+        int iniciadas = 0;
         int concluidas = 0;
         int lembretes = 0;
-        // Confirmadas ate amanha: as que ja terminaram e as que comecam nas proximas 24 horas.
-        for (Agendamento a : agendamentoRepository.findByStatusAndDataReuniaoLessThanEqual(
-                StatusAgendamento.CONFIRMADO, agora.toLocalDate().plusDays(1))) {
+        // Reunioes ativas ate amanha: as que ja comecaram/terminaram e as que comecam nas proximas 24 horas.
+        for (Agendamento a : agendamentoRepository.findByStatusInAndDataReuniaoLessThanEqual(
+                ACOMPANHADOS, agora.toLocalDate().plusDays(1))) {
             LocalDateTime inicio = LocalDateTime.of(a.getDataReuniao(), a.getHorarioInicio());
-            LocalDateTime fim = a.getHorarioFim() == null ? inicio : LocalDateTime.of(a.getDataReuniao(), a.getHorarioFim());
+            LocalDateTime fim = fimDaReuniao(a, inicio);
 
-            if (!fim.isAfter(agora)) {
-                a.setStatus(StatusAgendamento.CONCLUIDO);
-                agendamentoRepository.save(a);
-                notificador.avaliacaoPendente(a);
-                concluidas++;
-            } else if (inicio.isAfter(agora) && !inicio.isAfter(agora.plusHours(HORAS_ANTES_DO_LEMBRETE))) {
-                lembretes += lembrar(a);
+            switch (a.getStatus()) {
+                case PENDENTE, AGUARDANDO_RESPOSTA -> {
+                    // RN 18 - sem um docente e um aluno confirmados ate o inicio, a reuniao nao acontece.
+                    if (!inicio.isAfter(agora)) {
+                        a.setStatus(StatusAgendamento.CANCELADO);
+                        agendamentoRepository.save(a);
+                        notificador.naoConfirmada(a);
+                        expiradas++;
+                    }
+                }
+                case CONFIRMADO, EM_ANDAMENTO -> {
+                    if (!fim.isAfter(agora)) {
+                        a.setStatus(StatusAgendamento.CONCLUIDO);
+                        agendamentoRepository.save(a);
+                        notificador.avaliacaoPendente(a);
+                        concluidas++;
+                    } else if (!inicio.isAfter(agora)) {
+                        if (a.getStatus() == StatusAgendamento.CONFIRMADO) {
+                            a.setStatus(StatusAgendamento.EM_ANDAMENTO);
+                            agendamentoRepository.save(a);
+                            iniciadas++;
+                        }
+                    } else if (a.getStatus() == StatusAgendamento.CONFIRMADO
+                            && !inicio.isAfter(agora.plusHours(HORAS_ANTES_DO_LEMBRETE))) {
+                        lembretes += lembrar(a);
+                    }
+                }
+                default -> {
+                    // CANCELADO e CONCLUIDO nao sao consultados.
+                }
             }
         }
-        if (concluidas + lembretes > 0) {
-            log.info("Rotina de agenda: {} reuniao(oes) concluida(s), {} lembrete(s) enviado(s).", concluidas, lembretes);
+        if (expiradas + iniciadas + concluidas + lembretes > 0) {
+            log.info("Rotina de agenda: {} expirada(s) sem confirmacao, {} iniciada(s), {} concluida(s), {} lembrete(s).",
+                    expiradas, iniciadas, concluidas, lembretes);
         }
+    }
+
+    /** Fim da reuniao; se passar da meia-noite (fim "antes" do inicio), termina no dia seguinte. */
+    private static LocalDateTime fimDaReuniao(Agendamento a, LocalDateTime inicio) {
+        if (a.getHorarioFim() == null) {
+            return inicio;
+        }
+        LocalDateTime fim = LocalDateTime.of(a.getDataReuniao(), a.getHorarioFim());
+        return fim.isAfter(inicio) ? fim : fim.plusDays(1);
     }
 
     private int lembrar(Agendamento agendamento) {

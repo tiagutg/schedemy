@@ -342,7 +342,7 @@ CREATE TABLE registro_motivo (
     id_agendamento BIGINT UNSIGNED NOT NULL,
     id_usuario BIGINT UNSIGNED NOT NULL,
     tipo_operacao ENUM('CANCELAMENTO', 'SOLICITACAO_EDICAO', 'RECUSA_AGENDAMENTO', 'RECUSA_REMARCACAO') NOT NULL,
-    justificativa VARCHAR(200) NOT NULL,
+    justificativa TEXT NOT NULL,
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     PRIMARY KEY (id_registro_motivo),

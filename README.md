@@ -62,6 +62,8 @@ Instale e configure estas ferramentas na sua máquina:
 
 > ⚠️ **Atenção:** o dump apaga e recria todas as tabelas do `schedemy_db`. Faça backup antes se tiver dados que queira manter.
 >
+> Já tem o banco criado antes de 10/11/2026? Rode também `db/migracoes/2026-11-10_justificativa_text.sql` (amplia o campo de motivo).
+>
 > Para criar o banco vazio, sem usuários, use `db/db_schedemy.sql`. Nesse caso, cadastre o primeiro usuário pela tela "Cadastre-se" ou pelo Swagger.
 
 > ⚠️ **Nota:** por padrão, a API usa o usuário `root` **sem senha**. Para usar outras credenciais, veja a seção [Variáveis de ambiente](#-variáveis-de-ambiente).
@@ -134,6 +136,7 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `DB_USER` | `root` | Usuário do MySQL |
 | `DB_PASSWORD` | *(vazio)* | Senha do MySQL |
 | `SHOW_SQL` | `false` | Exibe no log o SQL gerado pelo Hibernate |
+| `SCHEDEMY_FUSO` | `America/Sao_Paulo` | Fuso usado nos prazos e na rotina de status (evita deslocamento quando o servidor roda em UTC) |
 | `SPRING_PROFILES_ACTIVE` | *(vazio)* | `supabase` usa o banco PostgreSQL do Supabase (o script `subir-api-supabase.ps1` já define) |
 
 ### Front-end (`frontend/.env`)

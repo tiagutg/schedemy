@@ -69,7 +69,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   const a = agendamento;
   // Além do estado do agendamento, cada ação depende da permissão do perfil.
   const podeCancelar =
-    a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && pode("agendamentos.cancelar");
+    a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && a.status !== "EM_ANDAMENTO" && pode("agendamentos.cancelar");
   // Editar e remarcar são do organizador; recepção e administração podem fazer por ele.
   const podeGerir = a.idOrganizador === eu?.id || pode("agendamentos.organizarPorOutros");
   const horasAteReuniao = (new Date(`${a.dataReuniao}T${a.horarioInicio}`).getTime() - agora) / 3_600_000;
@@ -86,7 +86,12 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
     (a.status === "PENDENTE" || a.status === "CANCELADO") && pode("agendamentos.remover");
   // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador),
   // e cada um responde só o próprio convite (a API não aceita responder por outra pessoa).
-  const podeResponderPor = (p: Participante) => pode("agendamentos.responder") && p.idUsuario === eu?.id;
+  // A API só aceita resposta antes do início e enquanto a reunião não foi cancelada, iniciada ou concluída.
+  const podeResponderPor = (p: Participante) =>
+    pode("agendamentos.responder") &&
+    p.idUsuario === eu?.id &&
+    ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
+    horasAteReuniao > 0;
   const situacao = situacaoDaReuniao(a, eu?.id);
   const participo = a.participantes.some((p) => p.idUsuario === eu?.id);
   // RF 24: o aluno participante avalia a reunião concluída.
@@ -211,6 +216,12 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               )}
             </div>
           )}
+          {!linkSala && a.formato !== "PRESENCIAL" && (
+            <p className="rounded-lg border border-dashed p-3.5 text-sm text-muted-foreground">
+              Reunião {a.formato === "HIBRIDO" ? "híbrida" : "on-line"} ainda sem link da sala. Combine o endereço com o
+              organizador.
+            </p>
+          )}
 
           {(podeExportar || podeAvaliar) && (
             <div className="flex flex-wrap gap-2">
@@ -293,6 +304,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               <TextAreaField
                 label="Justificativa"
                 required
+                maxLength={500}
                 value={motivoRecusa}
                 onChange={(e) => setMotivoRecusa(e.target.value)}
                 placeholder="Ex.: Conflito de horário"
@@ -367,6 +379,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
           <TextAreaField
             label="Motivo do cancelamento"
             required
+            maxLength={500}
             value={motivoCancelamento}
             onChange={(e) => setMotivoCancelamento(e.target.value)}
             placeholder="Ex.: Imprevisto pessoal"

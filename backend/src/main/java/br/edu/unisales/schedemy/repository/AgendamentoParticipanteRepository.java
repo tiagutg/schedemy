@@ -9,4 +9,7 @@ import java.util.List;
 public interface AgendamentoParticipanteRepository extends JpaRepository<AgendamentoParticipante, AgendamentoParticipanteId> {
     List<AgendamentoParticipante> findByAgendamentoId(Long agendamentoId);
     List<AgendamentoParticipante> findByUsuarioId(Long usuarioId);
+
+    /** O usuario aparece em algum agendamento (como organizador ou convidado)? */
+    boolean existsByUsuarioId(Long usuarioId);
 }

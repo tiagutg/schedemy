@@ -68,8 +68,11 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
         if (logado.getTipoUsuario() == TipoUsuario.ALUNO && !logado.getId().equals(alunoId)) {
             throw new AcessoNegadoNegocioException("Voce so pode consultar as suas proprias avaliacoes.");
         }
-        return avaliacaoRepository.findByAlunoId(alunoId, pageable)
-                .map(avaliacaoMapper::paraResponseDTO);
+        // RNF 15 - a docencia ve so as avaliacoes das reunioes de que participou (mesma regra de exigirPodeVer).
+        Page<AvaliacaoReuniao> avaliacoes = logado.getTipoUsuario() == TipoUsuario.ALUNO || usuarioAutenticado.ehAdmin()
+                ? avaliacaoRepository.findByAlunoId(alunoId, pageable)
+                : avaliacaoRepository.buscarDoAlunoEmReunioesDoParticipante(alunoId, logado.getId(), pageable);
+        return avaliacoes.map(avaliacaoMapper::paraResponseDTO);
     }
 
     @Override

@@ -11,6 +11,9 @@ public interface UsuarioService {
 
     UsuarioResponseDTO buscarPorId(Long id);
 
+    /** Cadastro do usuario dono da credencial da requisicao. */
+    UsuarioResponseDTO buscarLogado();
+
     Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable);
 
     UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto);

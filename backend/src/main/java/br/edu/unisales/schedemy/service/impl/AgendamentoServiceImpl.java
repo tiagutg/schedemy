@@ -25,10 +25,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.temporal.ChronoUnit;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
+import java.util.Set;
 
 /**
  * Implementacao das regras de negocio (RN) relacionadas ao ciclo de vida do agendamento,
@@ -45,6 +46,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private static final int LIMITE_MAX_AGENDAMENTOS_ALUNO_24H = 2; // RN 13
     private static final int LIMITE_MAX_DURACAO_MINUTOS = 60;     // RN 17
     private static final int PASSO_HORARIOS_LIVRES_MINUTOS = 15;  // RF 14
+    /** Depois de confirmada, a reuniao ainda recebe respostas dos convidados que nao responderam (RN 18). */
+    private static final Set<StatusAgendamento> STATUS_QUE_ACEITAM_RESPOSTA = EnumSet.of(
+            StatusAgendamento.PENDENTE, StatusAgendamento.AGUARDANDO_RESPOSTA, StatusAgendamento.CONFIRMADO);
 
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -59,7 +63,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
     @Override
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
-        Usuario organizador = buscarUsuario(dto.idOrganizador());
+        Usuario organizador = buscarUsuarioAtivo(dto.idOrganizador());
         // RF 13 - a recepcao agenda em nome de alunos e docentes; os demais perfis, so em nome proprio.
         if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
                 && !usuarioAutenticado.id().equals(organizador.getId())) {
@@ -69,8 +73,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
         validarDuracao(duracao);
         validarAntecedenciaMaxima(dto.dataReuniao());
+        validarInicioNoFuturo(dto.dataReuniao(), dto.horarioInicio());
 
-        List<Usuario> convidados = dto.idsConvidados().stream().map(this::buscarUsuario).toList();
+        List<Usuario> convidados = dto.idsConvidados().stream().map(this::buscarUsuarioAtivo).toList();
         validarComposicaoDeParticipantes(organizador, convidados);
 
         LocalTime horarioFim = dto.horarioInicio().plusMinutes(duracao.getMinutos());
@@ -140,7 +145,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         if (ignorarAgendamentoId != null) {
             usuarioAutenticado.exigirParticipanteOuGestor(buscarAgendamento(ignorarAgendamentoId));
         }
-        List<Usuario> usuarios = idsUsuarios.stream().distinct().map(this::buscarUsuario).toList();
+        List<Usuario> usuarios = idsUsuarios.stream().distinct().map(this::buscarUsuarioAtivo).toList();
 
         LocalDate hoje = LocalDate.now();
         // RN 16 - fora da janela de agendamento nao ha horario a oferecer.
@@ -213,8 +218,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         DuracaoReuniao duracao = buscarDuracao(dto.idDuracao());
         validarDuracao(duracao);
         validarAntecedenciaMaxima(dto.dataReuniao());
+        validarInicioNoFuturo(dto.dataReuniao(), dto.horarioInicio());
 
-        List<Usuario> convidados = dto.idsConvidados().stream().map(this::buscarUsuario).toList();
+        List<Usuario> convidados = dto.idsConvidados().stream().map(this::buscarUsuarioAtivo).toList();
         validarComposicaoDeParticipantes(agendamento.getOrganizador(), convidados);
 
         LocalTime horarioFim = dto.horarioInicio().plusMinutes(duracao.getMinutos());
@@ -258,6 +264,20 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                 .orElseThrow(() -> new AcessoNegadoNegocioException(
                         "O usuario informado nao e participante deste agendamento."));
 
+        // RF 19 - so convidados respondem; o organizador ja entra como ACEITO (RN 09) e desiste pelo cancelamento (RN 05).
+        if (participante.getPapel() == PapelParticipante.ORGANIZADOR) {
+            throw new RegraDeNegocioException(
+                    "O organizador nao responde ao proprio convite. Para desistir da reuniao, cancele o agendamento.");
+        }
+        // Reuniao cancelada, em andamento ou concluida nao pode voltar a mudar de status por uma resposta.
+        if (!STATUS_QUE_ACEITAM_RESPOSTA.contains(agendamento.getStatus())) {
+            throw new RegraDeNegocioException(
+                    "Nao e possivel responder a um agendamento com status " + agendamento.getStatus() + ".");
+        }
+        if (!LocalDateTime.of(agendamento.getDataReuniao(), agendamento.getHorarioInicio()).isAfter(LocalDateTime.now())) {
+            throw new RegraDeNegocioException("O horario desta reuniao ja passou; nao e mais possivel responder ao convite.");
+        }
+
         if (Boolean.FALSE.equals(dto.aceitar()) && (dto.motivo() == null || dto.motivo().isBlank())) {
             throw new RegraDeNegocioException("O motivo e obrigatorio ao recusar um agendamento."); // RF 11
         }
@@ -286,7 +306,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         // RF 20 - participantes ou a recepcao; o motivo fica registrado em nome de quem cancelou.
         usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
 
-        if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO) {
+        if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO
+                || agendamento.getStatus() == StatusAgendamento.EM_ANDAMENTO) {
             throw new RegraDeNegocioException("Nao e possivel cancelar um agendamento que ja esta " + agendamento.getStatus() + ".");
         }
         if (!Boolean.TRUE.equals(dto.confirmar())) {
@@ -422,37 +443,52 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
-    /** RN 18 - confirma a reuniao quando ao menos um docente e um aluno aceitam; cancela se um docente recusa. */
     private void recalcularStatus(Agendamento agendamento) {
-        List<AgendamentoParticipante> participantes = agendamento.getParticipantes();
+        agendamento.setStatus(statusPelasRespostas(agendamento.getParticipantes()));
+    }
 
-        boolean docenteRecusou = participantes.stream().anyMatch(p ->
-                CalculadoraDeAgenda.ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.RECUSADO);
-        if (docenteRecusou) {
-            agendamento.setStatus(StatusAgendamento.CANCELADO);
-            return;
+    /**
+     * RN 18 (Documento de Requisitos v2.7.0) - a reuniao acontece quando pelo menos um professor/coordenador
+     * e pelo menos um aluno aceitam. A recusa de parte dos alunos (ou de parte dos docentes) nao impede a
+     * reuniao; ela so e cancelada quando TODOS os docentes ou TODOS os alunos recusam.
+     */
+    static StatusAgendamento statusPelasRespostas(List<AgendamentoParticipante> participantes) {
+        List<AgendamentoParticipante> docentes = participantes.stream()
+                .filter(p -> CalculadoraDeAgenda.ehDocente(p.getUsuario())).toList();
+        List<AgendamentoParticipante> alunos = participantes.stream()
+                .filter(p -> p.getUsuario().getTipoUsuario() == TipoUsuario.ALUNO).toList();
+
+        if (todosRecusaram(docentes) || todosRecusaram(alunos)) {
+            return StatusAgendamento.CANCELADO;
         }
+        boolean temDocenteAceito = docentes.stream().anyMatch(p -> p.getStatusResposta() == StatusResposta.ACEITO);
+        boolean temAlunoAceito = alunos.stream().anyMatch(p -> p.getStatusResposta() == StatusResposta.ACEITO);
+        return temDocenteAceito && temAlunoAceito ? StatusAgendamento.CONFIRMADO : StatusAgendamento.AGUARDANDO_RESPOSTA;
+    }
 
-        boolean temDocenteAceito = participantes.stream().anyMatch(p ->
-                CalculadoraDeAgenda.ehDocente(p.getUsuario()) && p.getStatusResposta() == StatusResposta.ACEITO);
-        boolean temAlunoAceito = participantes.stream().anyMatch(p ->
-                p.getUsuario().getTipoUsuario() == TipoUsuario.ALUNO && p.getStatusResposta() == StatusResposta.ACEITO);
+    private static boolean todosRecusaram(List<AgendamentoParticipante> grupo) {
+        return !grupo.isEmpty() && grupo.stream().allMatch(p -> p.getStatusResposta() == StatusResposta.RECUSADO);
+    }
 
-        if (temDocenteAceito && temAlunoAceito) {
-            agendamento.setStatus(StatusAgendamento.CONFIRMADO);
-        } else {
-            agendamento.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+    /** O horario de inicio nao pode estar no passado (a validacao de data sozinha aceitava "hoje, 08:00" as 15:00). */
+    private void validarInicioNoFuturo(LocalDate data, LocalTime horario) {
+        if (!LocalDateTime.of(data, horario).isAfter(LocalDateTime.now())) {
+            throw new RegraDeNegocioException("O horario de inicio da reuniao ja passou.");
         }
     }
 
     /**
-     * RF 27 - sala virtual para reunioes online/hibridas: usa o link informado pelo organizador
-     * (Teams, Meet...) ou gera um automaticamente.
+     * RF 27 - sala virtual para reunioes online/hibridas com o link informado pelo organizador (Teams, Meet...).
+     * Ate existir a integracao com o Microsoft Teams, sem link informado nao ha sala: antes era gerado um
+     * endereco do Teams que nao existe e era mostrado aos participantes como se fosse a sala real.
      */
     private void criarSalaVirtual(Agendamento agendamento, String linkInformado) {
+        if (linkInformado == null || linkInformado.isBlank()) {
+            return;
+        }
         SalaVirtual sala = SalaVirtual.builder()
                 .agendamento(agendamento)
-                .linkTeams(linkOuSimulado(linkInformado))
+                .linkTeams(linkInformado.trim())
                 .build();
         salaVirtualRepository.save(sala);
         agendamento.setSalaVirtual(sala);
@@ -470,13 +506,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
-    private static String linkOuSimulado(String linkInformado) {
-        if (linkInformado != null && !linkInformado.isBlank()) {
-            return linkInformado.trim();
-        }
-        return "https://teams.microsoft.com/l/meetup-join/schedemy/%s".formatted(UUID.randomUUID());
-    }
-
     /** RF 11 - toda operacao sensivel (cancelamento, recusa) precisa registrar uma justificativa. */
     private void registrarMotivo(Agendamento agendamento, Usuario usuario, TipoOperacaoMotivo tipo, String justificativa) {
         RegistroMotivo registro = RegistroMotivo.builder()
@@ -491,6 +520,16 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private Usuario buscarUsuario(Long id) {
         return usuarioRepository.findById(id)
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Usuario", id));
+    }
+
+    /** Organizador e convidados precisam estar ativos: um usuario inativo nao consegue entrar para responder. */
+    private Usuario buscarUsuarioAtivo(Long id) {
+        Usuario usuario = buscarUsuario(id);
+        if (!Boolean.TRUE.equals(usuario.getAtivo())) {
+            throw new RegraDeNegocioException(
+                    "O usuario '%s' esta inativo e nao pode participar de reunioes.".formatted(usuario.getNome()));
+        }
+        return usuario;
     }
 
     private DuracaoReuniao buscarDuracao(Long id) {

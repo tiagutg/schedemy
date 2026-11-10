@@ -56,7 +56,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         NotificacaoController.class,
         RegistroMotivoController.class
 })
-@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class, SecurityConfigTest.TestUsersConfig.class})
+@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, NaoAutenticadoJsonEntryPoint.class, br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class, SecurityConfigTest.TestUsersConfig.class})
 class SecurityConfigTest {
 
     @Autowired
@@ -84,6 +84,8 @@ class SecurityConfigTest {
     @CsvSource({
             // O login valida a credencial consultando os usuarios: todos precisam ler.
             "aluno,         GET,    /api/v1/usuarios",
+            "aluno,         GET,    /api/v1/usuarios/me",
+            "recepcionista, GET,    /api/v1/usuarios/me",
             "professor,     GET,    /api/v1/usuarios",
             "recepcionista, GET,    /api/v1/usuarios",
             "coordenador,   GET,    /api/v1/usuarios",

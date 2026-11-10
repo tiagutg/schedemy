@@ -111,6 +111,15 @@ public class Notificador {
         }
     }
 
+    /** RN 07/RN 18 - a reuniao chegou ao horario sem as confirmacoes necessarias e foi cancelada pelo sistema. */
+    public void naoConfirmada(Agendamento agendamento) {
+        for (Usuario envolvido : envolvidos(agendamento)) {
+            enviar(envolvido, agendamento, CANCELAMENTO,
+                    "\"%s\" de %s foi cancelada: não houve confirmação até o horário marcado."
+                            .formatted(topico(agendamento), quando(agendamento)));
+        }
+    }
+
     public void lembrete(Agendamento agendamento, Usuario usuario) {
         enviar(usuario, agendamento, LEMBRETE,
                 "Lembrete: \"%s\" acontece em %s.".formatted(topico(agendamento), quando(agendamento)));

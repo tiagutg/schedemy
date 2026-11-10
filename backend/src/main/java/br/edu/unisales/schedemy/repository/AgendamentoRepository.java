@@ -48,11 +48,14 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
                                        @Param("busca") String busca,
                                        Pageable pageable);
 
+    /** A duracao ja foi usada em algum agendamento? (a FK impede apagar) */
+    boolean existsByDuracaoId(Long duracaoId);
+
     /** RF 28 - existe uma remarcacao ativa desta reuniao? */
     boolean existsByAgendamentoOrigemIdAndStatusNot(Long agendamentoOrigemId, StatusAgendamento status);
 
-    /** Reunioes num status ate a data informada (rotina de conclusao e lembretes). */
-    List<Agendamento> findByStatusAndDataReuniaoLessThanEqual(StatusAgendamento status, LocalDate data);
+    /** Reunioes nos status informados ate a data (rotina de status, conclusao e lembretes - RN 08, RN 11). */
+    List<Agendamento> findByStatusInAndDataReuniaoLessThanEqual(Collection<StatusAgendamento> status, LocalDate data);
 
     @Query("""
             SELECT a FROM Agendamento a

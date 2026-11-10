@@ -8,7 +8,9 @@ import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
 import br.edu.unisales.schedemy.exception.RecursoDuplicadoException;
 import br.edu.unisales.schedemy.exception.RecursoNaoEncontradoException;
 import br.edu.unisales.schedemy.mapper.UsuarioMapper;
+import br.edu.unisales.schedemy.repository.AgendamentoParticipanteRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import br.edu.unisales.schedemy.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -28,8 +30,10 @@ public class UsuarioServiceImpl implements UsuarioService {
     public static final String PREFIXO_VINCULO_PENDENTE = "pendente-sso:";
 
     private final UsuarioRepository usuarioRepository;
+    private final AgendamentoParticipanteRepository agendamentoParticipanteRepository;
     private final UsuarioMapper usuarioMapper;
     private final PasswordEncoder passwordEncoder;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public UsuarioResponseDTO criar(UsuarioRequestDTO dto) {
@@ -77,6 +81,12 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     @Transactional(readOnly = true)
+    public UsuarioResponseDTO buscarLogado() {
+        return usuarioMapper.paraResponseDTO(usuarioAutenticado.obter());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
         // Sem filtro de nome, busca por "" (aceita todos): o PostgreSQL nao aceita LOWER(null) sem tipo.
         String filtroNome = nome == null ? "" : nome;
@@ -108,6 +118,11 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public void deletar(Long id) {
         Usuario usuario = buscarEntidadePorId(id);
+        // As FKs de agendamento, participante, motivo e avaliacao sao RESTRICT: com historico, so desativando.
+        if (agendamentoParticipanteRepository.existsByUsuarioId(id)) {
+            throw new RegraDeNegocioException(
+                    "Este usuario participa de agendamentos e nao pode ser excluido. Desative o cadastro (ativo = false).");
+        }
         usuarioRepository.delete(usuario);
     }
 

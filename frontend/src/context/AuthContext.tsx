@@ -42,16 +42,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Enquanto o cadastro do usuário logado não chega, o perfil ainda é desconhecido.
   const buscandoPerfil = !!auth && !perfilEmDia && perfilResolvidoPara !== chaveSessao;
 
-  // Ao abrir com uma sessão salva, recarrega o cadastro do usuário logado,
-  // pelo id guardado ou, em sessões antigas sem id, pelo e-mail do login.
+  // Ao abrir com uma sessão salva, recarrega o cadastro do usuário logado (GET /usuarios/me).
   useEffect(() => {
     if (!auth || (auth.usuarioId && perfilVinculado?.id === auth.usuarioId)) return;
     let cancelado = false;
     const chave = `${auth.username}|${auth.usuarioId ?? ""}`;
-    const busca = auth.usuarioId
-      ? usuariosApi.buscarPorId(auth.usuarioId)
-      : usuariosApi.buscarPorEmail(auth.username);
-    busca
+    usuariosApi
+      .eu()
       .then((usuario) => {
         if (cancelado) return;
         setPerfilVinculado(usuario);
@@ -91,7 +88,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       // A busca do próprio cadastro também valida as credenciais (401 se inválidas).
       setStoredAuth({ username, password, usuarioId: null });
-      const usuario = await usuariosApi.buscarPorEmail(username);
+      const usuario = await usuariosApi.eu();
       const novaAuth = { username, password, usuarioId: usuario?.id ?? null };
       setStoredAuth(novaAuth);
       setPerfilVinculado(usuario);

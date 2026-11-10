@@ -53,6 +53,10 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+.env
+.env.*
+!.env.example
+
 # Editores
 frontend/.vscode/
 frontend/.idea/

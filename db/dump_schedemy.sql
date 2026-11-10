@@ -381,7 +381,7 @@ CREATE TABLE `registro_motivo` (
   `id_agendamento` bigint(20) unsigned NOT NULL,
   `id_usuario` bigint(20) unsigned NOT NULL,
   `tipo_operacao` enum('CANCELAMENTO','SOLICITACAO_EDICAO','RECUSA_AGENDAMENTO','RECUSA_REMARCACAO') NOT NULL,
-  `justificativa` varchar(200) NOT NULL,
+  `justificativa` text NOT NULL,
   `criado_em` datetime NOT NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id_registro_motivo`),
   KEY `fk_motivo_agendamento` (`id_agendamento`),

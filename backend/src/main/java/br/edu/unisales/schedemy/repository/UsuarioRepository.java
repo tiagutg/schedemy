@@ -24,7 +24,8 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     @Query("""
             SELECT u FROM Usuario u
             WHERE (:tipo IS NULL OR u.tipoUsuario = :tipo)
-              AND (:nome IS NULL OR LOWER(u.nome) LIKE LOWER(CONCAT('%', :nome, '%')))
+              AND (:nome IS NULL OR LOWER(u.nome) LIKE LOWER(CONCAT('%', :nome, '%'))
+                   OR LOWER(COALESCE(u.matriculaRa, '')) LIKE LOWER(CONCAT('%', :nome, '%')))
               AND (:ativo IS NULL OR u.ativo = :ativo)
             """)
     Page<Usuario> buscarComFiltros(@Param("tipo") TipoUsuario tipo,

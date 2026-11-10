@@ -33,6 +33,12 @@ public class UsuarioController {
         return ResponseEntity.created(URI.create("/api/v1/usuarios/" + criado.id())).body(criado);
     }
 
+    @GetMapping("/me")
+    @Operation(summary = "Usuario logado", description = "Cadastro do dono da credencial usada na requisicao.")
+    public ResponseEntity<UsuarioResponseDTO> buscarLogado() {
+        return ResponseEntity.ok(usuarioService.buscarLogado());
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Buscar usuario por ID")
     public ResponseEntity<UsuarioResponseDTO> buscarPorId(@PathVariable Long id) {
@@ -43,7 +49,7 @@ public class UsuarioController {
     @Operation(summary = "Listar usuarios", description = "Lista usuarios com filtros opcionais, paginacao e ordenacao.")
     public ResponseEntity<PageResponseDTO<UsuarioResponseDTO>> listar(
             @Parameter(description = "Filtra pelo tipo de usuario") @RequestParam(required = false) TipoUsuario tipo,
-            @Parameter(description = "Filtra por parte do nome") @RequestParam(required = false) String nome,
+            @Parameter(description = "Filtra por parte do nome ou do RA (RF 33)") @RequestParam(required = false) String nome,
             @Parameter(description = "Filtra por usuarios ativos/inativos") @RequestParam(required = false) Boolean ativo,
             @ParameterObject @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
         return ResponseEntity.ok(PageResponseDTO.de(usuarioService.listar(tipo, nome, ativo, pageable)));

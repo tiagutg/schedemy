@@ -9,6 +9,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 
@@ -47,7 +48,8 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, AccessDeniedHandler accessDeniedHandler) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, AccessDeniedHandler accessDeniedHandler,
+                                           AuthenticationEntryPoint naoAutenticado) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(withDefaults())
@@ -119,8 +121,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 )
-                .httpBasic(withDefaults())
-                .exceptionHandling(ex -> ex.accessDeniedHandler(accessDeniedHandler));
+                .httpBasic(basic -> basic.authenticationEntryPoint(naoAutenticado))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(naoAutenticado)
+                        .accessDeniedHandler(accessDeniedHandler));
 
         return http.build();
     }

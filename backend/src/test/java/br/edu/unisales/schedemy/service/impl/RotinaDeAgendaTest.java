@@ -29,7 +29,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -106,8 +105,58 @@ class RotinaDeAgendaTest {
         verify(notificacaoRepository, never()).save(any());
     }
 
+    @Test
+    @DisplayName("Reuniao confirmada que ja comecou passa a EM_ANDAMENTO, sem avisos")
+    void marcaEmAndamento() {
+        Agendamento agora = confirmada(LocalDateTime.now().minusMinutes(10));
+        confirmadasNoBanco(agora);
+
+        rotina.executar();
+
+        assertThat(agora.getStatus()).isEqualTo(StatusAgendamento.EM_ANDAMENTO);
+        verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Reuniao em andamento que terminou vira CONCLUIDO")
+    void concluiReuniaoEmAndamento() {
+        Agendamento passada = confirmada(LocalDateTime.now().minusHours(2));
+        passada.setStatus(StatusAgendamento.EM_ANDAMENTO);
+        confirmadasNoBanco(passada);
+
+        rotina.executar();
+
+        assertThat(passada.getStatus()).isEqualTo(StatusAgendamento.CONCLUIDO);
+    }
+
+    @Test
+    @DisplayName("Reuniao sem confirmacao cujo horario chegou e cancelada e todos sao avisados (RN 18)")
+    void cancelaNaoConfirmadaVencida() {
+        Agendamento vencida = confirmada(LocalDateTime.now().minusMinutes(5));
+        vencida.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        confirmadasNoBanco(vencida);
+
+        rotina.executar();
+
+        assertThat(vencida.getStatus()).isEqualTo(StatusAgendamento.CANCELADO);
+        assertThat(avisosSalvos(2)).allSatisfy(n -> assertThat(n.getTipoEvento()).isEqualTo(Notificador.CANCELAMENTO));
+    }
+
+    @Test
+    @DisplayName("Reuniao pendente no futuro nao muda nem recebe lembrete")
+    void ignoraPendenteFutura() {
+        Agendamento futura = confirmada(LocalDateTime.now().plusHours(3));
+        futura.setStatus(StatusAgendamento.PENDENTE);
+        confirmadasNoBanco(futura);
+
+        rotina.executar();
+
+        assertThat(futura.getStatus()).isEqualTo(StatusAgendamento.PENDENTE);
+        verify(notificacaoRepository, never()).save(any());
+    }
+
     private void confirmadasNoBanco(Agendamento... agendamentos) {
-        when(agendamentoRepository.findByStatusAndDataReuniaoLessThanEqual(eq(StatusAgendamento.CONFIRMADO), any()))
+        when(agendamentoRepository.findByStatusInAndDataReuniaoLessThanEqual(any(), any()))
                 .thenReturn(List.of(agendamentos));
     }
 
