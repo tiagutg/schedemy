@@ -12,7 +12,6 @@ import { duracoesApi } from "@/api/duracoes";
 import type { ApiError } from "@/api/client";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useAuth } from "@/context/AuthContext";
-import { useToast } from "@/context/ToastContext";
 import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
 import { formatarData, formatarHora, hojeISO } from "@/utils/format";
 import { proximoDiaUtilISO } from "@/utils/reuniao";
@@ -74,7 +73,6 @@ function normalizar(texto: string): string {
 }
 
 export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
-  const toast = useToast();
   const { perfilVinculado: eu, pode } = useAuth();
   // Na criação, quem não agenda para outros é sempre o organizador; na edição e
   // na remarcação o organizador é o do agendamento original.
@@ -200,22 +198,17 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       let salvo: Agendamento;
       if (modo === "editar" && base) {
         salvo = await agendamentosApi.atualizar(base.id, payload);
+      } else if (modo === "remarcar" && base) {
+        // RF 28: a API cancela a original e cria a nova numa só transação; se a nova
+        // for recusada, a original não muda. O organizador e o vínculo vêm da original.
+        const { idOrganizador: _organizador, idAgendamentoOrigem: _origem, ...dadosDaNova } = payload;
+        salvo = await agendamentosApi.remarcar(base.id, {
+          ...dadosDaNova,
+          motivo: motivoRemarcacao.trim(),
+          confirmar: true,
+        });
       } else {
         salvo = await agendamentosApi.criar(payload);
-      }
-      // Na remarcação, a reunião original é cancelada com o motivo informado.
-      if (modo === "remarcar" && base && eu) {
-        try {
-          await agendamentosApi.cancelar(base.id, {
-            idUsuario: eu.id,
-            motivo: `Remarcada para ${formatarData(form.dataReuniao)} às ${form.horarioInicio}: ${motivoRemarcacao.trim()}`,
-            confirmar: true,
-          });
-        } catch (e2) {
-          toast.erro(
-            `A nova reunião foi criada, mas não foi possível cancelar a original: ${(e2 as ApiError).message}`
-          );
-        }
       }
       onSalvo?.(salvo);
     } catch (e2) {
@@ -410,7 +403,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             label="Motivo da remarcação"
             required
             placeholder="Ex.: Conflito com prova"
-            maxLength={450}
+            maxLength={400}
             value={motivoRemarcacao}
             onChange={(e) => setMotivoRemarcacao(e.target.value)}
           />

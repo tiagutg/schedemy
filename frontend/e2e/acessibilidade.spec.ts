@@ -26,6 +26,8 @@ for (const tema of ["claro", "escuro"] as const) {
       await usarTema(page, tema);
       await page.reload();
       await semViolacoes(page, "login");
+      await page.goto("/cadastro");
+      await semViolacoes(page, "como obter acesso");
     });
 
     test("telas do aluno", async ({ page }) => {

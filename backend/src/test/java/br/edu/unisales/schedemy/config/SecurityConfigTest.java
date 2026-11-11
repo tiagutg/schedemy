@@ -82,14 +82,20 @@ class SecurityConfigTest {
     @ParameterizedTest(name = "{0} {1} {2} -> permitido")
     @DisplayName("Acessos que cada perfil deve ter")
     @CsvSource({
-            // O login valida a credencial consultando os usuarios: todos precisam ler.
-            "aluno,         GET,    /api/v1/usuarios",
+            // Todos leem o proprio cadastro (login) e o resumo para escolher convidados (RF 14, RF 33).
             "aluno,         GET,    /api/v1/usuarios/me",
+            "professor,     GET,    /api/v1/usuarios/me",
             "recepcionista, GET,    /api/v1/usuarios/me",
-            "professor,     GET,    /api/v1/usuarios",
+            "aluno,         GET,    /api/v1/usuarios/resumo",
+            "professor,     GET,    /api/v1/usuarios/resumo",
+            "coordenador,   GET,    /api/v1/usuarios/resumo",
+            "recepcionista, GET,    /api/v1/usuarios/resumo",
+            "admin,         GET,    /api/v1/usuarios/resumo",
+            // Cadastro completo (RNF 18): administracao e recepcao.
             "recepcionista, GET,    /api/v1/usuarios",
-            "coordenador,   GET,    /api/v1/usuarios",
+            "recepcionista, GET,    /api/v1/usuarios/1",
             "admin,         GET,    /api/v1/usuarios",
+            "admin,         GET,    /api/v1/usuarios/1",
 
             // Agendamentos: RF 13, 15, 20 valem para todos os perfis.
             "admin,         GET,    /api/v1/agendamentos",
@@ -100,6 +106,11 @@ class SecurityConfigTest {
             "professor,     POST,   /api/v1/agendamentos",
             "aluno,         PATCH,  /api/v1/agendamentos/1/cancelamento",
             "recepcionista, PATCH,  /api/v1/agendamentos/1/cancelamento",
+            // RF 28: remarcacao (o service exige ser o organizador, ou recepcao/admin por ele).
+            "aluno,         POST,   /api/v1/agendamentos/1/remarcacao",
+            "professor,     POST,   /api/v1/agendamentos/1/remarcacao",
+            "coordenador,   POST,   /api/v1/agendamentos/1/remarcacao",
+            "recepcionista, POST,   /api/v1/agendamentos/1/remarcacao",
 
             // RF 13, 20, 21: a recepcao ve todos os agendamentos, consulta, edita e cancela.
             "recepcionista, GET,    /api/v1/agendamentos",
@@ -179,6 +190,16 @@ class SecurityConfigTest {
             "aluno,         DELETE, /api/v1/usuarios/1",
             "coordenador,   DELETE, /api/v1/usuarios/1",
             "coordenador,   PUT,    /api/v1/usuarios/1",
+            "recepcionista, PUT,    /api/v1/usuarios/1",
+            "recepcionista, DELETE, /api/v1/usuarios/1",
+
+            // RNF 18: e-mail e telefone de toda a base nao ficam abertos a qualquer logado.
+            "aluno,         GET,    /api/v1/usuarios",
+            "professor,     GET,    /api/v1/usuarios",
+            "coordenador,   GET,    /api/v1/usuarios",
+            "aluno,         GET,    /api/v1/usuarios/1",
+            "professor,     GET,    /api/v1/usuarios/1",
+            "coordenador,   GET,    /api/v1/usuarios/1",
 
             // RN 06: so professor e coordenador definem disponibilidade.
             "aluno,         POST,   /api/v1/disponibilidades",
@@ -232,8 +253,10 @@ class SecurityConfigTest {
     @DisplayName("Sem autenticacao a API responde 401")
     @CsvSource({
             "GET,  /api/v1/usuarios",
+            "GET,  /api/v1/usuarios/resumo",
             "GET,  /api/v1/agendamentos",
             "POST, /api/v1/agendamentos",
+            "POST, /api/v1/agendamentos/1/remarcacao",
             "GET,  /api/v1/agendamentos/horarios-livres"
     })
     void deveExigirAutenticacao(String metodo, String caminho) throws Exception {

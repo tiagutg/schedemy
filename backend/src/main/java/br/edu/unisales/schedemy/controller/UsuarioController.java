@@ -4,6 +4,7 @@ import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.UsuarioRequestDTO;
 import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.dto.response.UsuarioResponseDTO;
+import br.edu.unisales.schedemy.dto.response.UsuarioResumoResponseDTO;
 import br.edu.unisales.schedemy.service.UsuarioService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -39,14 +40,28 @@ public class UsuarioController {
         return ResponseEntity.ok(usuarioService.buscarLogado());
     }
 
+    @GetMapping("/resumo")
+    @Operation(summary = "Listar usuarios (resumo)",
+            description = "Para escolher convidados e filtros: id, nome, tipo, RA, departamento e situacao. "
+                    + "Sem e-mail e telefone (RNF 18). Aberto a qualquer usuario autenticado.")
+    public ResponseEntity<PageResponseDTO<UsuarioResumoResponseDTO>> listarResumo(
+            @Parameter(description = "Filtra pelo tipo de usuario") @RequestParam(required = false) TipoUsuario tipo,
+            @Parameter(description = "Filtra por parte do nome ou do RA (RF 33)") @RequestParam(required = false) String nome,
+            @Parameter(description = "Filtra por usuarios ativos/inativos") @RequestParam(required = false) Boolean ativo,
+            @ParameterObject @PageableDefault(size = 20, sort = "nome") Pageable pageable) {
+        return ResponseEntity.ok(PageResponseDTO.de(usuarioService.listarResumo(tipo, nome, ativo, pageable)));
+    }
+
     @GetMapping("/{id}")
-    @Operation(summary = "Buscar usuario por ID")
+    @Operation(summary = "Buscar usuario por ID", description = "Cadastro completo: somente administracao e recepcao.")
     public ResponseEntity<UsuarioResponseDTO> buscarPorId(@PathVariable Long id) {
         return ResponseEntity.ok(usuarioService.buscarPorId(id));
     }
 
     @GetMapping
-    @Operation(summary = "Listar usuarios", description = "Lista usuarios com filtros opcionais, paginacao e ordenacao.")
+    @Operation(summary = "Listar usuarios",
+            description = "Cadastro completo com filtros, paginacao e ordenacao: somente administracao e recepcao. "
+                    + "Os demais perfis usam /usuarios/resumo.")
     public ResponseEntity<PageResponseDTO<UsuarioResponseDTO>> listar(
             @Parameter(description = "Filtra pelo tipo de usuario") @RequestParam(required = false) TipoUsuario tipo,
             @Parameter(description = "Filtra por parte do nome ou do RA (RF 33)") @RequestParam(required = false) String nome,

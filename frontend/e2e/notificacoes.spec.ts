@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { api, CONTAS, entrar, garantirDisponibilidade, paraISO, proximoDiaUtil, removerAgendamentosComTopico } from "./apoio";
+import { api, CONTAS, entrar, garantirDisponibilidade, idDaConta, paraISO, proximoDiaUtil, removerAgendamentosComTopico } from "./apoio";
 
 // RF 23: o sistema avisa os envolvidos. O aluno convida o professor; o professor
 // vê o aviso, abre a reunião por ele e o aviso passa a constar como lido.
@@ -10,17 +10,10 @@ const topico = `${PREFIXO}${Date.now()}`;
 const dia = proximoDiaUtil(12);
 let idAgendamento = 0;
 
-async function idPorEmail(email: string): Promise<number> {
-  const admin = await api(CONTAS.admin);
-  const usuarios = await (await admin.get("/api/v1/usuarios", { params: { size: 200 } })).json();
-  await admin.dispose();
-  return usuarios.conteudo.find((u: { email: string }) => u.email === email).id;
-}
-
 test.beforeAll(async () => {
   await garantirDisponibilidade(dia);
   const aluno = await api(CONTAS.aluno);
-  const [idAluno, idProfessor] = await Promise.all([idPorEmail(CONTAS.aluno.email), idPorEmail(CONTAS.professor.email)]);
+  const [idAluno, idProfessor] = await Promise.all([idDaConta(CONTAS.aluno), idDaConta(CONTAS.professor)]);
   const duracoes = await (await aluno.get("/api/v1/duracoes-reuniao", { params: { ativas: true } })).json();
   const resposta = await aluno.post("/api/v1/agendamentos", {
     data: {
@@ -73,7 +66,7 @@ test("o convidado recebe o aviso e abre a reunião por ele", async ({ page }) =>
 
 test("o organizador é avisado quando o convidado aceita", async () => {
   const professor = await api(CONTAS.professor);
-  const idProfessor = await idPorEmail(CONTAS.professor.email);
+  const idProfessor = await idDaConta(CONTAS.professor);
   const resposta = await professor.patch(`/api/v1/agendamentos/${idAgendamento}/resposta`, {
     data: { idUsuario: idProfessor, aceitar: true },
   });
@@ -81,7 +74,7 @@ test("o organizador é avisado quando o convidado aceita", async () => {
   await professor.dispose();
 
   const aluno = await api(CONTAS.aluno);
-  const idAluno = await idPorEmail(CONTAS.aluno.email);
+  const idAluno = await idDaConta(CONTAS.aluno);
   const avisos = await (await aluno.get("/api/v1/notificacoes", { params: { usuarioId: idAluno, size: 50, sort: "criadoEm,desc" } })).json();
   const daReuniao = avisos.conteudo.filter((n: { idAgendamento: number }) => n.idAgendamento === idAgendamento);
   expect(daReuniao.map((n: { tipoEvento: string }) => n.tipoEvento)).toContain("CONFIRMACAO");

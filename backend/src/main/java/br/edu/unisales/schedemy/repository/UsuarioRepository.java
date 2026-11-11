@@ -8,6 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
+import java.util.List;
 import java.util.Optional;
 
 public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
@@ -20,6 +22,17 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
     boolean existsByEmail(String email);
 
     boolean existsByIdMicrosoft(String idMicrosoft);
+
+    /**
+     * RN 01 - trava (SELECT ... FOR UPDATE) os usuarios envolvidos num agendamento ate o fim da transacao.
+     * Duas requisicoes que envolvem o mesmo usuario passam a checar conflito e gravar uma depois da outra.
+     * Ordenado por id para que todas as transacoes travem na mesma ordem e nao haja deadlock.
+     * SQL nativo de proposito: o @Lock do Hibernate gera "FOR UPDATE OF alias", que o MariaDB nao aceita.
+     * O retorno so serve para executar a consulta (o tipo do id varia: BIGINT UNSIGNED vira BigInteger no MariaDB).
+     */
+    @Query(value = "SELECT id_usuario FROM usuario WHERE id_usuario IN (:ids) ORDER BY id_usuario FOR UPDATE",
+            nativeQuery = true)
+    List<Object> travarParaAgendamento(@Param("ids") Collection<Long> ids);
 
     @Query("""
             SELECT u FROM Usuario u

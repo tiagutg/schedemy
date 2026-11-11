@@ -3,6 +3,7 @@ package br.edu.unisales.schedemy.service;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
+import br.edu.unisales.schedemy.dto.request.RemarcacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
 import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
@@ -44,5 +45,8 @@ public interface AgendamentoService {
     AgendamentoResponseDTO cancelar(Long id, CancelamentoRequestDTO dto);
 
     // Remocao definitiva, permitida apenas para agendamentos pendentes ou ja cancelados.
+    // RF 28 - cancela a reuniao original e cria a nova ligada a ela, na mesma transacao.
+    AgendamentoResponseDTO remarcar(Long id, RemarcacaoRequestDTO dto);
+
     void deletar(Long id);
 }

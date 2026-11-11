@@ -4,6 +4,7 @@ import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.UsuarioRequestDTO;
 import br.edu.unisales.schedemy.dto.response.UsuarioResponseDTO;
+import br.edu.unisales.schedemy.dto.response.UsuarioResumoResponseDTO;
 import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
 import br.edu.unisales.schedemy.exception.RecursoDuplicadoException;
 import br.edu.unisales.schedemy.exception.RecursoNaoEncontradoException;
@@ -88,10 +89,19 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     @Transactional(readOnly = true)
     public Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
+        return buscar(tipo, nome, ativo, pageable).map(usuarioMapper::paraResponseDTO);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UsuarioResumoResponseDTO> listarResumo(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
+        return buscar(tipo, nome, ativo, pageable).map(usuarioMapper::paraResumoDTO);
+    }
+
+    private Page<Usuario> buscar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
         // Sem filtro de nome, busca por "" (aceita todos): o PostgreSQL nao aceita LOWER(null) sem tipo.
         String filtroNome = nome == null ? "" : nome;
-        return usuarioRepository.buscarComFiltros(tipo, filtroNome, ativo, pageable)
-                .map(usuarioMapper::paraResponseDTO);
+        return usuarioRepository.buscarComFiltros(tipo, filtroNome, ativo, pageable);
     }
 
     @Override

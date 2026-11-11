@@ -64,10 +64,11 @@ public class SecurityConfig {
                         ).permitAll()
 
                         // --- Usuarios ---
-                        // A LEITURA fica aberta a qualquer autenticado de proposito: o login
-                        // valida a credencial consultando este endpoint e a escolha de
-                        // convidados depende dele (RF 14 e RF 33). So a gestao e restrita.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios", "/api/v1/usuarios/**").authenticated()
+                        // Todos leem o proprio cadastro (login) e o resumo para escolher convidados
+                        // (RF 14 e RF 33). O cadastro completo (e-mail, telefone) fica com a
+                        // administracao e a recepcao, que agenda por terceiros (RNF 18).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios/me", "/api/v1/usuarios/resumo").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios", "/api/v1/usuarios/**").hasAnyRole(RECEPCIONISTA, ADMIN)
                         .requestMatchers("/api/v1/usuarios", "/api/v1/usuarios/**").hasRole(ADMIN)
 
                         // --- Duracoes de reuniao (RF 01, RN 17) ---

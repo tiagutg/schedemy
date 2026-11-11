@@ -1,5 +1,5 @@
-import { expect, test, type APIRequestContext } from "@playwright/test";
-import { api, CONTAS, garantirDisponibilidade, paraISO, proximoDiaUtil } from "./apoio";
+import { expect, test } from "@playwright/test";
+import { api, CONTAS, garantirDisponibilidade, idDaConta, paraISO, proximoDiaUtil } from "./apoio";
 
 // Regras de agenda validadas direto na API: bloqueios (RF 04, RN 15), horários
 // livres para todos (RF 14) e a recepção agendando por terceiros (RF 13, 20, 21).
@@ -14,11 +14,6 @@ let idProfessor = 0;
 let idOutroAluno = 0;
 let idDuracao30 = 0;
 let idBloqueio: number | null = null;
-
-async function idPorEmail(cliente: APIRequestContext, email: string): Promise<number> {
-  const usuarios = await (await cliente.get("/api/v1/usuarios", { params: { size: 200 } })).json();
-  return usuarios.conteudo.find((u: { email: string }) => u.email === email).id;
-}
 
 function payload(horarioInicio: string, topico: string) {
   return {
@@ -35,8 +30,8 @@ function payload(horarioInicio: string, topico: string) {
 test.beforeAll(async () => {
   await garantirDisponibilidade(dia);
   const professor = await api(CONTAS.professor);
-  idProfessor = await idPorEmail(professor, CONTAS.professor.email);
-  idOutroAluno = await idPorEmail(professor, CONTAS.outroAluno.email);
+  idProfessor = await idDaConta(CONTAS.professor);
+  idOutroAluno = await idDaConta(CONTAS.outroAluno);
   const duracoes = await (await professor.get("/api/v1/duracoes-reuniao", { params: { ativas: true } })).json();
   idDuracao30 = duracoes.find((d: { minutos: number }) => d.minutos === 30).id;
 
@@ -59,7 +54,7 @@ test.beforeAll(async () => {
 
 test.afterAll(async () => {
   const admin = await api(CONTAS.admin);
-  const idAdmin = await idPorEmail(admin, CONTAS.admin.email);
+  const idAdmin = await idDaConta(CONTAS.admin);
   const lista = await (await admin.get("/api/v1/agendamentos", { params: { size: 500 } })).json();
   for (const a of lista.conteudo) {
     if (!a.topico.startsWith(PREFIXO)) continue;
@@ -100,7 +95,7 @@ test("a API recusa agendamento em período bloqueado", async () => {
 
 test("recepção agenda por um aluno, vê na lista geral e cancela", async () => {
   const recepcao = await api(CONTAS.recepcao);
-  const idRecepcao = await idPorEmail(recepcao, CONTAS.recepcao.email);
+  const idRecepcao = await idDaConta(CONTAS.recepcao);
 
   const criado = await recepcao.post("/api/v1/agendamentos", { data: payload("10:00:00", "Recepcao") });
   expect(criado.status(), await criado.text()).toBe(201);

@@ -3,6 +3,7 @@ package br.edu.unisales.schedemy.mapper;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.dto.request.UsuarioRequestDTO;
 import br.edu.unisales.schedemy.dto.response.UsuarioResponseDTO;
+import br.edu.unisales.schedemy.dto.response.UsuarioResumoResponseDTO;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -52,6 +53,17 @@ public class UsuarioMapper {
                 usuario.getAtivo(),
                 usuario.getCriadoEm(),
                 usuario.getAtualizadoEm()
+        );
+    }
+
+    public UsuarioResumoResponseDTO paraResumoDTO(Usuario usuario) {
+        return new UsuarioResumoResponseDTO(
+                usuario.getId(),
+                usuario.getNome(),
+                usuario.getTipoUsuario(),
+                usuario.getMatriculaRa(),
+                usuario.getDepartamento(),
+                usuario.getAtivo()
         );
     }
 }

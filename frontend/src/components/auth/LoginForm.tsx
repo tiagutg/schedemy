@@ -93,9 +93,9 @@ export default function LoginForm({ className = "" }: { className?: string }) {
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">
-          Não tem uma conta?{" "}
+          Não tem acesso?{" "}
           <Link to="/cadastro" className="font-medium text-brand-600 underline underline-offset-4">
-            Cadastre-se
+            Saiba como obter
           </Link>
         </p>
       </div>

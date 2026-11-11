@@ -10,6 +10,17 @@ test("recusa e-mail ou senha inválidos", async ({ page }) => {
   await expect(page).toHaveURL(/\/login$/);
 });
 
+test("quem não tem acesso é orientado a procurar a instituição, sem autocadastro (RF 29)", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Saiba como obter" }).click();
+  await expect(page).toHaveURL(/\/cadastro$/);
+  await expect(page.getByRole("heading", { name: "Como obter acesso" })).toBeVisible();
+  await expect(page.getByLabel("Senha")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /conta Microsoft/ })).toBeDisabled();
+  await page.getByRole("link", { name: "Voltar para o login" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
 test("aluno vê só o próprio menu e os próprios agendamentos", async ({ page }) => {
   await entrar(page, CONTAS.aluno);
   const menu = page.locator("[data-sidebar=content]");

@@ -31,6 +31,9 @@ export interface Usuario {
   ativo: boolean;
 }
 
+/** Dados mínimos de um usuário (`GET /usuarios/resumo`), sem contato — RNF 18. */
+export type UsuarioResumo = Pick<Usuario, "id" | "nome" | "tipoUsuario" | "matriculaRa" | "departamento" | "ativo">;
+
 export interface Participante {
   idUsuario: number;
   nomeUsuario: string;

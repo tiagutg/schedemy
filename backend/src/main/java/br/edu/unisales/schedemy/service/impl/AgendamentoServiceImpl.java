@@ -6,6 +6,7 @@ import br.edu.unisales.schedemy.domain.entity.*;
 import br.edu.unisales.schedemy.domain.enums.*;
 import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
+import br.edu.unisales.schedemy.dto.request.RemarcacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
 import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
@@ -19,11 +20,13 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
 import java.util.EnumSet;
 import java.util.LinkedHashMap;
@@ -49,6 +52,10 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     /** Depois de confirmada, a reuniao ainda recebe respostas dos convidados que nao responderam (RN 18). */
     private static final Set<StatusAgendamento> STATUS_QUE_ACEITAM_RESPOSTA = EnumSet.of(
             StatusAgendamento.PENDENTE, StatusAgendamento.AGUARDANDO_RESPOSTA, StatusAgendamento.CONFIRMADO);
+    /** RF 28 - reunioes ainda nao iniciadas e nao canceladas. */
+    private static final Set<StatusAgendamento> STATUS_QUE_PODEM_SER_REMARCADOS = STATUS_QUE_ACEITAM_RESPOSTA;
+    private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
+    private static final DateTimeFormatter HORA_BR = DateTimeFormatter.ofPattern("HH:mm");
 
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
@@ -61,8 +68,22 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private final Notificador notificador;
     private final NotificacaoRepository notificacaoRepository;
 
+    /**
+     * RN 01 - READ COMMITTED (padrao do PostgreSQL; o MySQL usa REPEATABLE READ): depois de esperar a trava dos
+     * envolvidos, a checagem de conflito precisa enxergar a reuniao que a outra transacao acabou de gravar.
+     * Em REPEATABLE READ o MySQL continuaria lendo a "foto" tirada na primeira consulta da transacao.
+     */
     @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
+        return agendamentoMapper.paraResponseDTO(novoAgendamento(dto, null));
+    }
+
+    /**
+     * Regras de criacao (compartilhadas por criar e remarcar).
+     * @param agendamentoIgnoradoId reuniao que nao conta como conflito (a original, na remarcacao)
+     */
+    private Agendamento novoAgendamento(AgendamentoRequestDTO dto, Long agendamentoIgnoradoId) {
         Usuario organizador = buscarUsuarioAtivo(dto.idOrganizador());
         // RF 13 - a recepcao agenda em nome de alunos e docentes; os demais perfis, so em nome proprio.
         if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
@@ -79,7 +100,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         validarComposicaoDeParticipantes(organizador, convidados);
 
         LocalTime horarioFim = dto.horarioInicio().plusMinutes(duracao.getMinutos());
-        validarHorarioLivreParaTodos(organizador, convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim, null);
+        validarHorarioLivreParaTodos(organizador, convidados, dto.dataReuniao(), dto.horarioInicio(), horarioFim,
+                agendamentoIgnoradoId);
 
         if (organizador.getTipoUsuario() == TipoUsuario.ALUNO) {
             validarLimiteDeAgendamentosDoAluno(organizador.getId());
@@ -125,7 +147,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
 
         notificador.novoAgendamento(agendamento, usuarioAutenticado.obter()); // RF 23
-        return agendamentoMapper.paraResponseDTO(agendamento);
+        return agendamento;
     }
 
     @Override
@@ -199,8 +221,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     }
 
     @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED) // RN 01 - ver criar()
     public AgendamentoResponseDTO atualizar(Long id, AgendamentoRequestDTO dto) {
-        Agendamento agendamento = buscarAgendamento(id);
+        Agendamento agendamento = travarAgendamento(id);
         // RF 21 - o organizador ou a recepcao alteram reunioes ainda nao aceitas.
         if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
                 && !usuarioAutenticado.id().equals(agendamento.getOrganizador().getId())) {
@@ -298,7 +321,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
     @Override
     public AgendamentoResponseDTO cancelar(Long id, CancelamentoRequestDTO dto) {
-        Agendamento agendamento = buscarAgendamento(id);
+        Agendamento agendamento = travarAgendamento(id);
         Usuario usuario = usuarioAutenticado.obter();
         if (!usuario.getId().equals(dto.idUsuario())) {
             throw new AcessoNegadoNegocioException("Voce so pode cancelar um agendamento em seu proprio nome.");
@@ -306,15 +329,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         // RF 20 - participantes ou a recepcao; o motivo fica registrado em nome de quem cancelou.
         usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
 
-        if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO
-                || agendamento.getStatus() == StatusAgendamento.EM_ANDAMENTO) {
-            throw new RegraDeNegocioException("Nao e possivel cancelar um agendamento que ja esta " + agendamento.getStatus() + ".");
-        }
-        if (!Boolean.TRUE.equals(dto.confirmar())) {
-            throw new RegraDeNegocioException("E necessario confirmar explicitamente o cancelamento."); // RNF 10
-        }
-        validarAntecedenciaMinima(agendamento.getDataReuniao(), agendamento.getHorarioInicio(),
-                LIMITE_MIN_HORAS_CANCELAMENTO, "cancelado"); // RN 05
+        validarCancelamento(agendamento, dto.confirmar(), "cancelado");
 
         agendamento.setStatus(StatusAgendamento.CANCELADO);
         registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.CANCELAMENTO, dto.motivo()); // RF 11
@@ -325,6 +340,40 @@ public class AgendamentoServiceImpl implements AgendamentoService {
             notificador.cancelamento(agendamento, usuario); // RF 23
         }
         return agendamentoMapper.paraResponseDTO(agendamento);
+    }
+
+    /**
+     * RF 28 - remarcacao atomica: cancela a reuniao original (com o motivo - RF 11) e cria a nova ligada a ela.
+     * Tudo na mesma transacao: se a nova reuniao for recusada por qualquer regra, a original continua como estava.
+     * READ COMMITTED pelo mesmo motivo de criar() (RN 01).
+     */
+    @Override
+    @Transactional(isolation = Isolation.READ_COMMITTED)
+    public AgendamentoResponseDTO remarcar(Long id, RemarcacaoRequestDTO dto) {
+        Agendamento original = travarAgendamento(id);
+        // Como na edicao: o organizador remarca; a recepcao e a administracao, por ele.
+        if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()
+                && !usuarioAutenticado.id().equals(original.getOrganizador().getId())) {
+            throw new AcessoNegadoNegocioException("Somente o organizador pode remarcar este agendamento.");
+        }
+        if (!STATUS_QUE_PODEM_SER_REMARCADOS.contains(original.getStatus())) {
+            throw new RegraDeNegocioException("Nao e possivel remarcar um agendamento que esta " + original.getStatus() + ".");
+        }
+        validarCancelamento(original, dto.confirmar(), "remarcado");
+
+        original.setStatus(StatusAgendamento.CANCELADO);
+        registrarMotivo(original, usuarioAutenticado.obter(), TipoOperacaoMotivo.CANCELAMENTO,
+                "Remarcada para %s às %s: %s".formatted(dto.dataReuniao().format(DATA_BR),
+                        dto.horarioInicio().format(HORA_BR), dto.motivo().trim()));
+        agendamentoRepository.save(original);
+
+        AgendamentoRequestDTO dadosNovos = new AgendamentoRequestDTO(original.getOrganizador().getId(),
+                dto.idsConvidados(), dto.idDuracao(), dto.dataReuniao(), dto.horarioInicio(), dto.formato(),
+                dto.topico(), dto.resumo(), original.getId(), dto.linkReuniao());
+        // A original deixa de existir para a checagem de conflito: a nova pode ocupar o mesmo horario (ou parte dele).
+        // Os envolvidos recebem o aviso de remarcacao da nova reuniao, nao o de cancelamento da original.
+        Agendamento nova = novoAgendamento(dadosNovos, original.getId());
+        return agendamentoMapper.paraResponseDTO(nova);
     }
 
     @Override
@@ -368,6 +417,19 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
+    /** Regras comuns ao cancelamento e a remarcacao (que cancela a reuniao original). */
+    private void validarCancelamento(Agendamento agendamento, Boolean confirmar, String acao) {
+        if (agendamento.getStatus() == StatusAgendamento.CANCELADO || agendamento.getStatus() == StatusAgendamento.CONCLUIDO
+                || agendamento.getStatus() == StatusAgendamento.EM_ANDAMENTO) {
+            throw new RegraDeNegocioException("Nao e possivel cancelar um agendamento que ja esta " + agendamento.getStatus() + ".");
+        }
+        if (!Boolean.TRUE.equals(confirmar)) {
+            throw new RegraDeNegocioException("E necessario confirmar explicitamente o cancelamento."); // RNF 10
+        }
+        validarAntecedenciaMinima(agendamento.getDataReuniao(), agendamento.getHorarioInicio(),
+                LIMITE_MIN_HORAS_CANCELAMENTO, acao); // RN 05
+    }
+
     /**
      * RN 01/RN 15/RF 04/RF 14 - o horario precisa estar livre para TODOS os envolvidos (organizador e convidados):
      * docentes dentro da disponibilidade e fora de bloqueios; ninguem com outra reuniao no intervalo.
@@ -375,6 +437,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
      */
     private void validarHorarioLivreParaTodos(Usuario organizador, List<Usuario> convidados, LocalDate data,
                                               LocalTime inicio, LocalTime fim, Long agendamentoIgnoradoId) {
+        // RN 01 - sem a trava, duas requisicoes simultaneas passariam pela checagem antes de qualquer uma gravar.
+        usuarioRepository.travarParaAgendamento(envolvidos(organizador, convidados).stream().map(Usuario::getId).toList());
         for (Usuario envolvido : envolvidos(organizador, convidados)) {
             calculadoraDeAgenda.verificar(envolvido, data, inicio, fim, agendamentoIgnoradoId)
                     .ifPresent(impedimento -> {
@@ -535,6 +599,15 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private DuracaoReuniao buscarDuracao(Long id) {
         return duracaoReuniaoRepository.findById(id)
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Duracao de reuniao", id));
+    }
+
+    /**
+     * Trava e so depois le o agendamento (ver AgendamentoRepository.travarPorId): a leitura vem depois da espera,
+     * entao enxerga o que a outra transacao gravou.
+     */
+    private Agendamento travarAgendamento(Long id) {
+        agendamentoRepository.travarPorId(id);
+        return buscarAgendamento(id);
     }
 
     private Agendamento buscarAgendamento(Long id) {

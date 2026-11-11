@@ -14,6 +14,15 @@ import java.util.Collection;
 import java.util.List;
 
 public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> {
+    /**
+     * Trava o agendamento (SELECT ... FOR UPDATE) ate o fim da transacao: duas operacoes sobre a mesma reuniao
+     * (ex.: duas remarcacoes, ou remarcar e cancelar ao mesmo tempo) passam a acontecer uma depois da outra.
+     * Ordem das travas: primeiro o agendamento, depois os usuarios (UsuarioRepository.travarParaAgendamento).
+     * SQL nativo pelo mesmo motivo de travarParaAgendamento (MariaDB). Chame antes de ler o agendamento.
+     */
+    @Query(value = "SELECT id_agendamento FROM agendamento WHERE id_agendamento = :id FOR UPDATE", nativeQuery = true)
+    List<Object> travarPorId(@Param("id") Long id);
+
     @Query("""
             SELECT DISTINCT a FROM Agendamento a
             LEFT JOIN a.participantes p

@@ -64,7 +64,16 @@ Instale e configure estas ferramentas na sua máquina:
 >
 > Já tem o banco criado antes de 10/11/2026? Rode também `db/migracoes/2026-11-10_justificativa_text.sql` (amplia o campo de motivo).
 >
-> Para criar o banco vazio, sem usuários, use `db/db_schedemy.sql`. Nesse caso, cadastre o primeiro usuário pela tela "Cadastre-se" ou pelo Swagger.
+> Para criar o banco vazio, sem usuários, use `db/db_schedemy.sql`. Não existe autocadastro (o RF 29 prevê o cadastro pela
+> conta Microsoft), e só o administrador cria usuários. Por isso, crie o primeiro administrador direto no banco. A senha é `admin123`; troque-a depois pela tela de usuários:
+>
+> ```sql
+> INSERT INTO schedemy_db.usuario (id_microsoft, nome, email, senha, tipo_usuario, departamento)
+> VALUES ('pendente-sso:admin-inicial', 'Administrador', 'admin@hotmail.com',
+>         '$2a$10$AmeD92ui97SdYT5Am8FDr.CUQrA8z2fQlpKH7yN6fkU7F5LAkD4H6', 'ADMIN', 'Administrativo');
+> ```
+>
+> Os demais usuários são criados pelo administrador, na tela **Usuários** ou pelo Swagger (`POST /api/v1/usuarios`).
 
 > ⚠️ **Nota:** por padrão, a API usa o usuário `root` **sem senha**. Para usar outras credenciais, veja a seção [Variáveis de ambiente](#-variáveis-de-ambiente).
 

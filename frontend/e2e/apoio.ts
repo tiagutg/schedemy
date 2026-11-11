@@ -35,6 +35,19 @@ export async function api(conta: Conta) {
   });
 }
 
+/**
+ * Id do usuário da conta, pelo próprio cadastro (`GET /usuarios/me`). A listagem completa
+ * de usuários é só de admin/recepção e o resumo não traz e-mail (RNF 18).
+ */
+export async function idDaConta(conta: Conta): Promise<number> {
+  const cliente = await api(conta);
+  const resposta = await cliente.get("/api/v1/usuarios/me");
+  expect(resposta.ok(), await resposta.text()).toBeTruthy();
+  const { id } = await resposta.json();
+  await cliente.dispose();
+  return id;
+}
+
 export function paraISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -55,11 +68,10 @@ export function diaSemanaBanco(d: Date): number {
 /** Garante que o professor de teste atenda das 08:00 às 18:00 no dia informado. */
 export async function garantirDisponibilidade(dia: Date) {
   const professor = await api(CONTAS.professor);
-  const usuarios = await (await professor.get("/api/v1/usuarios", { params: { size: 200 } })).json();
-  const eu = usuarios.conteudo.find((u: { email: string }) => u.email === CONTAS.professor.email);
+  const idEu = await idDaConta(CONTAS.professor);
   const lista = await (
     await professor.get("/api/v1/disponibilidades", {
-      params: { usuarioId: eu.id, diaSemana: diaSemanaBanco(dia), ativo: true, size: 50 },
+      params: { usuarioId: idEu, diaSemana: diaSemanaBanco(dia), ativo: true, size: 50 },
     })
   ).json();
   const cobre = lista.conteudo.some(
@@ -67,7 +79,7 @@ export async function garantirDisponibilidade(dia: Date) {
   );
   if (!cobre) {
     const resposta = await professor.post("/api/v1/disponibilidades", {
-      data: { idUsuario: eu.id, diaSemana: diaSemanaBanco(dia), horarioInicio: "08:00:00", horarioFim: "18:00:00", ativo: true },
+      data: { idUsuario: idEu, diaSemana: diaSemanaBanco(dia), horarioInicio: "08:00:00", horarioFim: "18:00:00", ativo: true },
     });
     expect(resposta.ok(), await resposta.text()).toBeTruthy();
   }
@@ -82,8 +94,7 @@ export async function garantirDisponibilidade(dia: Date) {
 export async function removerAgendamentosComTopico(prefixo: string) {
   const admin = await api(CONTAS.admin);
   const lista = await (await admin.get("/api/v1/agendamentos", { params: { size: 500 } })).json();
-  const usuarios = await (await admin.get("/api/v1/usuarios", { params: { size: 200 } })).json();
-  const idAdmin = usuarios.conteudo.find((u: { email: string }) => u.email === CONTAS.admin.email).id;
+  const idAdmin = await idDaConta(CONTAS.admin);
   // Mais recentes primeiro: uma remarcação aponta para a reunião original.
   const ordenados = [...lista.conteudo].sort((x: { id: number }, y: { id: number }) => y.id - x.id);
   for (const a of ordenados) {
@@ -125,10 +136,9 @@ async function marcarHorarios(conta: Conta, lista: DisponibilidadeApi[], ativo: 
  */
 export async function semHorariosDeAtendimento(conta: Conta): Promise<() => Promise<void>> {
   const cliente = await api(conta);
-  const usuarios = await (await cliente.get("/api/v1/usuarios", { params: { size: 200 } })).json();
-  const eu = usuarios.conteudo.find((u: { email: string }) => u.email === conta.email);
+  const idEu = await idDaConta(conta);
   const ativos: DisponibilidadeApi[] = (
-    await (await cliente.get("/api/v1/disponibilidades", { params: { usuarioId: eu.id, ativo: true, size: 100 } })).json()
+    await (await cliente.get("/api/v1/disponibilidades", { params: { usuarioId: idEu, ativo: true, size: 100 } })).json()
   ).conteudo;
   await cliente.dispose();
   await marcarHorarios(conta, ativos, false);

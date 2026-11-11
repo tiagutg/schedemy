@@ -3,6 +3,7 @@ package br.edu.unisales.schedemy.service;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.UsuarioRequestDTO;
 import br.edu.unisales.schedemy.dto.response.UsuarioResponseDTO;
+import br.edu.unisales.schedemy.dto.response.UsuarioResumoResponseDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -15,6 +16,9 @@ public interface UsuarioService {
     UsuarioResponseDTO buscarLogado();
 
     Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable);
+
+    /** RNF 18 - mesma busca de listar, mas so com os dados necessarios para escolher convidados. */
+    Page<UsuarioResumoResponseDTO> listarResumo(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable);
 
     UsuarioResponseDTO atualizar(Long id, UsuarioRequestDTO dto);
 

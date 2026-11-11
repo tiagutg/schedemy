@@ -22,5 +22,7 @@ export const agendamentosApi = {
   atualizar: (id: Id, dto: unknown) => api.put<Agendamento>(`/api/v1/agendamentos/${id}`, dto),
   responder: (id: Id, dto: unknown) => api.patch<Agendamento>(`/api/v1/agendamentos/${id}/resposta`, dto),
   cancelar: (id: Id, dto: unknown) => api.patch<Agendamento>(`/api/v1/agendamentos/${id}/cancelamento`, dto),
+  /** RF 28: cancela a original e cria a nova (com idAgendamentoOrigem) numa só transação. */
+  remarcar: (id: Id, dto: unknown) => api.post<Agendamento>(`/api/v1/agendamentos/${id}/remarcacao`, dto),
   remover: (id: Id) => api.del(`/api/v1/agendamentos/${id}`),
 };
