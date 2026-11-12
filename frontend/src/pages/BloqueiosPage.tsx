@@ -101,6 +101,11 @@ export default function BloqueiosPage() {
       setErro("Selecione um professor ou coordenador.");
       return;
     }
+    // Mesma regra do back: com os dois horários preenchidos, o fim precisa vir depois do início.
+    if (form.horarioInicio && form.horarioFim && form.horarioFim <= form.horarioInicio) {
+      setErro("O horário de fim deve ser posterior ao de início. Para bloquear até o fim do dia, deixe o fim em branco.");
+      return;
+    }
     setSalvando(true);
     try {
       const payload = {

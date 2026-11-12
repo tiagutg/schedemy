@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.BloqueioPeriodoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
 import br.edu.unisales.schedemy.dto.response.BloqueioPeriodoResponseDTO;
@@ -42,6 +43,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     public BloqueioPeriodoResponseDTO criar(BloqueioPeriodoRequestDTO dto) {
         Usuario usuario = buscarUsuario(dto.idUsuario());
         usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
+        validarPapelDocente(usuario);
         validarPeriodo(dto);
 
         BloqueioPeriodo entidade = bloqueioPeriodoMapper.paraEntidade(dto, usuario);
@@ -71,6 +73,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
         usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
         Usuario usuario = buscarUsuario(dto.idUsuario());
         usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode gerenciar os seus proprios bloqueios.");
+        validarPapelDocente(usuario);
         validarPeriodo(dto);
 
         bloqueioPeriodoMapper.atualizarEntidade(entidade, dto, usuario);
@@ -110,6 +113,19 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
         }
         if (!recorrente && dto.diaSemanaRecorrente() != null) {
             throw new RegraDeNegocioException("diaSemanaRecorrente so deve ser informado quando o bloqueio e recorrente.");
+        }
+        // Sem horario o bloqueio cobre o dia inteiro; sem fim, vai ate o fim do dia (CalculadoraDeAgenda).
+        if (dto.horarioInicio() != null && dto.horarioFim() != null && !dto.horarioFim().isAfter(dto.horarioInicio())) {
+            throw new RegraDeNegocioException(
+                    "O horario de fim do bloqueio deve ser posterior ao horario de inicio. Para bloquear ate o fim do dia, deixe o horario de fim em branco.");
+        }
+    }
+
+    /** RF 04 - bloqueio e da agenda do docente (mesma regra da disponibilidade, RN 06). */
+    private void validarPapelDocente(Usuario usuario) {
+        if (usuario.getTipoUsuario() != TipoUsuario.PROFESSOR && usuario.getTipoUsuario() != TipoUsuario.COORDENADOR) {
+            throw new RegraDeNegocioException(
+                    "Somente usuarios do tipo PROFESSOR ou COORDENADOR podem ter bloqueios de agenda.");
         }
     }
 
