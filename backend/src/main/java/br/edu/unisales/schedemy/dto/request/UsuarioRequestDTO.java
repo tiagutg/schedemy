@@ -32,7 +32,7 @@ public record UsuarioRequestDTO(
         @Pattern(regexp = "^$|^[0-9]{10,20}$", message = "telefoneWhatsapp deve conter apenas numeros (10 a 20 digitos)")
         String telefoneWhatsapp,
 
-        @Schema(example = "USUARIO")
+        @Schema(description = "Perfil: ADMIN, ALUNO, PROFESSOR, COORDENADOR ou RECEPCIONISTA", example = "ALUNO")
         @NotNull(message = "tipoUsuario e obrigatorio")
         TipoUsuario tipoUsuario,
 
