@@ -41,7 +41,7 @@ Instale e configure estas ferramentas na sua máquina:
 
 - **Java JDK 21**
 - **MySQL Server 8**, rodando na porta `3306` (dispensável se você usar o [banco no Supabase](#opção-banco-no-supabase))
-- **Node.js 20** ou superior (com o npm)
+- **Node.js 22.12** ou superior (com o npm; o Vitest 5 não roda em versões anteriores)
 
 > O Maven não precisa ser instalado: o back-end usa o **Maven Wrapper** (`mvnw`).
 
@@ -112,15 +112,22 @@ Em vez do MySQL local, a API pode usar o banco PostgreSQL compartilhado no [Supa
 3. Defina a variável `JAVA_HOME` apontando para o JDK 21 e suba a API pelo script:
 
    ```powershell
+   # Windows
    cd backend
    .\subir-api-supabase.ps1
    ```
 
-   O script usa o `supabase.env` da raiz do projeto. Se ele estiver em outro lugar, informe o caminho: `.\subir-api-supabase.ps1 -Arquivo C:\caminho\supabase.env`.
+   ```bash
+   # Linux/macOS
+   cd backend
+   ./subir-api-supabase.sh
+   ```
+
+   O script usa o `supabase.env` da raiz do projeto. Se ele estiver em outro lugar, informe o caminho: `.\subir-api-supabase.ps1 -Arquivo C:\caminho\supabase.env` (Windows) ou `./subir-api-supabase.sh /caminho/supabase.env` (Linux/macOS).
 
 4. Suba o front-end normalmente (passo 3 acima). Ele não muda: conversa com a API em `http://localhost:8080`, e é a API que acessa o banco.
 
-Para voltar ao MySQL local, suba a API com `mvnw.cmd spring-boot:run`, como no passo 2.
+Para voltar ao MySQL local, suba a API com `mvnw.cmd spring-boot:run` (Windows) ou `./mvnw spring-boot:run` (Linux/macOS), como no passo 2.
 
 > ⚠️ **Atenção:** o banco do Supabase é **compartilhado**. O que você cria, edita ou apaga aparece para todos. Rode os testes de ponta a ponta (`npm run test:e2e`) no MySQL local, porque eles criam e apagam agendamentos.
 >
@@ -153,6 +160,19 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | Variável | Padrão | Descrição |
 | :--- | :--- | :--- |
 | `VITE_API_BASE_URL` | `http://localhost:8080` | Endereço da API |
+
+---
+
+## 🧪 Testes do back-end
+
+```bash
+cd backend
+./mvnw test                                        # testes de regra e de acesso, sem banco
+./mvnw test -Dgroups=banco -DexcludedGroups=nenhum # testes que usam o banco (MySQL local ligado)
+```
+
+Os testes de banco rodam dentro de uma transação desfeita no final: não deixam dados. O CI do GitHub
+(`.github/workflows/backend.yml`) roda todos eles num MySQL e num PostgreSQL criados só para o teste.
 
 ---
 

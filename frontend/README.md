@@ -1,101 +1,94 @@
-# Schedemy Web
+# Schedemy — painel web
 
-Front-end (React + Vite) do **Schedemy — Sistema de Agendamento de Reuniões no AVA**, consumindo a
-API REST desenvolvida em `schedemy-api` (Spring Boot).
+Front-end do **Schedemy**, sistema de agendamento de reuniões acadêmicas da UniSales. Conversa com a API
+Spring Boot da pasta [`backend/`](../backend) deste mesmo repositório.
+
+Instalação completa (banco, API e front), variáveis de ambiente, scripts, testes de ponta a ponta e contas de teste
+estão no [README da raiz](../README.md). Aqui fica só o que é específico do front-end.
 
 ## Stack
 
-- **React 19** + **Vite** (JavaScript)
-- **React Router** para navegação
-- **Tailwind CSS** para estilização
-- Fontes: **Fraunces** (títulos) + **IBM Plex Sans** (texto) + **IBM Plex Mono** (código)
-- Autenticação **HTTP Basic** (igual ao back-end), sem dependências de estado externas (Redux etc.)
+- **React 19** + **TypeScript 7** + **Vite 8**
+- **React Router 7** para a navegação
+- **Tailwind CSS 4** + componentes **shadcn/ui** (Radix) em `src/components/ui/`
+- **Recharts** nos gráficos do painel, **Sonner** nos avisos (toasts), ícones **Tabler**, fonte **Geist**
+- **Vitest** (testes unitários) e **Playwright** + **axe** (ponta a ponta e acessibilidade)
+- **oxlint** para o lint
 
 ## Pré-requisitos
 
-- Node.js 18+ e npm
-- O back-end **schedemy-api** rodando (por padrão em `http://localhost:8080`) — veja o guia de
-  instalação do back-end para colocá-lo no ar antes de usar este front-end.
+- **Node.js 22.12** ou superior, com o npm (o Vitest 5 não roda em versões anteriores; o CI usa o Node 22)
+- A API rodando em `http://localhost:8080` (veja o README da raiz)
 
 ## Como rodar
 
 ```bash
 npm install
-npm run dev
+npm run dev        # http://localhost:5173
 ```
 
-A aplicação sobe em `http://localhost:5173` (padrão do Vite).
+Para usar outra API, copie `.env.example` para `.env` e ajuste `VITE_API_BASE_URL`. A API só aceita chamadas
+das origens configuradas no `CorsConfig` (por padrão `localhost:5173`, `3000` e `4200`; em outro endereço, defina
+`CORS_ALLOWED_ORIGINS` na API).
 
-Por padrão, o front-end aponta para `http://localhost:8080` como URL da API. Para apontar para
-outro endereço, copie `.env.example` para `.env` e ajuste:
+Antes de dar uma tarefa como pronta, rode `npm run lint`, `npm test` e `npm run build` (é o que o CI confere).
+Os testes de ponta a ponta (`npm run test:e2e`) exigem a API com o MySQL local e o `db/dump_schedemy.sql`;
+**nunca rode contra o Supabase**, porque eles criam e apagam agendamentos.
 
-```bash
-VITE_API_BASE_URL=http://localhost:8080
-```
+## Login e permissões
 
-> O back-end já vem com CORS liberado para `localhost:5173`, `3000` e `4200` (veja
-> `CorsConfig.java` no projeto `schedemy-api`).
+- O login é por **e-mail e senha**. O `AuthContext` valida as credenciais buscando o próprio cadastro em
+  `GET /api/v1/usuarios/me` e guarda a sessão no `localStorage` (`schedemy.auth`).
+- Não há cadastro aberto: `/cadastro` explica como obter acesso (a conta é criada pela coordenação/recepção).
+- O menu e os botões variam por perfil (aluno, professor, coordenador, recepcionista, admin) conforme
+  `src/utils/permissoes.ts`. Esse arquivo **só esconde a interface**: quem protege os dados é a API. Ao mudar uma
+  regra de acesso, atualize também o `SecurityConfig` e o `SecurityConfigTest` do back-end.
 
-## Login
+## Telas
 
-A tela de login usa as mesmas credenciais HTTP Basic configuradas no `SecurityConfig` do
-back-end. Botões de atalho já preenchem usuário/senha de cada papel:
+| Rota | Tela |
+|---|---|
+| `/` | Painel com indicadores, gráficos, convites pendentes e próximas reuniões |
+| `/agendamentos` | Lista e visão semanal; criar, editar, responder convite, cancelar e remarcar |
+| `/disponibilidades` | Grade semanal de horários do docente |
+| `/bloqueios` | Bloqueios de agenda, com os agendamentos impactados |
+| `/duracoes` | Durações de reunião permitidas |
+| `/usuarios` | Cadastro de usuários (admin e recepção) |
+| `/avaliacoes` | Avaliações de reuniões concluídas |
+| `/notificacoes` | Avisos do sistema |
+| `/perfil` | Dados da própria conta |
 
-| Usuário | Senha | Papel |
-|---|---|---|
-| `admin` | `admin123` | ADMIN / COORDENADOR / RECEPCIONISTA |
-| `coordenador` | `coordenador123` | COORDENADOR |
-| `professor` | `professor123` | PROFESSOR |
-| `recepcionista` | `recepcionista123` | RECEPCIONISTA |
-| `aluno` | `aluno123` | ALUNO |
-
-## Funcionalidades
-
-- **Painel** — indicadores de agendamentos por status e próximos compromissos.
-- **Agendamentos** — criação (com seleção de organizador, convidados, duração, formato),
-  listagem com filtros (usuário, status, período), detalhes com aceite/recusa por participante,
-  cancelamento (com motivo obrigatório) e remoção.
-- **Disponibilidades** — grade semanal de horários de professores/coordenadores.
-- **Bloqueios de período** — cadastro de indisponibilidades, com visualização dos agendamentos
-  impactados.
-- **Durações de reunião** — CRUD das durações padronizadas (10 a 60 minutos).
-- **Usuários** — CRUD de alunos, professores, coordenadores e recepcionistas.
-- **Avaliações** — consulta e registro de avaliações de reuniões concluídas.
-- **Notificações** — fila/histórico de notificações, com opção de marcar como enviada.
-
-## Build de produção
-
-```bash
-npm run build
-npm run preview   # serve o build em http://localhost:4173 para conferência local
-```
-
-Os arquivos finais são gerados em `dist/`.
+Em `src/App.tsx`, cada rota restrita passa por `RotaProtegida` com uma permissão de `src/utils/permissoes.ts`
+(ex.: `usuarios.gerenciar`).
 
 ## Estrutura de pastas
 
 ```
 src/
-├── api/            # funções que conversam com a Schedemy API (fetch)
+├── api/          # uma função por endpoint; client.ts é o apiFetch central (Basic Auth + erros em ApiError)
 ├── components/
-│   ├── layout/      # AppLayout (sidebar/topbar) e RotaProtegida
-│   └── ui/           # Table, Modal, Pagination, campos de formulário, etc.
-├── context/         # AuthContext (sessão) e ToastContext (notificações)
-├── hooks/           # usePaginatedList, useUsuariosOptions
-├── pages/           # uma pasta/arquivo por tela
-├── utils/           # formatação de datas e rótulos de enums do domínio
-├── App.jsx          # rotas
-└── main.jsx         # bootstrap do React
+│   ├── auth/     # login e orientação de acesso
+│   ├── common/   # tabela, modal, paginação, campos de formulário, filtros...
+│   ├── layout/   # AppLayout, menu lateral, cabeçalho e RotaProtegida
+│   └── ui/       # componentes shadcn/ui (evite editar à mão)
+├── context/      # AuthContext (sessão), AvisosContext (notificações), ToastContext
+├── hooks/        # usePaginatedList, useUsuariosOptions, useTema...
+├── pages/        # uma tela por arquivo (agendamentos/ e painel/ em subpastas)
+├── utils/        # formatação, rótulos do domínio, regras de agenda e permissões (+ testes *.test.ts)
+├── types.ts      # tipos dos DTOs da API
+├── App.tsx       # rotas
+└── main.tsx      # ponto de entrada
+e2e/              # testes Playwright (apoio.ts tem os utilitários de login e limpeza)
 ```
 
-## Notas de integração com o back-end
+O alias `@/` aponta para `src/`.
 
-- Todas as chamadas usam o wrapper `src/api/client.js`, que injeta o header `Authorization:
-  Basic ...` automaticamente a partir da sessão salva em `localStorage`, e normaliza erros no
-  mesmo formato do `ErrorResponseDTO` do back-end (com `mensagem` e `camposInvalidos`, quando
-  aplicável).
-- As páginas respeitam a paginação (`PageResponseDTO`) e a ordenação (`?sort=campo,asc|desc`)
-  já implementadas na API.
-- Este front-end cobre a primeira camada de uso do sistema. Itens como aprovação de solicitação
-  de edição já confirmada, sugestão de remarcação e favoritar convidados ainda não têm CRUD
-  próprio na API (ver README do `schedemy-api`) e, por isso, não têm tela aqui.
+## Integração com a API
+
+- Todas as chamadas passam por `src/api/client.ts`, que injeta o cabeçalho `Authorization: Basic ...` e converte
+  as respostas de erro (`ErrorResponseDTO`: `mensagem`, `camposInvalidos`) em `ApiError`. Um 401 com sessão salva
+  encerra a sessão e volta para o login.
+- As listas usam a paginação (`page`, `size`) e a ordenação (`sort=campo,asc|desc`) da API.
+- Listas de pessoas para escolher convidados usam `GET /api/v1/usuarios/resumo`, que não traz e-mail nem telefone.
+- A remarcação usa `POST /api/v1/agendamentos/{id}/remarcacao`, que cancela a original e cria a nova numa
+  transação só.
