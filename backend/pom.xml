@@ -28,6 +28,9 @@
 	</scm>
 	<properties>
 		<java.version>21</java.version>
+		<!-- Testes com a tag "banco" precisam do MySQL/PostgreSQL ligado e ficam fora do ./mvnw test padrao.
+		     Para roda-los: ./mvnw test -Dgroups=banco -DexcludedGroups=nenhum (e o que o CI faz). -->
+		<excludedGroups>banco</excludedGroups>
 	</properties>
 	<dependencies>
 		<dependency>
