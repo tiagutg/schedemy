@@ -38,8 +38,8 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 /**
- * Verifica a matriz de autorizacao do SecurityConfig contra a secao 5.3 do
- * Documento de Definicao de Requisitos.
+ * Verifica a matriz de autorizacao do SecurityConfig (perfis do Documento de
+ * Definicao de Requisitos v3.1.0: RFs, RN 03, RN 06 e RNF 15).
  *
  * O teste olha apenas para o veredito do filtro de seguranca: 403 significa
  * barrado pelo perfil; qualquer outro status (inclusive 404, quando o endpoint

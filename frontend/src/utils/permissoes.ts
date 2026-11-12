@@ -1,7 +1,7 @@
 // Controle de acesso por perfil no front-end.
 //
-// Baseado na seção 5.3 ("Relação Entre Atores e Casos de Uso") do Documento de
-// Definição de Requisitos v3.1.0 e nas regras RN 03, RN 06 e RNF 15.
+// Baseado no Documento de Definição de Requisitos v3.1.0 (atores citados nos
+// RFs) e nas regras RN 03, RN 06 e RNF 15.
 //
 // IMPORTANTE: isto é apenas a camada de interface — esconder um botão não
 // protege a API. A autorização definitiva é feita no back-end (SecurityConfig).
@@ -35,8 +35,8 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * - agenda.gerenciarTodos → disponibilidades e bloqueios de qualquer docente
  * - avaliacoes.verTodas → docência acompanha as avaliações dos alunos (RNF 11)
  */
-// A seção 5.3 do documento trata "Professor/Coordenador" como um único ator:
-// os dois perfis compartilham exatamente as mesmas permissões.
+// Os RFs sempre citam "professor ou coordenador" juntos: os dois perfis
+// compartilham exatamente as mesmas permissões.
 const PERMISSOES_DOCENTE = [
   "agendamentos.ver",
   "agendamentos.criar",

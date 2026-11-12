@@ -16,14 +16,14 @@ import org.springframework.security.web.access.AccessDeniedHandler;
 /**
  * Autenticacao (Basic Auth) e autorizacao por papel da Schedemy API.
  *
- * As regras abaixo espelham a matriz de acesso do Docume   nto de Definicao de
- * Requisitos v3.1.0 (secao 5.3 "Relacao Entre Atores e Casos de Uso", RN 03 e
- * RN 06), a mesma aplicada no front-end em src/utils/permissoes.js.
+ * As regras abaixo seguem o Documento de Definicao de Requisitos v3.1.0 (atores
+ * citados nos RFs, RN 03, RN 06 e RNF 15) e sao as mesmas aplicadas no front-end
+ * em src/utils/permissoes.ts.
  *
  * Resumo:
  * - TODOS          os proprios avisos (notificacoes do sistema)
  * - ALUNO          agendamentos (criar/ver/cancelar/responder) e avaliacoes
- * - PROFESSOR      o mesmo do coordenador (a secao 5.3 trata os dois como um ator)
+ * - PROFESSOR      o mesmo do coordenador (os RFs sempre citam "professor ou coordenador")
  * - COORDENADOR    + disponibilidades, bloqueios, duracoes e notificacoes
  * - RECEPCIONISTA  agendamentos de todos (criar por terceiros, ver, editar, cancelar),
  *                  sem aceitar/recusar convite (RN 03)
