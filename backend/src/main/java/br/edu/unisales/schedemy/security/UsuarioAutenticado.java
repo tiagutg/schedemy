@@ -15,7 +15,7 @@ import org.springframework.web.context.request.RequestContextHolder;
 /**
  * Acesso ao usuario autenticado na requisicao e verificacoes de "dono" do recurso.
  *
- * A identidade usada nas regras de autorizacao SEMPRE vem do login (Basic Auth),
+ * A identidade usada nas regras de autorizacao SEMPRE vem do login (token de acesso),
  * nunca de ids enviados no corpo da requisicao (RNF 15).
  */
 @Component
@@ -56,6 +56,14 @@ public class UsuarioAutenticado {
             requisicao.setAttribute(ATRIBUTO_USUARIO, usuario, RequestAttributes.SCOPE_REQUEST);
         }
         return usuario;
+    }
+
+    /** Chamado pelo ConversorDeToken, que ja leu o cadastro ao validar o token. */
+    static void guardarNaRequisicao(Usuario usuario) {
+        RequestAttributes requisicao = RequestContextHolder.getRequestAttributes();
+        if (requisicao != null) {
+            requisicao.setAttribute(ATRIBUTO_USUARIO, usuario, RequestAttributes.SCOPE_REQUEST);
+        }
     }
 
     public Long id() {

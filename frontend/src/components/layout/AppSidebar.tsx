@@ -29,7 +29,7 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
   const iniciais =
     partesNome.length > 1
       ? partesNome[0][0] + partesNome[partesNome.length - 1][0]
-      : (partesNome[0] || auth?.username || "").slice(0, 2);
+      : (partesNome[0] || auth?.email || "").slice(0, 2);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -52,7 +52,7 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
       </SidebarContent>
       <SidebarFooter>
         <NavUser
-          nome={perfilVinculado?.nome || auth?.username || ""}
+          nome={perfilVinculado?.nome || auth?.email || ""}
           descricao={perfil ? ROTULOS_PERFIL[perfil] || perfil : undefined}
           iniciais={iniciais.toUpperCase()}
           onSair={onSair}

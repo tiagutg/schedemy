@@ -13,7 +13,7 @@ O projeto tem duas partes:
 
 | Camada | Tecnologias |
 | :--- | :--- |
-| **Back-end** | Java 21, Spring Boot 4, Spring Data JPA, Spring Security (Basic Auth), Springdoc OpenAPI (Swagger) |
+| **Back-end** | Java 21, Spring Boot 4, Spring Data JPA, Spring Security (login com token JWT), Springdoc OpenAPI (Swagger) |
 | **Banco de dados** | MySQL 8 (local) ou PostgreSQL no Supabase (opcional) |
 | **Front-end** | React 19, TypeScript, Vite, Tailwind CSS 4, shadcn/ui, React Router |
 
@@ -152,6 +152,8 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `DB_USER` | `root` | Usuário do MySQL |
 | `DB_PASSWORD` | *(vazio)* | Senha do MySQL |
 | `SHOW_SQL` | `false` | Exibe no log o SQL gerado pelo Hibernate |
+| `SCHEDEMY_JWT_SEGREDO` | *(sorteado ao iniciar)* | Segredo que assina os tokens de acesso (mínimo 32 caracteres). Sem ele, os tokens deixam de valer quando a API reinicia. **Obrigatório em produção**, o mesmo em todas as instâncias |
+| `SCHEDEMY_JWT_VALIDADE_MINUTOS` | `480` | Validade do token; depois disso é preciso entrar de novo |
 | `SCHEDEMY_FUSO` | `America/Sao_Paulo` | Fuso usado nos prazos e na rotina de status (evita deslocamento quando o servidor roda em UTC) |
 | `SPRING_PROFILES_ACTIVE` | *(vazio)* | `supabase` usa o banco PostgreSQL do Supabase (o script `subir-api-supabase.ps1` já define) |
 
@@ -207,13 +209,15 @@ A interface interativa do Swagger lista e permite testar todos os endpoints:
 
 - **Swagger UI:** [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 
+Para chamar os endpoints protegidos: execute `POST /api/v1/auth/login` com `{"email": ..., "senha": ...}`, copie o `token` da resposta e cole em **Authorize**. Fora do Swagger, envie `Authorization: Bearer <token>`.
+
 A coleção de requisições também está em [`Documentacao/`](Documentacao/).
 
 ---
 
 ## 🔑 Contas de acesso
 
-O login é feito com o **e-mail e a senha** de um usuário cadastrado no banco. As senhas ficam criptografadas (BCrypt), e o perfil de acesso vem do tipo do usuário.
+O login é feito com o **e-mail e a senha** de um usuário cadastrado no banco. A API devolve um token de acesso (JWT, 8 h por padrão) e o navegador guarda só o token, nunca a senha. As senhas ficam criptografadas (BCrypt), e o perfil de acesso vem do tipo do usuário.
 
 Estas contas vêm no `db/dump_schedemy.sql`:
 

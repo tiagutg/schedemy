@@ -37,8 +37,10 @@ Os testes de ponta a ponta (`npm run test:e2e`) exigem a API com o MySQL local e
 
 ## Login e permissões
 
-- O login é por **e-mail e senha**. O `AuthContext` valida as credenciais buscando o próprio cadastro em
-  `GET /api/v1/usuarios/me` e guarda a sessão no `localStorage` (`schedemy.auth`).
+- O login é por **e-mail e senha**: o `AuthContext` troca as credenciais por um token em `POST /api/v1/auth/login`,
+  busca o próprio cadastro em `GET /api/v1/usuarios/me` e guarda **só o token** (com a validade) no `localStorage`
+  (`schedemy.auth`). A senha não fica no navegador. Quando o token vence, a sessão se encerra sozinha; uma sessão
+  no formato antigo (com senha) é apagada ao abrir o app (`src/utils/sessao.ts`).
 - Não há cadastro aberto: `/cadastro` explica como obter acesso (a conta é criada pela coordenação/recepção).
 - O menu e os botões variam por perfil (aluno, professor, coordenador, recepcionista, admin) conforme
   `src/utils/permissoes.ts`. Esse arquivo **só esconde a interface**: quem protege os dados é a API. Ao mudar uma
@@ -65,7 +67,7 @@ Em `src/App.tsx`, cada rota restrita passa por `RotaProtegida` com uma permissã
 
 ```
 src/
-├── api/          # uma função por endpoint; client.ts é o apiFetch central (Basic Auth + erros em ApiError)
+├── api/          # uma função por endpoint; client.ts é o apiFetch central (token Bearer + erros em ApiError)
 ├── components/
 │   ├── auth/     # login e orientação de acesso
 │   ├── common/   # tabela, modal, paginação, campos de formulário, filtros...
@@ -85,7 +87,7 @@ O alias `@/` aponta para `src/`.
 
 ## Integração com a API
 
-- Todas as chamadas passam por `src/api/client.ts`, que injeta o cabeçalho `Authorization: Basic ...` e converte
+- Todas as chamadas passam por `src/api/client.ts`, que injeta o cabeçalho `Authorization: Bearer <token>` e converte
   as respostas de erro (`ErrorResponseDTO`: `mensagem`, `camposInvalidos`) em `ApiError`. Um 401 com sessão salva
   encerra a sessão e volta para o login.
 - As listas usam a paginação (`page`, `size`) e a ordenação (`sort=campo,asc|desc`) da API.

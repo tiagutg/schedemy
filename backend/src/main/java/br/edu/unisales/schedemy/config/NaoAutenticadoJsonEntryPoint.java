@@ -11,8 +11,8 @@ import org.springframework.web.servlet.HandlerExceptionResolver;
 /**
  * Faz o 401 sair no mesmo formato (ErrorResponseDTO) das demais respostas de erro (RNF 17).
  *
- * Substitui o entry point padrao do Basic Auth, que respondia sem corpo e com o cabecalho
- * "WWW-Authenticate: Basic" - esse cabecalho pode fazer o navegador abrir a janela nativa de login.
+ * Substitui o entry point padrao, que responde sem corpo e so com o cabecalho WWW-Authenticate
+ * (no Basic Auth, esse cabecalho fazia o navegador abrir a janela nativa de login).
  * Mesmo esquema do AcessoNegadoJsonHandler: delega ao GlobalExceptionHandler.
  */
 @Component

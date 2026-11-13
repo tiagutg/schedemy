@@ -25,13 +25,21 @@ export async function entrar(page: Page, conta: Conta) {
   await expect(page).toHaveURL("/");
 }
 
+/** Token de acesso da conta (POST /api/v1/auth/login). */
+export async function tokenDaConta(conta: Conta): Promise<string> {
+  const anonimo = await request.newContext({ baseURL: API });
+  const resposta = await anonimo.post("/api/v1/auth/login", { data: { email: conta.email, senha: conta.senha } });
+  expect(resposta.ok(), await resposta.text()).toBeTruthy();
+  const { token } = await resposta.json();
+  await anonimo.dispose();
+  return token;
+}
+
 /** Cliente da API autenticado como a conta informada (para preparar dados). */
 export async function api(conta: Conta) {
   return request.newContext({
     baseURL: API,
-    extraHTTPHeaders: {
-      Authorization: "Basic " + Buffer.from(`${conta.email}:${conta.senha}`).toString("base64"),
-    },
+    extraHTTPHeaders: { Authorization: `Bearer ${await tokenDaConta(conta)}` },
   });
 }
 

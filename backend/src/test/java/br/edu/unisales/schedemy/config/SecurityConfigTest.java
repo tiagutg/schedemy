@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.config;
 
 import br.edu.unisales.schedemy.controller.AgendamentoController;
+import br.edu.unisales.schedemy.controller.AutenticacaoController;
 import br.edu.unisales.schedemy.controller.AvaliacaoController;
 import br.edu.unisales.schedemy.controller.NotificacaoController;
 import br.edu.unisales.schedemy.controller.RegistroMotivoController;
@@ -8,7 +9,10 @@ import br.edu.unisales.schedemy.controller.BloqueioPeriodoController;
 import br.edu.unisales.schedemy.controller.DisponibilidadeController;
 import br.edu.unisales.schedemy.controller.DuracaoReuniaoController;
 import br.edu.unisales.schedemy.controller.UsuarioController;
+import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.security.ConversorDeToken;
 import br.edu.unisales.schedemy.service.AgendamentoService;
+import br.edu.unisales.schedemy.service.AutenticacaoService;
 import br.edu.unisales.schedemy.service.AvaliacaoService;
 import br.edu.unisales.schedemy.service.NotificacaoService;
 import br.edu.unisales.schedemy.service.RegistroMotivoService;
@@ -26,15 +30,15 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
-import org.springframework.boot.test.context.TestConfiguration;
-import org.springframework.context.annotation.Bean;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 /**
@@ -45,6 +49,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
  * barrado pelo perfil; qualquer outro status (inclusive 404, quando o endpoint
  * ainda nao existe, ou 400, quando falta corpo) significa que a autorizacao
  * deixou passar. Assim a matriz pode ser validada sem banco de dados.
+ *
+ * Cada conta e simulada com um token ja validado (jwt()) que carrega o papel; a conversao
+ * real do token em usuario (ConversorDeToken, que consulta o banco) tem teste proprio.
  */
 @WebMvcTest(controllers = {
         AgendamentoController.class,
@@ -54,9 +61,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         UsuarioController.class,
         AvaliacaoController.class,
         NotificacaoController.class,
-        RegistroMotivoController.class
+        RegistroMotivoController.class,
+        AutenticacaoController.class
 })
-@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, NaoAutenticadoJsonEntryPoint.class, br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class, SecurityConfigTest.TestUsersConfig.class})
+@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, NaoAutenticadoJsonEntryPoint.class, JwtConfig.class, ConversorDeToken.class,
+        br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class })
 class SecurityConfigTest {
 
     @Autowired
@@ -70,12 +79,14 @@ class SecurityConfigTest {
     @MockitoBean private AvaliacaoService avaliacaoService;
     @MockitoBean private NotificacaoService notificacaoService;
     @MockitoBean private RegistroMotivoService registroMotivoService;
+    @MockitoBean private AutenticacaoService autenticacaoService;
+    @MockitoBean private UsuarioRepository usuarioRepository;
 
-    private static final String SENHA_POR_CONTA = "123";
-
+    /** A conta do CSV ("aluno", "recepcionista"...) e o proprio papel. */
     private int statusDe(String conta, String metodo, String caminho) throws Exception {
+        var papel = new SimpleGrantedAuthority("ROLE_" + conta.toUpperCase(Locale.ROOT));
         MockHttpServletRequestBuilder req = request(HttpMethod.valueOf(metodo), caminho)
-                .with(httpBasic(conta, conta + SENHA_POR_CONTA));
+                .with(jwt().authorities(papel));
         return mockMvc.perform(req).andReturn().getResponse().getStatus();
     }
 
@@ -265,39 +276,32 @@ class SecurityConfigTest {
         assertThat(status).isEqualTo(401);
     }
 
-    @TestConfiguration
-    static class TestUsersConfig {
+    @Test
+    @DisplayName("O login e publico")
+    void loginEhPublico() throws Exception {
+        int status = mockMvc.perform(request(HttpMethod.POST, "/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"senha\":\"x\"}"))
+                .andReturn().getResponse().getStatus();
+        assertThat(status).isEqualTo(200);
+    }
 
-        @Bean
-        UserDetailsService testUserDetailsService(
-                PasswordEncoder passwordEncoder) {
+    @Test
+    @DisplayName("Basic Auth nao e mais aceito (a senha so trafega no login)")
+    void basicAuthNaoValeMais() throws Exception {
+        int status = mockMvc.perform(request(HttpMethod.GET, "/api/v1/usuarios/me")
+                        .with(httpBasic("admin@hotmail.com", "admin123")))
+                .andReturn().getResponse().getStatus();
+        assertThat(status).isEqualTo(401);
+    }
 
-            return new InMemoryUserDetailsManager(
-                    User.withUsername("aluno")
-                            .password(passwordEncoder.encode("aluno123"))
-                            .roles("ALUNO")
-                            .build(),
-
-                    User.withUsername("professor")
-                            .password(passwordEncoder.encode("professor123"))
-                            .roles("PROFESSOR")
-                            .build(),
-
-                    User.withUsername("coordenador")
-                            .password(passwordEncoder.encode("coordenador123"))
-                            .roles("COORDENADOR")
-                            .build(),
-
-                    User.withUsername("recepcionista")
-                            .password(passwordEncoder.encode("recepcionista123"))
-                            .roles("RECEPCIONISTA")
-                            .build(),
-
-                    User.withUsername("admin")
-                            .password(passwordEncoder.encode("admin123"))
-                            .roles("ADMIN")
-                            .build()
-            );
-        }
+    @Test
+    @DisplayName("Token malformado ou de outro emissor responde 401 em JSON")
+    void tokenInvalidoResponde401() throws Exception {
+        var resposta = mockMvc.perform(request(HttpMethod.GET, "/api/v1/usuarios/me")
+                        .header("Authorization", "Bearer abc.def.ghi"))
+                .andReturn().getResponse();
+        assertThat(resposta.getStatus()).isEqualTo(401);
+        assertThat(resposta.getContentType()).contains("application/json");
     }
 }

@@ -1,13 +1,10 @@
 import type { ErrorResponse, Params } from "@/types";
+import { lerSessao, type StoredAuth } from "@/utils/sessao";
 
 const BASE_URL: string = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
 const AUTH_STORAGE_KEY = "schedemy.auth";
 
-export interface StoredAuth {
-  username: string;
-  password: string;
-  usuarioId: number | null;
-}
+export type { StoredAuth };
 
 /** Classe de erro rica, carregando o corpo padronizado de erro da API (ErrorResponseDTO). */
 export class ApiError extends Error {
@@ -26,7 +23,10 @@ export class ApiError extends Error {
 export function getStoredAuth(): StoredAuth | null {
   try {
     const raw = localStorage.getItem(AUTH_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const sessao = lerSessao(raw);
+    // Apaga o que não serve mais — inclusive a senha do formato antigo (Basic Auth).
+    if (raw && !sessao) localStorage.removeItem(AUTH_STORAGE_KEY);
+    return sessao;
   } catch {
     return null;
   }
@@ -42,16 +42,14 @@ export function setStoredAuth(auth: StoredAuth | null) {
 
 let aoSessaoInvalida: (() => void) | null = null;
 
-/** Registra quem trata um 401 numa requisição autenticada (credenciais salvas que deixaram de valer). */
+/** Registra quem trata um 401 numa requisição autenticada (token vencido ou que deixou de valer). */
 export function definirAoSessaoInvalida(tratador: (() => void) | null) {
   aoSessaoInvalida = tratador;
 }
 
 function buildAuthHeader() {
   const auth = getStoredAuth();
-  if (!auth?.username) return null;
-  const token = btoa(`${auth.username}:${auth.password}`);
-  return `Basic ${token}`;
+  return auth ? `Bearer ${auth.token}` : null;
 }
 
 interface OpcoesRequisicao {
@@ -59,17 +57,19 @@ interface OpcoesRequisicao {
   body?: unknown;
   params?: Params;
   signal?: AbortSignal;
+  /** Não envia o token (login). */
+  semAutenticacao?: boolean;
 }
 
 /**
  * Wrapper central de requisições HTTP para a Schedemy API.
- * - injeta o header Authorization (Basic Auth) quando houver sessão salva;
+ * - injeta o header Authorization (Bearer, token do login) quando houver sessão salva;
  * - serializa/desserializa JSON automaticamente;
  * - normaliza erros no formato ErrorResponseDTO do backend em uma ApiError.
  */
 export async function apiFetch<T = unknown>(
   path: string,
-  { method = "GET", body, params, signal }: OpcoesRequisicao = {}
+  { method = "GET", body, params, signal, semAutenticacao = false }: OpcoesRequisicao = {}
 ): Promise<T> {
   const url = new URL(path.startsWith("http") ? path : `${BASE_URL}${path}`);
   if (params) {
@@ -84,7 +84,7 @@ export async function apiFetch<T = unknown>(
   }
 
   const headers: Record<string, string> = { Accept: "application/json" };
-  const authHeader = buildAuthHeader();
+  const authHeader = semAutenticacao ? null : buildAuthHeader();
   if (authHeader) headers.Authorization = authHeader;
   if (body !== undefined) headers["Content-Type"] = "application/json";
 

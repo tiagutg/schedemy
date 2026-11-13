@@ -62,11 +62,29 @@ test("professor gerencia só a própria disponibilidade", async ({ page }) => {
   await expect(page.getByLabel("Professor / coordenador")).toBeDisabled();
 });
 
-test("sessão com senha que deixou de valer volta para o login", async ({ page }) => {
+test("o navegador guarda só o token, nunca a senha", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  const salvo = await page.evaluate(() => localStorage.getItem("schedemy.auth") as string);
+  expect(salvo).not.toContain(CONTAS.aluno.senha);
+  expect(JSON.parse(salvo)).toEqual(expect.objectContaining({ token: expect.any(String), expiraEm: expect.any(String) }));
+});
+
+test("sessão salva no formato antigo (com senha) é apagada", async ({ page }) => {
+  await page.goto("/login");
+  await page.evaluate(
+    ([email, senha]) => localStorage.setItem("schedemy.auth", JSON.stringify({ username: email, password: senha, usuarioId: null })),
+    [CONTAS.aluno.email, CONTAS.aluno.senha]
+  );
+  await page.goto("/agendamentos");
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(() => localStorage.getItem("schedemy.auth"))).toBeNull();
+});
+
+test("sessão com token que deixou de valer volta para o login", async ({ page }) => {
   await entrar(page, CONTAS.aluno);
   await page.evaluate(() => {
     const auth = JSON.parse(localStorage.getItem("schedemy.auth") as string);
-    localStorage.setItem("schedemy.auth", JSON.stringify({ ...auth, password: "errada" }));
+    localStorage.setItem("schedemy.auth", JSON.stringify({ ...auth, token: auth.token + "x" }));
   });
   await page.goto("/agendamentos");
   await expect(page).toHaveURL(/\/login$/);

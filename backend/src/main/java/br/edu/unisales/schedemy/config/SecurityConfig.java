@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.config;
 
 import static org.springframework.security.config.Customizer.withDefaults;
+import br.edu.unisales.schedemy.security.ConversorDeToken;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -14,7 +15,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 
 /**
- * Autenticacao (Basic Auth) e autorizacao por papel da Schedemy API.
+ * Autenticacao (token de acesso JWT, emitido em POST /api/v1/auth/login) e autorizacao por
+ * papel da Schedemy API. O token e validado pelo JwtConfig e convertido no usuario pelo
+ * ConversorDeToken (papel lido do banco a cada requisicao).
  *
  * As regras abaixo seguem o Documento de Definicao de Requisitos v3.1.0 (atores
  * citados nos RFs, RN 03, RN 06 e RNF 15) e sao as mesmas aplicadas no front-end
@@ -49,7 +52,8 @@ public class SecurityConfig {
 
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http, AccessDeniedHandler accessDeniedHandler,
-                                           AuthenticationEntryPoint naoAutenticado) throws Exception {
+                                           AuthenticationEntryPoint naoAutenticado,
+                                           ConversorDeToken conversorDeToken) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(withDefaults())
@@ -62,6 +66,8 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
+                        // Login: troca e-mail e senha pelo token de acesso.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
                         // --- Usuarios ---
                         // Todos leem o proprio cadastro (login) e o resumo para escolher convidados
@@ -122,7 +128,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().authenticated()
                 )
-                .httpBasic(basic -> basic.authenticationEntryPoint(naoAutenticado))
+                // Sem Basic Auth: a senha so trafega no login. Token ausente, invalido ou vencido -> 401 em JSON.
+                .oauth2ResourceServer(rs -> rs
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(conversorDeToken))
+                        .authenticationEntryPoint(naoAutenticado))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(naoAutenticado)
                         .accessDeniedHandler(accessDeniedHandler));
