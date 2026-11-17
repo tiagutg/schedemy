@@ -1,56 +1,113 @@
-import { useState } from "react";
-import { IconCheck, IconExternalLink, IconX } from "@tabler/icons-react";
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import {
+  IconCalendarPlus,
+  IconCalendarRepeat,
+  IconCopy,
+  IconCheck,
+  IconExternalLink,
+  IconPencil,
+  IconStar,
+  IconVideo,
+  IconX,
+} from "@tabler/icons-react";
 import Modal from "@/components/common/Modal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormActions from "@/components/common/FormActions";
 import Pill from "@/components/common/Pill";
-import { SelectField, TextAreaField } from "@/components/common/fields";
+import { TextAreaField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
 import { agendamentosApi } from "@/api/agendamentos";
+import { registrosMotivoApi } from "@/api/registrosMotivo";
 import type { ApiError } from "@/api/client";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
-import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora } from "@/utils/format";
-import type { Agendamento, Participante } from "@/types";
+import { rotularEnum } from "@/utils/domain";
+import { baixarIcs, situacaoDaReuniao } from "@/utils/reuniao";
+import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
+import type { Agendamento, Participante, RegistroMotivo } from "@/types";
 
 interface AgendamentoDetailModalProps {
   agendamento: Agendamento | null;
   onFechar: () => void;
   onAlterado: () => void;
+  /** Abre o formulário para editar, remarcar ou agendar de novo (RF 28) a partir deste agendamento. */
+  onAlterar?: (modo: "editar" | "remarcar" | "replicar", agendamento: Agendamento) => void;
 }
 
-export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado }: AgendamentoDetailModalProps) {
+export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado, onAlterar }: AgendamentoDetailModalProps) {
   const toast = useToast();
-  const { pode } = useAuth();
+  const navigate = useNavigate();
+  const { pode, perfilVinculado: eu } = useAuth();
   const [participanteRecusando, setParticipanteRecusando] = useState<Participante | null>(null);
   const [motivoRecusa, setMotivoRecusa] = useState("");
   const [respondendo, setRespondendo] = useState(false);
 
   const [modalCancelar, setModalCancelar] = useState(false);
-  const [idQuemCancela, setIdQuemCancela] = useState("");
   const [motivoCancelamento, setMotivoCancelamento] = useState("");
   const [cancelando, setCancelando] = useState(false);
 
   const [modalRemover, setModalRemover] = useState(false);
   const [removendo, setRemovendo] = useState(false);
 
+  // Histórico de motivos (cancelamentos, recusas e edições) registrado pela API (RF 11).
+  const [historico, setHistorico] = useState<RegistroMotivo[]>([]);
+  // Momento de referência para os prazos de edição/remarcação (a página recria o modal por agendamento).
+  const [agora] = useState(() => Date.now());
+  useEffect(() => {
+    if (!agendamento) return;
+    let cancelado = false;
+    registrosMotivoApi
+      .listarPorAgendamento(agendamento.id, { size: 50, sort: "criadoEm,desc" })
+      .then((p) => !cancelado && setHistorico(p.conteudo))
+      .catch(() => !cancelado && setHistorico([]));
+    return () => {
+      cancelado = true;
+    };
+  }, [agendamento]);
+
   if (!agendamento) return null;
   const a = agendamento;
   // Além do estado do agendamento, cada ação depende da permissão do perfil.
   const podeCancelar =
-    a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && pode("agendamentos.cancelar");
+    a.status !== "CANCELADO" && a.status !== "CONCLUIDO" && a.status !== "EM_ANDAMENTO" && pode("agendamentos.cancelar");
+  // Editar e remarcar são do organizador; recepção e administração podem fazer por ele.
+  const podeGerir = a.idOrganizador === eu?.id || pode("agendamentos.organizarPorOutros");
+  const horasAteReuniao = (new Date(`${a.dataReuniao}T${a.horarioInicio}`).getTime() - agora) / 3_600_000;
+  // RN 14: edição direta só de pendentes, com 24 h de antecedência. Fora disso, remarca-se
+  // (nova reunião ligada à original, que é cancelada — exige 1 h de antecedência, RN 05).
+  const podeEditar = podeGerir && a.status === "PENDENTE" && horasAteReuniao >= 24;
+  const podeRemarcar =
+    podeGerir &&
+    !podeEditar &&
+    ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
+    horasAteReuniao >= 1;
   // A remoção definitiva não consta nos casos de uso: fica restrita à administração.
   const podeRemover =
     (a.status === "PENDENTE" || a.status === "CANCELADO") && pode("agendamentos.remover");
-  // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador).
-  const podeResponder = pode("agendamentos.responder");
+  // RF 19: aceitar/recusar convite é do convidado (aluno, professor ou coordenador),
+  // e cada um responde só o próprio convite (a API não aceita responder por outra pessoa).
+  // A API só aceita resposta antes do início e enquanto a reunião não foi cancelada, iniciada ou concluída.
+  const podeResponderPor = (p: Participante) =>
+    pode("agendamentos.responder") &&
+    p.idUsuario === eu?.id &&
+    ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
+    horasAteReuniao > 0;
+  const situacao = situacaoDaReuniao(a, eu?.id);
+  const participo = a.participantes.some((p) => p.idUsuario === eu?.id);
+  // RF 28: quem participou (ou a recepção/administração) agenda de novo com os mesmos dados, em qualquer status.
+  const podeReplicar = pode("agendamentos.criar") && (participo || podeGerir);
+  // RF 24: o aluno participante avalia a reunião concluída.
+  const podeAvaliar = a.status === "CONCLUIDO" && participo && pode("avaliacoes.criar");
+  const podeExportar = ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) && horasAteReuniao > 0;
+  const linkSala = a.salaVirtual?.linkTeams;
 
   async function responder(participante: Participante, aceitar: boolean, motivo?: string) {
     setRespondendo(true);
     try {
       await agendamentosApi.responder(a.id, { idUsuario: participante.idUsuario, aceitar, motivo: motivo || null });
-      toast.sucesso(aceitar ? `${participante.nomeUsuario} aceitou o convite.` : `${participante.nomeUsuario} recusou o convite.`);
+      const quem = participante.idUsuario === eu?.id ? "Você" : participante.nomeUsuario;
+      toast.sucesso(aceitar ? `${quem} aceitou o convite.` : `${quem} recusou o convite.`);
       setParticipanteRecusando(null);
       setMotivoRecusa("");
       onAlterado();
@@ -62,12 +119,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   }
 
   async function confirmarCancelamento() {
-    if (!idQuemCancela) return toast.erro("Selecione quem está cancelando.");
+    if (!eu) return toast.erro("Não foi possível identificar o usuário logado.");
     if (!motivoCancelamento.trim()) return toast.erro("Informe o motivo do cancelamento.");
     setCancelando(true);
     try {
+      // O cancelamento é registrado em nome de quem está logado (RF 11).
       await agendamentosApi.cancelar(a.id, {
-        idUsuario: Number(idQuemCancela),
+        idUsuario: eu.id,
         motivo: motivoCancelamento,
         confirmar: true,
       });
@@ -101,7 +159,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
       <Modal aberto={!!agendamento} onFechar={onFechar} titulo={a.topico} subtitulo={`Agendamento #${a.id}`} largura="max-w-2xl">
         <div className="flex flex-col gap-5">
           <div className="flex flex-wrap items-center gap-2">
-            <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+            <Pill className={situacao.cor}>{situacao.rotulo}</Pill>
             <Pill className="bg-ink-100 text-ink-800">{rotularEnum(a.formato)}</Pill>
             <Pill className="bg-ink-100 text-ink-800">{a.duracaoMinutos} min</Pill>
           </div>
@@ -123,6 +181,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           </div>
 
+          {a.idAgendamentoOrigem && (
+            <p className="flex items-center gap-1.5 text-sm text-muted-foreground">
+              <IconCalendarRepeat className="size-4 shrink-0" />
+              Remarcação do agendamento #{a.idAgendamentoOrigem}
+            </p>
+          )}
+
           {a.resumo && (
             <div className="flex flex-col gap-1.5">
               <p className="text-sm font-medium">Resumo</p>
@@ -130,18 +195,51 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           )}
 
-          {a.salaVirtual && (
-            <div className="rounded-lg border p-3.5">
-              <p className="text-xs text-muted-foreground">Sala virtual</p>
-              <a
-                href={a.salaVirtual.linkTeams}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-1 flex items-center gap-1.5 truncate text-sm font-medium underline-offset-4 hover:underline"
-              >
-                <IconExternalLink className="size-4 shrink-0" />
-                <span className="truncate">{a.salaVirtual.linkTeams}</span>
-              </a>
+          {linkSala && (
+            <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3.5">
+              <div className="min-w-0 flex-1">
+                <p className="text-xs text-muted-foreground">Sala online</p>
+                <a
+                  href={linkSala}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-1 flex items-center gap-1.5 truncate text-sm underline-offset-4 hover:underline"
+                >
+                  <IconExternalLink className="size-4 shrink-0" />
+                  <span className="truncate">{linkSala}</span>
+                </a>
+              </div>
+              {situacao.rotulo !== "Cancelada" && a.status !== "CONCLUIDO" && (
+                <Button asChild size="sm">
+                  <a href={linkSala} target="_blank" rel="noreferrer">
+                    <IconVideo />
+                    Entrar na reunião
+                  </a>
+                </Button>
+              )}
+            </div>
+          )}
+          {!linkSala && a.formato !== "PRESENCIAL" && (
+            <p className="rounded-lg border border-dashed p-3.5 text-sm text-muted-foreground">
+              Reunião {a.formato === "HIBRIDO" ? "híbrida" : "on-line"} ainda sem link da sala. Combine o endereço com o
+              organizador.
+            </p>
+          )}
+
+          {(podeExportar || podeAvaliar) && (
+            <div className="flex flex-wrap gap-2">
+              {podeExportar && (
+                <Button variant="outline" size="sm" onClick={() => baixarIcs(a)}>
+                  <IconCalendarPlus />
+                  Adicionar ao calendário
+                </Button>
+              )}
+              {podeAvaliar && (
+                <Button size="sm" onClick={() => navigate(`/avaliacoes?avaliar=${a.id}`)}>
+                  <IconStar />
+                  Avaliar reunião
+                </Button>
+              )}
             </div>
           )}
 
@@ -151,11 +249,14 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               {a.participantes.map((p) => (
                 <li key={p.idUsuario} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-3.5 py-2.5">
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{p.nomeUsuario}</p>
+                    <p className="truncate text-sm font-medium">
+                      {p.nomeUsuario}
+                      {p.idUsuario === eu?.id && <span className="font-normal text-muted-foreground"> (você)</span>}
+                    </p>
                     <p className="text-xs text-muted-foreground">{rotularEnum(p.papel)}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
-                    {p.statusResposta === "PENDENTE" && a.status !== "CANCELADO" && podeResponder ? (
+                    {p.statusResposta === "PENDENTE" && a.status !== "CANCELADO" && podeResponderPor(p) ? (
                       <>
                         <Button
                           variant="outline"
@@ -199,11 +300,14 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
           {participanteRecusando && (
             <div className="flex flex-col gap-3 rounded-lg border border-destructive/30 bg-destructive/5 p-4">
               <p className="text-sm font-medium text-destructive">
-                Motivo da recusa de {participanteRecusando.nomeUsuario}
+                {participanteRecusando.idUsuario === eu?.id
+                  ? "Motivo da sua recusa"
+                  : `Motivo da recusa de ${participanteRecusando.nomeUsuario}`}
               </p>
               <TextAreaField
                 label="Justificativa"
                 required
+                maxLength={500}
                 value={motivoRecusa}
                 onChange={(e) => setMotivoRecusa(e.target.value)}
                 placeholder="Ex.: Conflito de horário"
@@ -224,6 +328,25 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           )}
 
+          {historico.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Histórico</p>
+              <ul className="divide-y rounded-lg border">
+                {historico.map((r) => (
+                  <li key={r.id} className="flex flex-col gap-0.5 px-3.5 py-2.5 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <span className="font-medium">
+                        {rotularEnum(r.tipoOperacao)} · {r.idUsuario === eu?.id ? "você" : r.nomeUsuario}
+                      </span>
+                      <span className="text-xs text-muted-foreground">{formatarDataHora(r.criadoEm)}</span>
+                    </div>
+                    <p className="text-muted-foreground">{r.justificativa}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <FormActions>
             {podeRemover && (
               <Button variant="destructive" onClick={() => setModalRemover(true)}>
@@ -235,6 +358,24 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
                 Cancelar agendamento
               </Button>
             )}
+            {podeEditar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("editar", a)}>
+                <IconPencil />
+                Editar
+              </Button>
+            )}
+            {podeRemarcar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
+                <IconCalendarRepeat />
+                Remarcar
+              </Button>
+            )}
+            {podeReplicar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("replicar", a)}>
+                <IconCopy />
+                Agendar de novo
+              </Button>
+            )}
             <Button variant="outline" onClick={onFechar}>
               Fechar
             </Button>
@@ -244,23 +385,17 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
 
       <Modal aberto={modalCancelar} onFechar={() => setModalCancelar(false)} titulo="Cancelar agendamento" largura="max-w-md">
         <div className="flex flex-col gap-4">
-          <SelectField
-            label="Quem está cancelando?"
-            required
-            placeholder="Selecione um participante…"
-            options={a.participantes.map((p) => ({ valor: p.idUsuario, rotulo: p.nomeUsuario }))}
-            value={idQuemCancela}
-            onChange={(e) => setIdQuemCancela(e.target.value)}
-          />
           <TextAreaField
             label="Motivo do cancelamento"
             required
+            maxLength={500}
             value={motivoCancelamento}
             onChange={(e) => setMotivoCancelamento(e.target.value)}
             placeholder="Ex.: Imprevisto pessoal"
           />
           <p className="text-sm text-muted-foreground">
-            O cancelamento exige confirmação e no mínimo 1 hora de antecedência em relação ao horário da reunião (RN 05).
+            O cancelamento fica registrado em seu nome e exige no mínimo 1 hora de antecedência em relação ao
+            horário da reunião.
           </p>
           <FormActions>
             <Button variant="outline" onClick={() => setModalCancelar(false)}>

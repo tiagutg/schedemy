@@ -1,10 +1,13 @@
-import { IconDotsVertical, IconLogout } from "@tabler/icons-react";
+import { Link } from "react-router-dom";
+import { IconDeviceDesktop, IconDotsVertical, IconLogout, IconMoon, IconSun, IconUserCircle } from "@tabler/icons-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -14,6 +17,7 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useTema, type Tema } from "@/hooks/useTema";
 
 interface NavUserProps {
   nome: string;
@@ -23,7 +27,8 @@ interface NavUserProps {
 }
 
 export function NavUser({ nome, descricao, iniciais, onSair }: NavUserProps) {
-  const { isMobile } = useSidebar();
+  const { isMobile, setOpenMobile } = useSidebar();
+  const { tema, definirTema } = useTema();
 
   return (
     <SidebarMenu>
@@ -61,6 +66,29 @@ export function NavUser({ nome, descricao, iniciais, onSair }: NavUserProps) {
                 </div>
               </div>
             </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem asChild>
+              <Link to="/perfil" onClick={() => setOpenMobile(false)}>
+                <IconUserCircle />
+                Meu perfil
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Tema</DropdownMenuLabel>
+            <DropdownMenuRadioGroup value={tema} onValueChange={(valor) => definirTema(valor as Tema)}>
+              <DropdownMenuRadioItem value="claro">
+                <IconSun />
+                Claro
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="escuro">
+                <IconMoon />
+                Escuro
+              </DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="sistema">
+                <IconDeviceDesktop />
+                Igual ao sistema
+              </DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={onSair}>
               <IconLogout />

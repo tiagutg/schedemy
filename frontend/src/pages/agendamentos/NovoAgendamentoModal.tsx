@@ -7,46 +7,156 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { agendamentosApi } from "@/api/agendamentos";
 import { duracoesApi } from "@/api/duracoes";
 import type { ApiError } from "@/api/client";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
-import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO } from "@/utils/domain";
-import { hojeISO } from "@/utils/format";
-import type { Duracao } from "@/types";
+import { useAuth } from "@/context/AuthContext";
+import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
+import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import { proximoDiaUtilISO } from "@/utils/reuniao";
+import type { Agendamento, Duracao } from "@/types";
+import AgendaDocentes from "./AgendaDocentes";
+import AvisosAgendamento from "./AvisosAgendamento";
 
-const FORM_VAZIO = {
+// Nasce no próximo dia útil: hoje, o horário padrão muitas vezes já passou.
+const formVazio = () => ({
   idOrganizador: "",
   idDuracao: "",
-  dataReuniao: hojeISO(),
+  dataReuniao: proximoDiaUtilISO(),
   horarioInicio: "10:00",
   formato: "PRESENCIAL",
   topico: "",
   resumo: "",
-};
+  linkReuniao: "",
+});
+
+// Duração sugerida num agendamento novo, se existir.
+const DURACAO_PADRAO_MINUTOS = 30;
+
+// RN 16: agendamentos com até 30 dias de antecedência.
+const MAX_DIAS_ANTECEDENCIA = 30;
+
+function dataMaxima(): string {
+  const d = new Date();
+  d.setDate(d.getDate() + MAX_DIAS_ANTECEDENCIA);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export type ModoAgendamento = "criar" | "editar" | "remarcar" | "replicar";
 
 interface NovoAgendamentoModalProps {
   aberto: boolean;
   onFechar: () => void;
-  onCriado?: () => void;
-  criarAgendamento: (payload: unknown) => Promise<unknown>;
+  onSalvo?: (agendamento: Agendamento) => void;
+  /**
+   * criar: novo agendamento; editar: altera um agendamento PENDENTE (RN 14);
+   * remarcar: cria um novo ligado ao original e cancela o original (RF 08/09);
+   * replicar: "Agendar de novo" (RF 28) — cria um agendamento novo com os dados do anterior,
+   * sem cancelar nem alterar nada.
+   */
+  modo?: ModoAgendamento;
+  base?: Agendamento | null;
 }
 
-export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criarAgendamento }: NovoAgendamentoModalProps) {
-  const { usuarios } = useUsuariosOptions();
+// RN 03: recepção e administração não participam das reuniões, só agendam para outros.
+const PODEM_PARTICIPAR = ["ALUNO", "PROFESSOR", "COORDENADOR"];
+const DOCENTES = ["PROFESSOR", "COORDENADOR"];
+
+const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando: string }> = {
+  criar: { titulo: "Novo agendamento", botao: "Criar agendamento", salvando: "Criando…" },
+  editar: { titulo: "Editar agendamento", botao: "Salvar alterações", salvando: "Salvando…" },
+  remarcar: { titulo: "Remarcar reunião", botao: "Remarcar", salvando: "Remarcando…" },
+  replicar: { titulo: "Agendar de novo", botao: "Criar agendamento", salvando: "Criando…" },
+};
+
+/**
+ * RF 28 — formulário de "Agendar de novo": mesmo tópico, formato, resumo, link e participantes
+ * da reunião anterior, no próximo dia útil e no mesmo horário. Quem replica vira o organizador
+ * (salvo recepção/administração, que mantêm o organizador original) e os demais envolvidos,
+ * inclusive o organizador anterior, viram convidados.
+ */
+function formReplicado(base: Agendamento, idOrganizador: string) {
+  return {
+    idOrganizador,
+    idDuracao: "",
+    dataReuniao: proximoDiaUtilISO(),
+    horarioInicio: formatarHora(base.horarioInicio),
+    formato: base.formato,
+    topico: base.topico,
+    resumo: base.resumo ?? "",
+    linkReuniao: base.salaVirtual?.linkTeams ?? "",
+  };
+}
+
+function convidadosReplicados(base: Agendamento, idOrganizador: string): string[] {
+  const ids = [String(base.idOrganizador), ...base.participantes.map((p) => String(p.idUsuario))];
+  return [...new Set(ids)].filter((id) => id !== idOrganizador);
+}
+
+/** Compara nomes sem diferenciar maiúsculas e acentos ("romulo" acha "Rômulo"). */
+function normalizar(texto: string): string {
+  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+}
+
+export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
+  const { perfilVinculado: eu, pode } = useAuth();
+  // Na criação (e ao agendar de novo), quem não agenda para outros é sempre o organizador;
+  // na edição e na remarcação o organizador é o do agendamento original.
+  const escolheOrganizador = (modo === "criar" || modo === "replicar") && pode("agendamentos.organizarPorOutros");
+  const organizadorReplicado = base && (escolheOrganizador ? String(base.idOrganizador) : String(eu?.id ?? ""));
+  const { usuarios: todos } = useUsuariosOptions();
+  const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
-  const [form, setForm] = useState(FORM_VAZIO);
-  const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>([]);
+  // O formulário nasce preenchido; a página recria o componente (key) a cada abertura.
+  const [form, setForm] = useState(() =>
+    modo === "replicar" && base
+      ? formReplicado(base, organizadorReplicado ?? "")
+      : base
+      ? {
+          idOrganizador: String(base.idOrganizador),
+          idDuracao: "",
+          dataReuniao: base.dataReuniao,
+          horarioInicio: formatarHora(base.horarioInicio),
+          formato: base.formato,
+          topico: base.topico,
+          resumo: base.resumo ?? "",
+          linkReuniao: "",
+        }
+      : { ...formVazio(), idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") }
+  );
+  const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>(() =>
+    modo === "replicar" && base
+      ? convidadosReplicados(base, organizadorReplicado ?? "")
+      : base
+      ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
+  );
+  const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
+  const [buscaConvidado, setBuscaConvidado] = useState("");
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
-    if (aberto) {
-      duracoesApi.listar(true).then(setDuracoes).catch(() => setDuracoes([]));
-      setForm(FORM_VAZIO);
-      setConvidadosSelecionados([]);
-      setErro("");
-    }
+    if (!aberto) return;
+    let cancelado = false;
+    duracoesApi
+      .listar(true)
+      .then((lista) => !cancelado && setDuracoes(lista))
+      .catch(() => !cancelado && setDuracoes([]));
+    return () => {
+      cancelado = true;
+    };
   }, [aberto]);
+
+  // A resposta do agendamento traz só os minutos; sem escolha explícita, casa com a lista de durações.
+  const idDuracao =
+    form.idDuracao ||
+    String(
+      (base
+        ? duracoes.find((d) => d.minutos === base.duracaoMinutos)
+        : (duracoes.find((d) => d.minutos === DURACAO_PADRAO_MINUTOS) ?? duracoes[0])
+      )?.id ?? ""
+    );
 
   function alternarConvidado(id: string) {
     setConvidadosSelecionados((atual) =>
@@ -54,30 +164,95 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     );
   }
 
-  const candidatosConvidado = usuarios.filter((u) => String(u.id) !== form.idOrganizador);
+  // Professores e coordenadores primeiro (toda reunião precisa de um), depois por nome.
+  const candidatosConvidado = form.idOrganizador
+    ? usuarios
+        .filter((u) => String(u.id) !== form.idOrganizador)
+        .sort(
+          (a, b) =>
+            Number(DOCENTES.includes(b.tipoUsuario)) - Number(DOCENTES.includes(a.tipoUsuario)) ||
+            a.nome.localeCompare(b.nome, "pt-BR")
+        )
+    : [];
+  const termoConvidado = normalizar(buscaConvidado.trim());
+  const convidadosVisiveis = termoConvidado
+    ? candidatosConvidado.filter(
+        // RF 33: busca por nome ou RA.
+        (u) =>
+          normalizar(u.nome).includes(termoConvidado) ||
+          normalizar(u.matriculaRa ?? "").includes(termoConvidado) ||
+          convidadosSelecionados.includes(String(u.id))
+      )
+    : candidatosConvidado;
+  const nomesSelecionados = candidatosConvidado.filter((u) => convidadosSelecionados.includes(String(u.id)));
+  const duracaoMinutos = duracoes.find((d) => String(d.id) === idDuracao)?.minutos ?? 0;
+  const organizadorUsuario = todos.find((u) => String(u.id) === form.idOrganizador) ?? null;
+  // RF 14: o horário precisa estar livre para todos os envolvidos (organizador e convidados).
+  const envolvidos = [
+    ...(organizadorUsuario ? [organizadorUsuario] : []),
+    ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && String(u.id) !== form.idOrganizador),
+  ];
+  const docentesEnvolvidos = envolvidos
+    .filter((u) => DOCENTES.includes(u.tipoUsuario))
+    .map((u) => ({ id: u.id, nome: u.nome }));
+  // Os avisos antecipam o choque de horário de quem não é docente e o limite de agendamentos do aluno.
+  const pessoasSemPainel = [
+    ...(organizadorUsuario ? [organizadorUsuario] : []),
+    ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && !DOCENTES.includes(u.tipoUsuario)),
+  ].map((u) => ({ id: u.id, nome: u.nome }));
+  const textos = TITULOS[modo];
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!form.idOrganizador) return setErro("Selecione o organizador do agendamento.");
-    if (!form.idDuracao) return setErro("Selecione a duração da reunião.");
+    if (!idDuracao) return setErro("Selecione a duração da reunião.");
     if (convidadosSelecionados.length === 0) return setErro("Selecione ao menos um convidado.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
+    if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
+    if (form.formato !== "PRESENCIAL" && form.linkReuniao.trim() && !/^https?:\/\/\S+$/.test(form.linkReuniao.trim())) {
+      return setErro("O link da reunião deve começar com http:// ou https://.");
+    }
 
     setSalvando(true);
     setErro("");
+    // Ao agendar de novo, quem saiu da lista (inativo, por exemplo) não vai junto.
+    const idsConvidados =
+      modo === "replicar"
+        ? convidadosSelecionados.filter((id) => candidatosConvidado.some((u) => String(u.id) === id))
+        : convidadosSelecionados;
+    if (idsConvidados.length === 0) {
+      setSalvando(false);
+      return setErro("Selecione ao menos um convidado.");
+    }
+    const payload = {
+      idOrganizador: Number(form.idOrganizador),
+      idsConvidados: idsConvidados.map(Number),
+      idDuracao: Number(idDuracao),
+      dataReuniao: form.dataReuniao,
+      horarioInicio: `${form.horarioInicio}:00`,
+      formato: form.formato,
+      topico: form.topico,
+      resumo: form.resumo || null,
+      idAgendamentoOrigem: modo === "remarcar" ? base?.id : undefined,
+      linkReuniao: form.formato !== "PRESENCIAL" && form.linkReuniao.trim() ? form.linkReuniao.trim() : null,
+    };
     try {
-      const payload = {
-        idOrganizador: Number(form.idOrganizador),
-        idsConvidados: convidadosSelecionados.map(Number),
-        idDuracao: Number(form.idDuracao),
-        dataReuniao: form.dataReuniao,
-        horarioInicio: `${form.horarioInicio}:00`,
-        formato: form.formato,
-        topico: form.topico,
-        resumo: form.resumo || null,
-      };
-      await criarAgendamento(payload);
-      onCriado?.();
+      let salvo: Agendamento;
+      if (modo === "editar" && base) {
+        salvo = await agendamentosApi.atualizar(base.id, payload);
+      } else if (modo === "remarcar" && base) {
+        // Remarcação: a API cancela a original e cria a nova numa só transação; se a nova
+        // for recusada, a original não muda. O organizador e o vínculo vêm da original.
+        const { idOrganizador: _organizador, idAgendamentoOrigem: _origem, ...dadosDaNova } = payload;
+        salvo = await agendamentosApi.remarcar(base.id, {
+          ...dadosDaNova,
+          motivo: motivoRemarcacao.trim(),
+          confirmar: true,
+        });
+      } else {
+        salvo = await agendamentosApi.criar(payload);
+      }
+      onSalvo?.(salvo);
     } catch (e2) {
       setErro((e2 as ApiError).message);
     } finally {
@@ -85,44 +260,90 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
     }
   }
 
+  const subtitulo =
+    modo === "criar" || modo === "replicar"
+      ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade de todos os envolvidos."
+      : modo === "editar"
+        ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
+        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
+
   return (
-    <Modal aberto={aberto} onFechar={onFechar} titulo="Novo agendamento" subtitulo="RN 01 a RN 18 são validadas pelo back-end." largura="max-w-2xl">
+    <Modal aberto={aberto} onFechar={onFechar} titulo={textos.titulo} subtitulo={subtitulo} largura="max-w-2xl">
       <form onSubmit={salvar} className="flex flex-col gap-4">
         <FieldGrid>
-          <SelectField
-            label="Organizador"
-            required
-            placeholder="Selecione…"
-            options={usuarios.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${u.tipoUsuario})` }))}
-            value={form.idOrganizador}
-            onChange={(e) => setForm({ ...form, idOrganizador: e.target.value })}
-          />
+          {escolheOrganizador ? (
+            <SelectField
+              label="Organizador"
+              required
+              placeholder="Selecione…"
+              options={usuarios.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              value={form.idOrganizador}
+              onChange={(e) => {
+                setForm({ ...form, idOrganizador: e.target.value });
+                setConvidadosSelecionados((atual) => atual.filter((c) => c !== e.target.value));
+              }}
+            />
+          ) : (
+            <TextField
+              label="Organizador"
+              value={(modo === "replicar" ? eu?.nome : base?.nomeOrganizador) ?? eu?.nome ?? ""}
+              disabled
+            />
+          )}
           <SelectField
             label="Duração"
             required
             placeholder="Selecione…"
             options={duracoes.map((d) => ({ valor: d.id, rotulo: `${d.minutos} minutos` }))}
-            value={form.idDuracao}
+            value={idDuracao}
             onChange={(e) => setForm({ ...form, idDuracao: e.target.value })}
           />
         </FieldGrid>
 
         <div className="flex flex-col gap-2">
-          <Label>
-            Convidados <span className="text-destructive">*</span>
+          <Label htmlFor="busca-convidado">
+            Com quem é a reunião? <span className="text-destructive">*</span>
           </Label>
+          {candidatosConvidado.length > 0 && (
+            <Input
+              id="busca-convidado"
+              type="search"
+              placeholder="Buscar pelo nome ou RA…"
+              value={buscaConvidado}
+              onChange={(e) => setBuscaConvidado(e.target.value)}
+            />
+          )}
+          {nomesSelecionados.length > 0 && (
+            <div className="flex flex-wrap gap-1.5" aria-label="Convidados escolhidos">
+              {nomesSelecionados.map((u) => (
+                <button
+                  key={u.id}
+                  type="button"
+                  onClick={() => alternarConvidado(String(u.id))}
+                  className="inline-flex items-center gap-1 rounded-full bg-brand-100 px-2.5 py-1 text-xs font-medium text-brand-700 hover:bg-brand-200"
+                  aria-label={`Remover ${u.nome}`}
+                >
+                  {u.nome}
+                  <span aria-hidden="true">×</span>
+                </button>
+              ))}
+            </div>
+          )}
           <div className="max-h-44 overflow-y-auto rounded-lg border p-1">
             {candidatosConvidado.length === 0 && (
               <p className="p-2 text-xs text-muted-foreground">Selecione o organizador primeiro.</p>
             )}
-            {candidatosConvidado.map((u) => (
+            {candidatosConvidado.length > 0 && convidadosVisiveis.length === 0 && (
+              <p className="p-2 text-xs text-muted-foreground">Ninguém encontrado com esse nome.</p>
+            )}
+            {convidadosVisiveis.map((u) => (
               <label key={u.id} className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-muted">
                 <Checkbox
                   checked={convidadosSelecionados.includes(String(u.id))}
                   onCheckedChange={() => alternarConvidado(String(u.id))}
                 />
                 <span className="flex-1 text-sm">{u.nome}</span>
-                <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{u.tipoUsuario}</Pill>
+                <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>
               </label>
             ))}
           </div>
@@ -137,6 +358,8 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             <Input
               id="novo-data"
               type="date"
+              min={hojeISO()}
+              max={dataMaxima()}
               value={form.dataReuniao}
               onChange={(e) => setForm({ ...form, dataReuniao: e.target.value })}
               required
@@ -147,6 +370,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             <Input
               id="novo-horario"
               type="time"
+              step={300}
               value={form.horarioInicio}
               onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
               required
@@ -155,11 +379,57 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
           <SelectField
             label="Formato"
             required
-            options={FORMATOS_REUNIAO}
+            options={FORMATOS_REUNIAO.map((f) => ({ valor: f, rotulo: rotularEnum(f) }))}
             value={form.formato}
             onChange={(e) => setForm({ ...form, formato: e.target.value })}
           />
         </FieldGrid>
+
+        {docentesEnvolvidos.length > 0 ? (
+          <AgendaDocentes
+            docentes={docentesEnvolvidos}
+            idsEnvolvidos={envolvidos.map((u) => u.id)}
+            idDuracao={idDuracao}
+            dataISO={form.dataReuniao}
+            duracaoMinutos={duracaoMinutos}
+            horario={form.horarioInicio}
+            ignorarAgendamentoId={modo === "editar" ? base?.id : null}
+            onEscolherHorario={(horarioInicio) => setForm((atual) => ({ ...atual, horarioInicio }))}
+            onEscolherData={(dataReuniao, horarioInicio) => setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }))}
+            idOrganizador={organizadorUsuario?.id ?? null}
+            onRemoverConvidado={(id) => setConvidadosSelecionados((atual) => atual.filter((c) => c !== String(id)))}
+          />
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Convide um professor ou coordenador para ver os horários livres.
+          </p>
+        )}
+
+        <AvisosAgendamento
+          pessoas={pessoasSemPainel}
+          organizador={
+            organizadorUsuario && {
+              id: organizadorUsuario.id,
+              ehAluno: organizadorUsuario.tipoUsuario === "ALUNO",
+              ehEu: organizadorUsuario.id === eu?.id,
+            }
+          }
+          dataISO={form.dataReuniao}
+          horario={form.horarioInicio}
+          duracaoMinutos={duracaoMinutos}
+          ignorarAgendamentoId={modo === "editar" ? base?.id : null}
+          verificarLimite={modo !== "editar"}
+        />
+
+        {form.formato !== "PRESENCIAL" && (
+          <TextField
+            label="Link da reunião (opcional)"
+            type="url"
+            placeholder="https://meet.google.com/… ou link do Teams"
+            value={form.linkReuniao}
+            onChange={(e) => setForm({ ...form, linkReuniao: e.target.value })}
+          />
+        )}
 
         <TextField
           label="Tópico"
@@ -174,6 +444,16 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
           value={form.resumo}
           onChange={(e) => setForm({ ...form, resumo: e.target.value })}
         />
+        {modo === "remarcar" && (
+          <TextAreaField
+            label="Motivo da remarcação"
+            required
+            placeholder="Ex.: Conflito com prova"
+            maxLength={400}
+            value={motivoRemarcacao}
+            onChange={(e) => setMotivoRemarcacao(e.target.value)}
+          />
+        )}
 
         {erro && (
           <p className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm text-destructive">{erro}</p>
@@ -184,7 +464,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onCriado, criar
             Cancelar
           </Button>
           <Button type="submit" disabled={salvando}>
-            {salvando ? "Criando…" : "Criar agendamento"}
+            {salvando ? textos.salvando : textos.botao}
           </Button>
         </FormActions>
       </form>

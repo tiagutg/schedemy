@@ -24,11 +24,15 @@ public record UsuarioRequestDTO(
         @Size(max = 150)
         String email,
 
+        @Schema(example = "Senha123@")
+        @Size(min = 6, max = 100, message = "senha deve ter entre 6 e 100 caracteres")
+        String senha, //
+
         @Schema(example = "2799989999")
         @Pattern(regexp = "^$|^[0-9]{10,20}$", message = "telefoneWhatsapp deve conter apenas numeros (10 a 20 digitos)")
         String telefoneWhatsapp,
 
-        @Schema(example = "USUARIO")
+        @Schema(description = "Perfil: ADMIN, ALUNO, PROFESSOR, COORDENADOR ou RECEPCIONISTA", example = "ALUNO")
         @NotNull(message = "tipoUsuario e obrigatorio")
         TipoUsuario tipoUsuario,
 

@@ -13,7 +13,7 @@ import { useAuth } from "@/context/AuthContext";
 import { ROTULOS_PERFIL } from "@/utils/permissoes";
 import { NavMain } from "./NavMain";
 import { NavUser } from "./NavUser";
-import { ITENS_GESTAO, ITENS_NAV } from "./navegacao";
+import { ITENS_AGENDA, ITENS_CONFIGURACAO, ITENS_NAV } from "./navegacao";
 
 type AppSidebarProps = ComponentProps<typeof Sidebar> & {
   onSair: () => void;
@@ -23,6 +23,13 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
   const { auth, perfilVinculado, perfil, pode } = useAuth();
 
   const visivel = (item: { permissao: string | null }) => !item.permissao || pode(item.permissao);
+
+  // Iniciais do primeiro e do último nome; sem cadastro, as duas primeiras letras do login.
+  const partesNome = perfilVinculado?.nome?.trim().split(/\s+/) ?? [];
+  const iniciais =
+    partesNome.length > 1
+      ? partesNome[0][0] + partesNome[partesNome.length - 1][0]
+      : (partesNome[0] || auth?.email || "").slice(0, 2);
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -40,13 +47,14 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain itens={ITENS_NAV.filter(visivel)} criarAgendamento={pode("agendamentos.criar")} />
-        <NavMain itens={ITENS_GESTAO.filter(visivel)} rotulo="Gestão" />
+        <NavMain itens={ITENS_AGENDA.filter(visivel)} rotulo="Minha agenda" />
+        <NavMain itens={ITENS_CONFIGURACAO.filter(visivel)} rotulo="Configurações" />
       </SidebarContent>
       <SidebarFooter>
         <NavUser
-          nome={perfilVinculado?.nome || auth?.username || ""}
+          nome={perfilVinculado?.nome || auth?.email || ""}
           descricao={perfil ? ROTULOS_PERFIL[perfil] || perfil : undefined}
-          iniciais={auth?.username?.slice(0, 2).toUpperCase() ?? ""}
+          iniciais={iniciais.toUpperCase()}
           onSair={onSair}
         />
       </SidebarFooter>

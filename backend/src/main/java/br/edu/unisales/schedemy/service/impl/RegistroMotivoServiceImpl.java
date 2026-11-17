@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
@@ -26,6 +28,7 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
     private final RegistroMotivoMapper registroMotivoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public RegistroMotivoResponseDTO criar(RegistroMotivoRequestDTO dto) {
@@ -33,6 +36,9 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Agendamento", dto.idAgendamento()));
         Usuario usuario = usuarioRepository.findById(dto.idUsuario())
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Usuario", dto.idUsuario()));
+
+        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode registrar motivos em seu proprio nome.");
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
 
         RegistroMotivo entidade = registroMotivoMapper.paraEntidade(dto, agendamento, usuario);
         entidade = registroMotivoRepository.save(entidade);
@@ -44,12 +50,16 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
     public RegistroMotivoResponseDTO buscarPorId(Long id) {
         RegistroMotivo entidade = registroMotivoRepository.findById(id)
                 .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("RegistroMotivo", id));
+        usuarioAutenticado.exigirParticipanteOuGestor(entidade.getAgendamento());
         return registroMotivoMapper.paraResponseDTO(entidade);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<RegistroMotivoResponseDTO> listarPorAgendamento(Long agendamentoId, Pageable pageable) {
+        Agendamento agendamento = agendamentoRepository.findById(agendamentoId)
+                .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Agendamento", agendamentoId));
+        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
         return registroMotivoRepository.findByAgendamentoId(agendamentoId, pageable)
                 .map(registroMotivoMapper::paraResponseDTO);
     }

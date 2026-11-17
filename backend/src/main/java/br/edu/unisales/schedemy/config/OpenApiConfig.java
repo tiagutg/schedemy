@@ -1,10 +1,10 @@
 package br.edu.unisales.schedemy.config;
 
 import io.swagger.v3.oas.annotations.OpenAPIDefinition;
-import io.swagger.v3.oas.annotations.enums.SecuritySchemeIn;
 import io.swagger.v3.oas.annotations.info.Contact;
 import io.swagger.v3.oas.annotations.info.Info;
 import io.swagger.v3.oas.annotations.info.License;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.security.SecurityScheme;
 import io.swagger.v3.oas.annotations.servers.Server;
 import org.springframework.context.annotation.Configuration;
@@ -23,13 +23,15 @@ import org.springframework.context.annotation.Configuration;
         ),
         servers = {
                 @Server(url = "/", description = "Servidor local")
-        }
+        },
+        security = @SecurityRequirement(name = "bearerAuth")
 )
+// No Swagger: chame POST /api/v1/auth/login, copie o "token" e cole em "Authorize".
 @SecurityScheme(
-        name = "basicAuth",
+        name = "bearerAuth",
         type = io.swagger.v3.oas.annotations.enums.SecuritySchemeType.HTTP,
-        scheme = "basic",
-        in = SecuritySchemeIn.HEADER
+        scheme = "bearer",
+        bearerFormat = "JWT"
 )
 public class OpenApiConfig {
 }

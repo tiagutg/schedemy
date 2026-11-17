@@ -1,11 +1,13 @@
 import { Toaster as Sonner, type ToasterProps } from "sonner"
 import { IconCircleCheck, IconInfoCircle, IconAlertTriangle, IconAlertOctagon, IconLoader } from "@tabler/icons-react"
+import { useTema } from "@/hooks/useTema"
 
-// O app usa apenas o tema claro, então o Toaster não depende de next-themes.
+// O tema vem do useTema do app, então o Toaster não depende de next-themes.
 const Toaster = ({ ...props }: ToasterProps) => {
+  const { escuro } = useTema()
   return (
     <Sonner
-      theme="light"
+      theme={escuro ? "dark" : "light"}
       className="toaster group"
       icons={{
         success: (

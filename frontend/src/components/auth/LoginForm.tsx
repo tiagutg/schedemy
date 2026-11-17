@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { useAuth, CONTAS_PADRAO } from "@/context/AuthContext";
+import { useAuth } from "@/context/AuthContext";
 import { useToast } from "@/context/ToastContext";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -25,11 +25,6 @@ export default function LoginForm({ className = "" }: { className?: string }) {
     if (ok) navigate(local.state?.de || "/", { replace: true });
   }
 
-  function usarConta(conta: (typeof CONTAS_PADRAO)[number]) {
-    setIdentificador(conta.usuario);
-    setSenha(conta.senha);
-  }
-
   return (
     <form onSubmit={aoSubmeter} className={cn("flex flex-col gap-6", className)}>
       <div className="flex flex-col items-center gap-1 text-center">
@@ -44,9 +39,8 @@ export default function LoginForm({ className = "" }: { className?: string }) {
           <Label htmlFor="email">E-mail institucional</Label>
           <Input
             id="email"
-            type="text"
+            type="email"
             autoComplete="username"
-            inputMode="email"
             value={identificador}
             onChange={(e) => setIdentificador(e.target.value)}
             placeholder="nome.sobrenome@instituicao.edu.br"
@@ -99,30 +93,11 @@ export default function LoginForm({ className = "" }: { className?: string }) {
         </Button>
 
         <p className="text-center text-sm text-muted-foreground">
-          Não tem uma conta?{" "}
+          Não tem acesso?{" "}
           <Link to="/cadastro" className="font-medium text-brand-600 underline underline-offset-4">
-            Cadastre-se
+            Saiba como obter
           </Link>
         </p>
-      </div>
-
-      {/* Atalhos de acesso usados no dia a dia: ficam sempre visiveis. */}
-      <div className="flex flex-col gap-2 border-t pt-4">
-        <p className="text-center text-xs font-medium text-muted-foreground">Contas de teste</p>
-        <div className="flex flex-wrap justify-center gap-1.5">
-          {CONTAS_PADRAO.map((conta) => (
-            <Button
-              key={conta.usuario}
-              type="button"
-              variant="outline"
-              size="xs"
-              onClick={() => usarConta(conta)}
-              title={conta.papel}
-            >
-              {conta.usuario}
-            </Button>
-          ))}
-        </div>
       </div>
     </form>
   );

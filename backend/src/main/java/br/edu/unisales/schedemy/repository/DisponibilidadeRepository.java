@@ -7,10 +7,30 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalTime;
 import java.util.List;
 
 public interface DisponibilidadeRepository extends JpaRepository<Disponibilidade, Long> {
     List<Disponibilidade> findByUsuarioIdAndAtivoTrue(Long usuarioId);
+
+    /**
+     * Janelas ativas do mesmo docente e dia que se sobrepoem a [inicio, fim). Janelas que so encostam
+     * (08:00-12:00 e 12:00-14:00) nao contam. idIgnorado exclui a propria janela na edicao (-1 na criacao).
+     */
+    @Query("""
+            SELECT COUNT(d) > 0 FROM Disponibilidade d
+            WHERE d.usuario.id = :usuarioId
+              AND d.diaSemana = :diaSemana
+              AND d.ativo = true
+              AND d.id <> :idIgnorado
+              AND d.horarioInicio < :fim
+              AND d.horarioFim > :inicio
+            """)
+    boolean existeSobreposicao(@Param("usuarioId") Long usuarioId,
+                               @Param("diaSemana") Integer diaSemana,
+                               @Param("inicio") LocalTime inicio,
+                               @Param("fim") LocalTime fim,
+                               @Param("idIgnorado") Long idIgnorado);
 
     @Query("""
             SELECT d FROM Disponibilidade d

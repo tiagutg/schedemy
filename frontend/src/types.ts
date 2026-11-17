@@ -17,7 +17,7 @@ export interface Pagina<T> {
   ultima: boolean;
 }
 
-export type TipoUsuario = "ALUNO" | "PROFESSOR" | "COORDENADOR" | "RECEPCIONISTA";
+export type TipoUsuario = "ADMIN" | "ALUNO" | "PROFESSOR" | "COORDENADOR" | "RECEPCIONISTA";
 
 export interface Usuario {
   id: number;
@@ -30,6 +30,9 @@ export interface Usuario {
   departamento?: string | null;
   ativo: boolean;
 }
+
+/** Dados mínimos de um usuário (`GET /usuarios/resumo`), sem contato — RNF 18. */
+export type UsuarioResumo = Pick<Usuario, "id" | "nome" | "tipoUsuario" | "matriculaRa" | "departamento" | "ativo">;
 
 export interface Participante {
   idUsuario: number;
@@ -47,10 +50,21 @@ export interface Agendamento {
   horarioFim?: string | null;
   formato: string;
   status: string;
+  idOrganizador: number;
   nomeOrganizador: string;
   duracaoMinutos?: number;
+  /** Agendamento original, quando este é uma remarcação. */
+  idAgendamentoOrigem?: number | null;
   participantes: Participante[];
   salaVirtual?: { linkTeams: string } | null;
+  criadoEm?: string;
+}
+
+/** RF 14: horários de início em que todos os envolvidos estão livres ("HH:mm:ss"). */
+export interface HorariosLivres {
+  data: string;
+  duracaoMinutos: number;
+  horarios: string[];
 }
 
 export interface Duracao {
@@ -92,17 +106,26 @@ export interface Avaliacao {
 
 export interface Notificacao {
   id: number;
+  idUsuario: number;
+  nomeUsuario: string;
   mensagem: string;
   tipoEvento: string;
   canalEnvio: string;
-  idAgendamento: number;
+  idAgendamento?: number | null;
+  /** Canal SISTEMA: PENDENTE = não lida, ENVIADO = lida. */
   statusEnvio: string;
+  enviadoEm?: string | null;
   criadoEm: string;
 }
 
 export interface RegistroMotivo {
   id: number;
-  [campo: string]: unknown;
+  idAgendamento: number;
+  idUsuario: number;
+  nomeUsuario: string;
+  tipoOperacao: "CANCELAMENTO" | "SOLICITACAO_EDICAO" | "RECUSA_AGENDAMENTO" | "RECUSA_REMARCACAO" | string;
+  justificativa: string;
+  criadoEm: string;
 }
 
 /** Corpo padronizado de erro da API (ErrorResponseDTO). */

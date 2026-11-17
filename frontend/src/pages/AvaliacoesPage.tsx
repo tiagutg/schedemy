@@ -1,5 +1,7 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { IconPlus } from "@tabler/icons-react";
+import { agendamentosApi } from "@/api/agendamentos";
 import { avaliacoesApi } from "@/api/avaliacoes";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
@@ -13,16 +15,20 @@ import Modal from "@/components/common/Modal";
 import EmptyState from "@/components/common/EmptyState";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
-import { FieldError, SelectField, TextField, TextAreaField } from "@/components/common/fields";
+import { FieldError, SelectField, TextAreaField } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
-import { formatarDataHora } from "@/utils/format";
-import type { Avaliacao, Pagina, Params } from "@/types";
+import { Estrelas, EscolhaDeEstrelas } from "@/components/common/Estrelas";
+import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
+import type { Agendamento, Avaliacao, Pagina, Params } from "@/types";
 
 export default function AvaliacoesPage() {
   const toast = useToast();
-  const { pode } = useAuth();
+  const { pode, perfilVinculado: eu } = useAuth();
   const { usuarios } = useUsuariosOptions("ALUNO");
-  const [alunoId, setAlunoId] = useState("");
+  // O aluno vê e registra as próprias avaliações; docência e administração escolhem o aluno.
+  const verTodas = pode("avaliacoes.verTodas");
+  const [alunoEscolhido, setAlunoEscolhido] = useState("");
+  const alunoId = verTodas ? alunoEscolhido : String(eu?.id ?? "");
 
   const buscar = useCallback(
     (params: Params) =>
@@ -33,6 +39,26 @@ export default function AvaliacoesPage() {
   );
   const { pagina, linhas, carregando, setPaginaAtual, recarregar } = usePaginatedList(buscar, { ordenarPor: "criadoEm,desc" });
 
+  // Detalhes das reuniões avaliadas, para mostrar tópico e data em vez do número.
+  // Busca cada reunião da página (quem vê a avaliação participou dela); null = sem acesso.
+  const [reunioes, setReunioes] = useState<Record<number, Agendamento | null>>({});
+  const faltando = [...new Set(linhas.map((a) => a.idAgendamento))].filter((id) => !(id in reunioes)).join(",");
+  useEffect(() => {
+    if (!faltando) return;
+    let cancelado = false;
+    Promise.all(
+      faltando.split(",").map((id) =>
+        agendamentosApi
+          .buscarPorId(id)
+          .then((ag) => [Number(id), ag] as const)
+          .catch(() => [Number(id), null] as const)
+      )
+    ).then((encontradas) => !cancelado && setReunioes((atual) => ({ ...atual, ...Object.fromEntries(encontradas) })));
+    return () => {
+      cancelado = true;
+    };
+  }, [faltando]);
+
   const [modalAberto, setModalAberto] = useState(false);
   const [form, setForm] = useState<{ idAgendamento: string; nota: number | string; comentario: string }>({
     idAgendamento: "",
@@ -41,17 +67,37 @@ export default function AvaliacoesPage() {
   });
   const [erro, setErro] = useState("");
   const [salvando, setSalvando] = useState(false);
+  // Reuniões concluídas do aluno que ele ainda não avaliou (null = carregando).
+  const [paraAvaliar, setParaAvaliar] = useState<Agendamento[] | null>(null);
 
-  function abrirCriacao() {
+  async function abrirCriacao(idPreferido?: number) {
     if (!alunoId) return toast.info("Selecione um aluno para avaliar uma reunião.");
     setForm({ idAgendamento: "", nota: 5, comentario: "" });
     setErro("");
+    setParaAvaliar(null);
     setModalAberto(true);
+    try {
+      const [concluidas, avaliadas] = await Promise.all([
+        agendamentosApi.listarPorUsuario(alunoId, { status: "CONCLUIDO", size: 100, sort: "dataReuniao,desc" }),
+        avaliacoesApi.listarPorAluno(alunoId, { size: 200 }),
+      ]);
+      const jaAvaliadas = new Set(avaliadas.conteudo.map((av) => av.idAgendamento));
+      const pendentes = concluidas.conteudo.filter((ag) => !jaAvaliadas.has(ag.id));
+      setParaAvaliar(pendentes);
+      if (idPreferido && !pendentes.some((ag) => ag.id === idPreferido)) {
+        toast.info("Essa reunião já foi avaliada ou ainda não foi concluída.");
+      }
+      const escolhida = pendentes.find((ag) => ag.id === idPreferido) ?? (pendentes.length === 1 ? pendentes[0] : null);
+      if (escolhida) setForm((atual) => ({ ...atual, idAgendamento: String(escolhida.id) }));
+    } catch (e) {
+      setParaAvaliar([]);
+      setErro((e as ApiError).message);
+    }
   }
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!form.idAgendamento) return setErro("Informe o ID do agendamento concluído.");
+    if (!form.idAgendamento) return setErro("Escolha a reunião que você quer avaliar.");
     setSalvando(true);
     try {
       await avaliacoesApi.criar({
@@ -71,15 +117,32 @@ export default function AvaliacoesPage() {
     }
   }
 
+  // Atalhos do painel e do detalhe da reunião: ?nova=1 abre o formulário; ?avaliar=<id> já escolhe a reunião.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const atalhoTratado = useRef(false);
+  useEffect(() => {
+    if (atalhoTratado.current || !pode("avaliacoes.criar") || !alunoId) return;
+    const avaliar = Number(searchParams.get("avaliar")) || undefined;
+    if (!avaliar && searchParams.get("nova") !== "1") return;
+    atalhoTratado.current = true;
+    setSearchParams({}, { replace: true });
+    abrirCriacao(avaliar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alunoId, searchParams]);
+
   return (
     <>
       <PageHeader
-        titulo="Avaliações"
-        subtitulo="Avaliações registradas pelos alunos após reuniões concluídas."
+        titulo={verTodas ? "Avaliações" : "Minhas avaliações"}
+        subtitulo={
+          verTodas
+            ? "Avaliações registradas pelos alunos após reuniões concluídas."
+            : "Avaliações que você registrou após reuniões concluídas."
+        }
         acao={
           // RF 24: apenas o aluno avalia a reunião; a coordenação só acompanha.
           pode("avaliacoes.criar") ? (
-            <Button onClick={abrirCriacao}>
+            <Button onClick={() => abrirCriacao()}>
               <IconPlus />
               Nova avaliação
             </Button>
@@ -87,19 +150,21 @@ export default function AvaliacoesPage() {
         }
       />
 
-      <FiltrosCard>
-        <SelectField
-          label="Aluno"
-          className="w-full sm:w-72"
-          placeholder="Selecione um aluno…"
-          options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={alunoId}
-          onChange={(e) => {
-            setAlunoId(e.target.value);
-            setPaginaAtual(0);
-          }}
-        />
-      </FiltrosCard>
+      {verTodas && (
+        <FiltrosCard>
+          <SelectField
+            label="Aluno"
+            className="w-full sm:w-72"
+            placeholder="Selecione um aluno…"
+            options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={alunoEscolhido}
+            onChange={(e) => {
+              setAlunoEscolhido(e.target.value);
+              setPaginaAtual(0);
+            }}
+          />
+        </FiltrosCard>
+      )}
 
       {!alunoId ? (
         <EmptyState titulo="Selecione um aluno" descricao="Escolha um aluno acima para ver as avaliações registradas por ele." />
@@ -109,9 +174,27 @@ export default function AvaliacoesPage() {
             carregando={carregando}
             chaveLinha={(a) => a.id}
             linhas={linhas}
+            linhaVazia={
+              <EmptyState
+                titulo="Nenhuma avaliação ainda"
+                descricao={verTodas ? "Este aluno ainda não avaliou reuniões." : "Avalie uma reunião depois que ela for concluída."}
+              />
+            }
             colunas={[
-              { chave: "agendamento", titulo: "Agendamento", render: (a) => `#${a.idAgendamento}` },
-              { chave: "nota", titulo: "Nota", render: (a) => "⭐".repeat(a.nota) || "0" },
+              { chave: "agendamento", titulo: "Reunião", render: (a) => {
+                  const r = reunioes[a.idAgendamento];
+                  return r ? (
+                    <div>
+                      <p className="font-medium">{r.topico}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {formatarData(r.dataReuniao)} às {formatarHora(r.horarioInicio)} · {r.nomeOrganizador}
+                      </p>
+                    </div>
+                  ) : (
+                    `#${a.idAgendamento}`
+                  );
+                } },
+              { chave: "nota", titulo: "Nota", render: (a) => <Estrelas nota={a.nota} /> },
               { chave: "comentario", titulo: "Comentário", render: (a) => a.comentario || "—" },
               { chave: "data", titulo: "Registrada em", render: (a) => formatarDataHora(a.criadoEm) },
             ]}
@@ -122,31 +205,40 @@ export default function AvaliacoesPage() {
 
       <Modal aberto={modalAberto} onFechar={() => setModalAberto(false)} titulo="Nova avaliação" largura="max-w-md">
         <form onSubmit={salvar} className="flex flex-col gap-4">
-          <TextField
-            label="ID do agendamento (concluído)"
-            type="number"
-            required
-            value={form.idAgendamento}
-            onChange={(e) => setForm({ ...form, idAgendamento: e.target.value })}
-          />
-          <SelectField
-            label="Nota"
-            options={[0, 1, 2, 3, 4, 5].map((n) => ({ valor: n, rotulo: `${n} estrela${n === 1 ? "" : "s"}` }))}
-            value={form.nota}
-            onChange={(e) => setForm({ ...form, nota: e.target.value })}
-          />
+          {paraAvaliar === null ? (
+            <p className="py-2 text-sm text-muted-foreground">Carregando reuniões concluídas…</p>
+          ) : paraAvaliar.length === 0 ? (
+            <EmptyState
+              titulo="Nada para avaliar"
+              descricao="Não há reuniões concluídas aguardando avaliação. Elas aparecem aqui depois que a reunião acontece."
+            />
+          ) : (
+            <SelectField
+              label="Reunião"
+              required
+              placeholder="Selecione a reunião…"
+              options={paraAvaliar.map((ag) => ({
+                valor: ag.id,
+                rotulo: `${formatarData(ag.dataReuniao)} ${formatarHora(ag.horarioInicio)} · ${ag.topico}`,
+              }))}
+              value={form.idAgendamento}
+              onChange={(e) => setForm({ ...form, idAgendamento: e.target.value })}
+            />
+          )}
+          <EscolhaDeEstrelas nota={Number(form.nota)} onChange={(nota) => setForm({ ...form, nota })} />
           <TextAreaField
             label="Comentário (opcional)"
             value={form.comentario}
             onChange={(e) => setForm({ ...form, comentario: e.target.value })}
             placeholder="Conte como foi o atendimento"
+            maxLength={200}
           />
           {erro && <FieldError>{erro}</FieldError>}
           <FormActions>
             <Button type="button" variant="outline" onClick={() => setModalAberto(false)}>
               Cancelar
             </Button>
-            <Button type="submit" disabled={salvando}>
+            <Button type="submit" disabled={salvando || !paraAvaliar?.length}>
               {salvando ? "Enviando…" : "Registrar avaliação"}
             </Button>
           </FormActions>

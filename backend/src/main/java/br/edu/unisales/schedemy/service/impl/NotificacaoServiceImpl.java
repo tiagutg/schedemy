@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
@@ -30,6 +32,7 @@ public class NotificacaoServiceImpl implements NotificacaoService {
     private final UsuarioRepository usuarioRepository;
     private final AgendamentoRepository agendamentoRepository;
     private final NotificacaoMapper notificacaoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public NotificacaoResponseDTO criar(NotificacaoRequestDTO dto) {
@@ -50,13 +53,16 @@ public class NotificacaoServiceImpl implements NotificacaoService {
     @Override
     @Transactional(readOnly = true)
     public NotificacaoResponseDTO buscarPorId(Long id) {
-        return notificacaoMapper.paraResponseDTO(buscarEntidadePorId(id));
+        Notificacao entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(),
+                "Voce so pode consultar as suas proprias notificacoes.");
+        return notificacaoMapper.paraResponseDTO(entidade);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<NotificacaoResponseDTO> listar(Long usuarioId, StatusEnvio status, Pageable pageable) {
-        return notificacaoRepository.buscarComFiltros(usuarioId, status, pageable)
+        return notificacaoRepository.buscarComFiltros(usuarioAutenticado.escopoDoUsuario(usuarioId), status, pageable)
                 .map(notificacaoMapper::paraResponseDTO);
     }
 
@@ -72,6 +78,24 @@ public class NotificacaoServiceImpl implements NotificacaoService {
         entidade.setEnviadoEm(LocalDateTime.now());
         entidade = notificacaoRepository.save(entidade);
         return notificacaoMapper.paraResponseDTO(entidade);
+    }
+
+    @Override
+    public NotificacaoResponseDTO marcarComoLida(Long id) {
+        Notificacao entidade = buscarEntidadePorId(id);
+        usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(),
+                "Voce so pode marcar as suas proprias notificacoes.");
+        if (entidade.getStatusEnvio() == StatusEnvio.PENDENTE) {
+            entidade.setStatusEnvio(StatusEnvio.ENVIADO);
+            entidade.setEnviadoEm(LocalDateTime.now());
+            entidade = notificacaoRepository.save(entidade);
+        }
+        return notificacaoMapper.paraResponseDTO(entidade);
+    }
+
+    @Override
+    public int marcarTodasComoLidas() {
+        return notificacaoRepository.marcarTodasComoLidas(usuarioAutenticado.id(), LocalDateTime.now());
     }
 
     @Override

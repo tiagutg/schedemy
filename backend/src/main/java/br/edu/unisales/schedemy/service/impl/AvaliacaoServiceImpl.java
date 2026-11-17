@@ -1,7 +1,9 @@
 package br.edu.unisales.schedemy.service.impl;
 
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
+import br.edu.unisales.schedemy.exception.AcessoNegadoNegocioException;
+
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
-import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.AvaliacaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -26,16 +28,17 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 @Transactional
 public class AvaliacaoServiceImpl implements AvaliacaoService {
-
     private final AvaliacaoReuniaoRepository avaliacaoRepository;
     private final AgendamentoRepository agendamentoRepository;
     private final UsuarioRepository usuarioRepository;
     private final AvaliacaoMapper avaliacaoMapper;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public AvaliacaoResponseDTO criar(AvaliacaoRequestDTO dto) {
         Agendamento agendamento = buscarAgendamento(dto.idAgendamento());
         Usuario aluno = buscarUsuario(dto.idAluno());
+        usuarioAutenticado.exigirProprioOuAdmin(aluno.getId(), "Voce so pode avaliar em seu proprio nome.");
 
         validarPapelAluno(aluno);
         validarReuniaoConcluida(agendamento);
@@ -53,14 +56,23 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     @Override
     @Transactional(readOnly = true)
     public AvaliacaoResponseDTO buscarPorId(Long id) {
-        return avaliacaoMapper.paraResponseDTO(buscarEntidadePorId(id));
+        AvaliacaoReuniao avaliacao = buscarEntidadePorId(id);
+        exigirPodeVer(avaliacao);
+        return avaliacaoMapper.paraResponseDTO(avaliacao);
     }
 
     @Override
     @Transactional(readOnly = true)
     public Page<AvaliacaoResponseDTO> listarPorAluno(Long alunoId, Pageable pageable) {
-        return avaliacaoRepository.findByAlunoId(alunoId, pageable)
-                .map(avaliacaoMapper::paraResponseDTO);
+        Usuario logado = usuarioAutenticado.obter();
+        if (logado.getTipoUsuario() == TipoUsuario.ALUNO && !logado.getId().equals(alunoId)) {
+            throw new AcessoNegadoNegocioException("Voce so pode consultar as suas proprias avaliacoes.");
+        }
+        // RNF 15 - a docencia ve so as avaliacoes das reunioes de que participou (mesma regra de exigirPodeVer).
+        Page<AvaliacaoReuniao> avaliacoes = logado.getTipoUsuario() == TipoUsuario.ALUNO || usuarioAutenticado.ehAdmin()
+                ? avaliacaoRepository.findByAlunoId(alunoId, pageable)
+                : avaliacaoRepository.buscarDoAlunoEmReunioesDoParticipante(alunoId, logado.getId(), pageable);
+        return avaliacoes.map(avaliacaoMapper::paraResponseDTO);
     }
 
     @Override
@@ -85,6 +97,21 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
         avaliacaoRepository.delete(buscarEntidadePorId(id));
     }
 
+    /** RNF 15 - o aluno so ve a propria avaliacao; a docencia, as das reunioes de que participa. */
+    private void exigirPodeVer(AvaliacaoReuniao avaliacao) {
+        if (usuarioAutenticado.ehAdmin()) {
+            return;
+        }
+        Usuario logado = usuarioAutenticado.obter();
+        boolean autorizado = logado.getTipoUsuario() == TipoUsuario.ALUNO
+                ? avaliacao.getAluno().getId().equals(logado.getId())
+                : avaliacao.getAgendamento().getParticipantes().stream()
+                .anyMatch(p -> p.getUsuario().getId().equals(logado.getId()));
+        if (!autorizado) {
+            throw new AcessoNegadoNegocioException("Voce nao tem permissao para ver esta avaliacao.");
+        }
+    }
+
     /** RF 24 - a avaliacao e do aluno. */
     private void validarPapelAluno(Usuario usuario) {
         if (usuario.getTipoUsuario() != TipoUsuario.ALUNO) {
@@ -104,8 +131,7 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     /** O aluno so avalia reuniao da qual participou (RNF 15). */
     private void validarParticipacao(Agendamento agendamento, Usuario aluno) {
         boolean participou = agendamento.getParticipantes().stream()
-                .map(AgendamentoParticipante::getUsuario)
-                .anyMatch(u -> u.getId().equals(aluno.getId()));
+                .anyMatch(p -> p.getUsuario().getId().equals(aluno.getId()));
         if (!participou) {
             throw new RegraDeNegocioException("O aluno informado nao participou desta reuniao.");
         }

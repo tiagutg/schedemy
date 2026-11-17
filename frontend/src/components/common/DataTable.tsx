@@ -1,4 +1,4 @@
-import type { Key, ReactNode } from "react";
+import type { Key, KeyboardEvent, ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -24,6 +24,10 @@ interface DataTableProps<T> {
   chaveLinha: (linha: T) => Key;
   linhaVazia?: ReactNode;
   acoes?: (linha: T) => ReactNode;
+  /** Torna a linha (e o cartão no celular) clicável. */
+  aoClicarLinha?: (linha: T) => void;
+  /** No celular, sem rodapé de ações: o cartão inteiro já abre a linha (requer aoClicarLinha). */
+  ocultarAcoesNoCartao?: boolean;
 }
 
 function valorCelula<T>(coluna: Coluna<T>, linha: T): ReactNode {
@@ -35,7 +39,16 @@ function valorCelula<T>(coluna: Coluna<T>, linha: T): ReactNode {
  * empilhados quando é estreita (celular, ou tablet com a sidebar aberta).
  * A troca usa a container query da área principal (@container/main).
  */
-export default function DataTable<T>({ colunas, linhas, carregando, chaveLinha, linhaVazia, acoes }: DataTableProps<T>) {
+export default function DataTable<T>({
+  colunas,
+  linhas,
+  carregando,
+  chaveLinha,
+  linhaVazia,
+  acoes,
+  aoClicarLinha,
+  ocultarAcoesNoCartao = false,
+}: DataTableProps<T>) {
   const totalColunas = colunas.length + (acoes ? 1 : 0);
   const vazio = linhaVazia || <EmptyState titulo="Nenhum registro encontrado" />;
   const [principal, ...demais] = colunas;
@@ -66,7 +79,12 @@ export default function DataTable<T>({ colunas, linhas, carregando, chaveLinha, 
               </TableRow>
             ) : (
               linhas.map((linha) => (
-                <TableRow key={chaveLinha(linha)}>
+                <TableRow
+                  key={chaveLinha(linha)}
+                  className={aoClicarLinha ? "cursor-pointer" : undefined}
+                  // O teclado usa o botão de ação da linha; o clique na linha é um atalho do mouse.
+                  onClick={aoClicarLinha ? () => aoClicarLinha(linha) : undefined}
+                >
                   {colunas.map((coluna) => (
                     <TableCell key={coluna.chave}>{valorCelula(coluna, linha)}</TableCell>
                   ))}
@@ -88,9 +106,27 @@ export default function DataTable<T>({ colunas, linhas, carregando, chaveLinha, 
           <div className="rounded-lg border">{vazio}</div>
         ) : (
           linhas.map((linha) => {
-            const acoesLinha = acoes?.(linha);
+            const acoesLinha = ocultarAcoesNoCartao && aoClicarLinha ? null : acoes?.(linha);
+            const clicavel = aoClicarLinha
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  onClick: () => aoClicarLinha(linha),
+                  onKeyDown: (e: KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      aoClicarLinha(linha);
+                    }
+                  },
+                }
+              : {};
             return (
-              <Card key={chaveLinha(linha)} size="sm" className="shadow-xs">
+              <Card
+                key={chaveLinha(linha)}
+                size="sm"
+                className={aoClicarLinha ? "cursor-pointer shadow-xs transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" : "shadow-xs"}
+                {...clicavel}
+              >
                 <CardContent className="flex flex-col gap-3">
                   {principal && <div className="text-sm font-medium break-words">{valorCelula(principal, linha)}</div>}
                   {demais.length > 0 && (

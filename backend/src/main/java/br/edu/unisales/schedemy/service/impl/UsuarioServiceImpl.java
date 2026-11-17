@@ -4,14 +4,19 @@ import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.UsuarioRequestDTO;
 import br.edu.unisales.schedemy.dto.response.UsuarioResponseDTO;
+import br.edu.unisales.schedemy.dto.response.UsuarioResumoResponseDTO;
+import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
 import br.edu.unisales.schedemy.exception.RecursoDuplicadoException;
 import br.edu.unisales.schedemy.exception.RecursoNaoEncontradoException;
 import br.edu.unisales.schedemy.mapper.UsuarioMapper;
+import br.edu.unisales.schedemy.repository.AgendamentoParticipanteRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import br.edu.unisales.schedemy.service.UsuarioService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -26,19 +31,32 @@ public class UsuarioServiceImpl implements UsuarioService {
     public static final String PREFIXO_VINCULO_PENDENTE = "pendente-sso:";
 
     private final UsuarioRepository usuarioRepository;
+    private final AgendamentoParticipanteRepository agendamentoParticipanteRepository;
     private final UsuarioMapper usuarioMapper;
+    private final PasswordEncoder passwordEncoder;
+    private final UsuarioAutenticado usuarioAutenticado;
 
     @Override
     public UsuarioResponseDTO criar(UsuarioRequestDTO dto) {
         if (usuarioRepository.existsByEmail(dto.email())) {
             throw new RecursoDuplicadoException("Ja existe um usuario cadastrado com o email: " + dto.email());
         }
+
+        // Validação da senha na criação.
+        if (dto.senha() == null || dto.senha().isBlank()) {
+            throw new RegraDeNegocioException("A senha é obrigatoria para a criação de usuário.");
+        }
+
         boolean temVinculoMicrosoft = dto.idMicrosoft() != null && !dto.idMicrosoft().isBlank();
         if (temVinculoMicrosoft && usuarioRepository.existsByIdMicrosoft(dto.idMicrosoft())) {
             throw new RecursoDuplicadoException("Ja existe um usuario cadastrado com este idMicrosoft.");
         }
 
         Usuario usuario = usuarioMapper.paraEntidade(dto);
+
+        // Criptografa a senha antes e persistir no banco.
+        usuario.setSenha(passwordEncoder.encode(dto.senha()));
+
         if (!temVinculoMicrosoft) {
             usuario.setIdMicrosoft(gerarVinculoProvisorio());
         }
@@ -64,9 +82,26 @@ public class UsuarioServiceImpl implements UsuarioService {
 
     @Override
     @Transactional(readOnly = true)
+    public UsuarioResponseDTO buscarLogado() {
+        return usuarioMapper.paraResponseDTO(usuarioAutenticado.obter());
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public Page<UsuarioResponseDTO> listar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
-        return usuarioRepository.buscarComFiltros(tipo, nome, ativo, pageable)
-                .map(usuarioMapper::paraResponseDTO);
+        return buscar(tipo, nome, ativo, pageable).map(usuarioMapper::paraResponseDTO);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<UsuarioResumoResponseDTO> listarResumo(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
+        return buscar(tipo, nome, ativo, pageable).map(usuarioMapper::paraResumoDTO);
+    }
+
+    private Page<Usuario> buscar(TipoUsuario tipo, String nome, Boolean ativo, Pageable pageable) {
+        // Sem filtro de nome, busca por "" (aceita todos): o PostgreSQL nao aceita LOWER(null) sem tipo.
+        String filtroNome = nome == null ? "" : nome;
+        return usuarioRepository.buscarComFiltros(tipo, filtroNome, ativo, pageable);
     }
 
     @Override
@@ -80,6 +115,12 @@ public class UsuarioServiceImpl implements UsuarioService {
         });
 
         usuarioMapper.atualizarEntidade(usuario, dto);
+
+        // Se uma nova senha foi enviada como atualização, criptografa e atualiza.
+        if (dto.senha() != null && !dto.senha().isBlank()) {
+            usuario.setSenha(passwordEncoder.encode(dto.senha()));
+        }
+
         usuario = usuarioRepository.save(usuario);
         return usuarioMapper.paraResponseDTO(usuario);
     }
@@ -87,6 +128,11 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public void deletar(Long id) {
         Usuario usuario = buscarEntidadePorId(id);
+        // As FKs de agendamento, participante, motivo e avaliacao sao RESTRICT: com historico, so desativando.
+        if (agendamentoParticipanteRepository.existsByUsuarioId(id)) {
+            throw new RegraDeNegocioException(
+                    "Este usuario participa de agendamentos e nao pode ser excluido. Desative o cadastro (ativo = false).");
+        }
         usuarioRepository.delete(usuario);
     }
 

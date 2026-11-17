@@ -1,0 +1,135 @@
+import { expect, test } from "@playwright/test";
+import { CONTAS, entrar, semHorariosDeAtendimento } from "./apoio";
+
+test("recusa e-mail ou senha inválidos", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByLabel("E-mail institucional").fill(CONTAS.aluno.email);
+  await page.locator("#senha").fill("senha-errada");
+  await page.getByRole("button", { name: "Entrar", exact: true }).click();
+  await expect(page.getByRole("alert")).toHaveText("E-mail ou senha inválidos.");
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test("quem não tem acesso é orientado a procurar a instituição, sem autocadastro (RF 29)", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("link", { name: "Saiba como obter" }).click();
+  await expect(page).toHaveURL(/\/cadastro$/);
+  await expect(page.getByRole("heading", { name: "Como obter acesso" })).toBeVisible();
+  await expect(page.getByLabel("Senha")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /conta Microsoft/ })).toBeDisabled();
+  await page.getByRole("link", { name: "Voltar para o login" }).click();
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test("aluno vê só o próprio menu e os próprios agendamentos", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  const menu = page.locator("[data-sidebar=content]");
+  await expect(menu.getByRole("link", { name: "Agendamentos" })).toBeVisible();
+  await expect(menu.getByRole("link", { name: "Usuários" })).toHaveCount(0);
+  await expect(menu.getByRole("link", { name: "Horários de atendimento" })).toHaveCount(0);
+  // RF 23: todos os perfis recebem avisos das próprias reuniões.
+  await expect(menu.getByRole("link", { name: "Notificações" })).toBeVisible();
+
+  await page.goto("/agendamentos");
+  await expect(page.getByRole("heading", { name: "Meus agendamentos" })).toBeVisible();
+  await expect(page.getByLabel("Usuário envolvido")).toHaveCount(0);
+
+  // O organizador é sempre o próprio aluno.
+  await page.getByRole("button", { name: "Novo agendamento" }).first().click();
+  await expect(page.getByLabel("Organizador")).toHaveValue(CONTAS.aluno.nome);
+  await expect(page.getByLabel("Organizador")).toBeDisabled();
+});
+
+test("recepção vê a agenda geral e escolhe o organizador", async ({ page }) => {
+  await entrar(page, CONTAS.recepcao);
+  await page.goto("/agendamentos");
+  await expect(page.getByRole("heading", { name: "Agendamentos", exact: true, level: 2 })).toBeVisible();
+  await expect(page.getByLabel("Usuário envolvido")).toBeVisible();
+
+  await page.getByRole("button", { name: "Novo agendamento" }).first().click();
+  const organizador = page.getByLabel("Organizador");
+  await expect(organizador).toBeEnabled();
+  // Recepção e administração não aparecem como organizador (RN 03).
+  await expect(organizador.locator("option", { hasText: "Recepcionista" })).toHaveCount(0);
+});
+
+test("professor gerencia só a própria disponibilidade", async ({ page }) => {
+  await entrar(page, CONTAS.professor);
+  await page.goto("/disponibilidades");
+  await expect(page.getByRole("heading", { name: "Meus horários de atendimento" })).toBeVisible();
+  await page.getByRole("button", { name: "Novo horário" }).click();
+  await expect(page.getByLabel("Professor / coordenador")).toHaveValue(CONTAS.professor.nome);
+  await expect(page.getByLabel("Professor / coordenador")).toBeDisabled();
+});
+
+test("o navegador guarda só o token, nunca a senha", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  const salvo = await page.evaluate(() => localStorage.getItem("schedemy.auth") as string);
+  expect(salvo).not.toContain(CONTAS.aluno.senha);
+  expect(JSON.parse(salvo)).toEqual(expect.objectContaining({ token: expect.any(String), expiraEm: expect.any(String) }));
+});
+
+test("sessão salva no formato antigo (com senha) é apagada", async ({ page }) => {
+  await page.goto("/login");
+  await page.evaluate(
+    ([email, senha]) => localStorage.setItem("schedemy.auth", JSON.stringify({ username: email, password: senha, usuarioId: null })),
+    [CONTAS.aluno.email, CONTAS.aluno.senha]
+  );
+  await page.goto("/agendamentos");
+  await expect(page).toHaveURL(/\/login$/);
+  expect(await page.evaluate(() => localStorage.getItem("schedemy.auth"))).toBeNull();
+});
+
+test("sessão com token que deixou de valer volta para o login", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.evaluate(() => {
+    const auth = JSON.parse(localStorage.getItem("schedemy.auth") as string);
+    localStorage.setItem("schedemy.auth", JSON.stringify({ ...auth, token: auth.token + "x" }));
+  });
+  await page.goto("/agendamentos");
+  await expect(page).toHaveURL(/\/login$/);
+  await expect(page.getByText("Sua sessão expirou. Entre novamente.")).toBeVisible();
+});
+
+test("professor sem horários cadastrados é avisado no painel", async ({ page }) => {
+  const restaurar = await semHorariosDeAtendimento(CONTAS.semHorario);
+  try {
+    await entrar(page, CONTAS.semHorario);
+    const aviso = page.getByRole("status").filter({ hasText: "Você ainda não cadastrou seus horários" });
+    await expect(aviso).toBeVisible();
+    await aviso.getByRole("link", { name: "Cadastrar horários" }).click();
+    await expect(page.getByRole("heading", { name: "Meus horários de atendimento" })).toBeVisible();
+  } finally {
+    await restaurar();
+  }
+});
+
+test("meu perfil mostra os dados do usuário logado", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitem", { name: "Meu perfil" }).click();
+  await expect(page.getByRole("heading", { name: "Meu perfil", level: 2 })).toBeVisible();
+  await expect(page.getByText(CONTAS.aluno.email)).toBeVisible();
+  await expect(page.locator("main").getByText("Aluno", { exact: true })).toBeVisible();
+});
+
+test("o tema escolhido no menu é aplicado e lembrado", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitemradio", { name: "Escuro" }).click();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+  await page.reload();
+  await expect(page.locator("html")).toHaveClass(/dark/);
+
+  await page.locator("[data-sidebar=footer] button").first().click();
+  await page.getByRole("menuitemradio", { name: "Claro" }).click();
+  await expect(page.locator("html")).not.toHaveClass(/dark/);
+});
+
+test("endereço inexistente mostra a página de não encontrada", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  await page.goto("/agendamento-que-nao-existe");
+  await expect(page.getByRole("heading", { name: "Página não encontrada", level: 2 })).toBeVisible();
+  await page.getByRole("link", { name: "Voltar ao painel" }).click();
+  await expect(page).toHaveURL("/");
+});

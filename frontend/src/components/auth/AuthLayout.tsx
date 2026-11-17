@@ -18,7 +18,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               src="/schedemy-logo.png"
               alt=""
               aria-hidden="true"
-              className="size-6 rounded-md object-contain"
+              className="size-8 rounded-md object-contain"
             />
             Schedemy
           </Link>
@@ -32,7 +32,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
                 src="/schedemy-logo.png"
                 alt=""
                 aria-hidden="true"
-                className="size-16 object-contain drop-shadow-sm"
+                className="size-28 object-contain drop-shadow-sm sm:size-32"
               />
               <span className="text-lg font-semibold tracking-tight text-brand-700">Schedemy</span>
             </Link>
@@ -53,14 +53,14 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
         {/* Véu azul da marca para dar contraste ao conteúdo sobreposto */}
-        <div className="absolute inset-0 bg-brand-950/30" />
-        <div className="absolute inset-0 bg-gradient-to-t from-brand-950/90 via-brand-950/45 to-brand-900/25" />
+        <div className="absolute inset-0 bg-marinho-950/30" />
+        <div className="absolute inset-0 bg-gradient-to-t from-marinho-950/90 via-marinho-950/45 to-marinho-900/25" />
 
         <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center text-white">
           <img
             src="/schedemy-logo.png"
             alt="Logo do Schedemy"
-            className="w-28 drop-shadow-[0_12px_28px_rgba(13,30,49,0.55)] xl:w-32"
+            className="w-36 drop-shadow-[0_12px_28px_rgba(13,30,49,0.55)] xl:w-40"
           />
           <h2 className="mt-6 text-5xl font-semibold tracking-tight drop-shadow-md">Schedemy</h2>
           <p className="mt-3 max-w-sm text-base leading-relaxed text-balance text-white/90 drop-shadow">

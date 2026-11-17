@@ -53,6 +53,10 @@ frontend/.env
 frontend/.env.*
 !frontend/.env.example
 
+.env
+.env.*
+!.env.example
+
 # Editores
 frontend/.vscode/
 frontend/.idea/
@@ -70,3 +74,12 @@ frontend/*.sw?
 Thumbs.db
 
 /.idea
+
+# Configurações locais do editor (caminhos desta máquina)
+/.vscode/
+
+# -------------------------------
+# Conexão com o Supabase: tem a senha do banco e nunca vai para o GitHub
+# (só o modelo supabase.env.example é versionado).
+supabase.env
+**/supabase.env

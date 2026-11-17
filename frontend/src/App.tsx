@@ -18,6 +18,8 @@ const BloqueiosPage = lazy(() => import("@/pages/BloqueiosPage"));
 const AgendamentosPage = lazy(() => import("@/pages/agendamentos/AgendamentosPage"));
 const AvaliacoesPage = lazy(() => import("@/pages/AvaliacoesPage"));
 const NotificacoesPage = lazy(() => import("@/pages/NotificacoesPage"));
+const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
+const NaoEncontradaPage = lazy(() => import("@/pages/NaoEncontradaPage"));
 
 export default function App() {
   return (
@@ -95,6 +97,9 @@ export default function App() {
                     </RotaProtegida>
                   }
                 />
+                <Route path="perfil" element={<PerfilPage />} />
+                {/* Qualquer outro endereço: página de não encontrada dentro do painel */}
+                <Route path="*" element={<NaoEncontradaPage />} />
               </Route>
             </Routes>
             </Suspense>

@@ -1,37 +1,41 @@
 package br.edu.unisales.schedemy.config;
 
 import static org.springframework.security.config.Customizer.withDefaults;
+import br.edu.unisales.schedemy.security.ConversorDeToken;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 
 /**
- * Autenticacao (Basic Auth) e autorizacao por papel da Schedemy API.
+ * Autenticacao (token de acesso JWT, emitido em POST /api/v1/auth/login) e autorizacao por
+ * papel da Schedemy API. O token e validado pelo JwtConfig e convertido no usuario pelo
+ * ConversorDeToken (papel lido do banco a cada requisicao).
  *
- * As regras abaixo espelham a matriz de acesso do Documento de Definicao de
- * Requisitos v3.1.0 (secao 5.3 "Relacao Entre Atores e Casos de Uso", RN 03 e
- * RN 06), a mesma aplicada no front-end em src/utils/permissoes.js.
+ * As regras abaixo seguem o Documento de Definicao de Requisitos v3.1.0 (atores
+ * citados nos RFs, RN 03, RN 06 e RNF 15) e sao as mesmas aplicadas no front-end
+ * em src/utils/permissoes.ts.
  *
  * Resumo:
+ * - TODOS          os proprios avisos (notificacoes do sistema)
  * - ALUNO          agendamentos (criar/ver/cancelar/responder) e avaliacoes
- * - PROFESSOR      o mesmo do coordenador (a secao 5.3 trata os dois como um ator)
+ * - PROFESSOR      o mesmo do coordenador (os RFs sempre citam "professor ou coordenador")
  * - COORDENADOR    + disponibilidades, bloqueios, duracoes e notificacoes
- * - RECEPCIONISTA  agendamentos, sem aceitar/recusar convite (RN 03)
+ * - RECEPCIONISTA  agendamentos de todos (criar por terceiros, ver, editar, cancelar),
+ *                  sem aceitar/recusar convite (RN 03)
  * - ADMIN          acesso total
  */
+
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
-
     private static final String ADMIN = "ADMIN";
     private static final String COORDENADOR = "COORDENADOR";
     private static final String PROFESSOR = "PROFESSOR";
@@ -47,40 +51,13 @@ public class SecurityConfig {
     }
 
     @Bean
-    public InMemoryUserDetailsManager userDetailsService(PasswordEncoder encoder) {
-        UserDetails admin = User.withUsername("admin")
-                .password(encoder.encode("admin123"))
-                .roles("ADMIN", "COORDENADOR", "RECEPCIONISTA")
-                .build();
-
-        UserDetails recepcionista = User.withUsername("recepcionista")
-                .password(encoder.encode("recepcionista123"))
-                .roles("RECEPCIONISTA")
-                .build();
-
-        UserDetails coordenador = User.withUsername("coordenador")
-                .password(encoder.encode("coordenador123"))
-                .roles("COORDENADOR")
-                .build();
-
-        UserDetails professor = User.withUsername("professor")
-                .password(encoder.encode("professor123"))
-                .roles("PROFESSOR")
-                .build();
-
-        UserDetails aluno = User.withUsername("aluno")
-                .password(encoder.encode("aluno123"))
-                .roles("ALUNO")
-                .build();
-
-        return new InMemoryUserDetailsManager(admin, recepcionista, coordenador, professor, aluno);
-    }
-
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http, AccessDeniedHandler accessDeniedHandler) throws Exception {
+    public SecurityFilterChain filterChain(HttpSecurity http, AccessDeniedHandler accessDeniedHandler,
+                                           AuthenticationEntryPoint naoAutenticado,
+                                           ConversorDeToken conversorDeToken) throws Exception {
         http
                 .csrf(csrf -> csrf.disable())
                 .cors(withDefaults())
+                .sessionManagement(sm -> sm.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // Documentacao OpenAPI/Swagger e Health livre
                         .requestMatchers(
@@ -89,14 +66,15 @@ public class SecurityConfig {
                                 "/v3/api-docs/**",
                                 "/actuator/health"
                         ).permitAll()
-                        // Console H2 livre
-                        .requestMatchers("/h2-console/**").permitAll()
+                        // Login: troca e-mail e senha pelo token de acesso.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
                         // --- Usuarios ---
-                        // A LEITURA fica aberta a qualquer autenticado de proposito: o login
-                        // valida a credencial consultando este endpoint e a escolha de
-                        // convidados depende dele (RF 14 e RF 33). So a gestao e restrita.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios", "/api/v1/usuarios/**").authenticated()
+                        // Todos leem o proprio cadastro (login) e o resumo para escolher convidados
+                        // (RF 14 e RF 33). O cadastro completo (e-mail, telefone) fica com a
+                        // administracao e a recepcao, que agenda por terceiros (RNF 18).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios/me", "/api/v1/usuarios/resumo").authenticated()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/usuarios", "/api/v1/usuarios/**").hasAnyRole(RECEPCIONISTA, ADMIN)
                         .requestMatchers("/api/v1/usuarios", "/api/v1/usuarios/**").hasRole(ADMIN)
 
                         // --- Duracoes de reuniao (RF 01, RN 17) ---
@@ -117,22 +95,29 @@ public class SecurityConfig {
                         // --- Agendamentos ---
                         // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/agendamentos/*/resposta")
-                                .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
-                        // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21.
+                        // Listagem global: a recepcao agenda, altera e cancela por terceiros (RF 13, 20, 21).
+                        // Os demais perfis usam /agendamentos/usuarios/{id} (somente o proprio id - RNF 15).
+                        .requestMatchers(HttpMethod.GET, "/api/v1/agendamentos").hasAnyRole(RECEPCIONISTA, ADMIN)
+                        // Criar, consultar, editar e cancelar: RF 13, 15-18, 20, 21. Inclui
+                        // GET /agendamentos/horarios-livres (RF 14), que nao expoe a agenda de ninguem.
+                        // A posse do recurso e verificada nos services (UsuarioAutenticado.java).
                         .requestMatchers("/api/v1/agendamentos", "/api/v1/agendamentos/**").authenticated()
 
                         // --- Avaliacoes (RF 24) ---
                         // Somente o aluno avalia; a docencia acompanha (RNF 11).
                         .requestMatchers(HttpMethod.POST, "/api/v1/avaliacoes").hasAnyRole(ALUNO, ADMIN)
                         .requestMatchers(HttpMethod.GET, "/api/v1/avaliacoes", "/api/v1/avaliacoes/**")
-                                .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
                         .requestMatchers("/api/v1/avaliacoes", "/api/v1/avaliacoes/**").hasRole(ADMIN)
 
                         // --- Notificacoes (RF 23) ---
-                        // O envio e do ator Sistema; a tela e um log operacional.
-                        .requestMatchers(HttpMethod.GET, "/api/v1/notificacoes", "/api/v1/notificacoes/**").hasAnyRole(DOCENTES)
+                        // O sistema gera os avisos; cada usuario le e marca como lidos os SEUS
+                        // (o escopo e verificado no service). Criar, enviar e remover: administracao.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/notificacoes", "/api/v1/notificacoes/**").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/notificacoes/lidas", "/api/v1/notificacoes/*/lida").authenticated()
                         .requestMatchers("/api/v1/notificacoes", "/api/v1/notificacoes/**").hasRole(ADMIN)
 
                         // --- Registros de motivo (RF 11) ---
@@ -141,11 +126,15 @@ public class SecurityConfig {
 
                         // Qualquer outro endpoint da API exige ao menos autenticacao
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().permitAll()
+                        .anyRequest().authenticated()
                 )
-                .httpBasic(withDefaults())
-                .exceptionHandling(ex -> ex.accessDeniedHandler(accessDeniedHandler))
-                .headers(headers -> headers.frameOptions(frame -> frame.sameOrigin()));
+                // Sem Basic Auth: a senha so trafega no login. Token ausente, invalido ou vencido -> 401 em JSON.
+                .oauth2ResourceServer(rs -> rs
+                        .jwt(jwt -> jwt.jwtAuthenticationConverter(conversorDeToken))
+                        .authenticationEntryPoint(naoAutenticado))
+                .exceptionHandling(ex -> ex
+                        .authenticationEntryPoint(naoAutenticado)
+                        .accessDeniedHandler(accessDeniedHandler));
 
         return http.build();
     }

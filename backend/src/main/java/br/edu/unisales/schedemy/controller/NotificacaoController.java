@@ -17,6 +17,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/notificacoes")
@@ -52,6 +53,18 @@ public class NotificacaoController {
             description = "Registra a data de envio e muda o status para ENVIADO.")
     public ResponseEntity<NotificacaoResponseDTO> marcarComoEnviada(@PathVariable Long id) {
         return ResponseEntity.ok(notificacaoService.marcarComoEnviada(id));
+    }
+
+    @PatchMapping("/{id}/lida")
+    @Operation(summary = "Marcar aviso como lido", description = "O proprio usuario marca um aviso do sistema como lido.")
+    public ResponseEntity<NotificacaoResponseDTO> marcarComoLida(@PathVariable Long id) {
+        return ResponseEntity.ok(notificacaoService.marcarComoLida(id));
+    }
+
+    @PatchMapping("/lidas")
+    @Operation(summary = "Marcar todos os avisos como lidos", description = "Vale para os avisos do usuario autenticado.")
+    public ResponseEntity<Map<String, Integer>> marcarTodasComoLidas() {
+        return ResponseEntity.ok(Map.of("marcadas", notificacaoService.marcarTodasComoLidas()));
     }
 
     @DeleteMapping("/{id}")

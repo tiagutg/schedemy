@@ -2,7 +2,6 @@ package br.edu.unisales.schedemy.dto.request;
 
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
 
 import java.time.LocalDate;
@@ -46,6 +45,12 @@ public record AgendamentoRequestDTO(
         String resumo,
 
         @Schema(description = "ID do agendamento anterior, quando reutilizado", example = "null")
-        Long idAgendamentoOrigem
+        Long idAgendamentoOrigem,
+
+        @Schema(description = "Link da sala online (Teams, Meet...). Opcional: sem ele, a reuniao fica sem sala ate a integracao com o Teams (RF 27).",
+                example = "https://meet.google.com/abc-defg-hij")
+        @Size(max = 1000)
+        @Pattern(regexp = "^\\s*$|^https?://\\S+$", message = "linkReuniao deve ser um endereco http(s) valido")
+        String linkReuniao
 ) {
 }

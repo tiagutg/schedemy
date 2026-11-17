@@ -3,8 +3,10 @@ package br.edu.unisales.schedemy.controller;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.CancelamentoRequestDTO;
+import br.edu.unisales.schedemy.dto.request.RemarcacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.RespostaAgendamentoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.HorariosLivresResponseDTO;
 import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.service.AgendamentoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +23,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.net.URI;
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/agendamentos")
@@ -36,6 +39,18 @@ public class AgendamentoController {
         return ResponseEntity.created(URI.create("/api/v1/agendamentos/" + criado.id())).body(criado);
     }
 
+    @GetMapping("/horarios-livres")
+    @Operation(summary = "Horarios livres para todos os envolvidos",
+            description = "RF 14: horarios de inicio (passo de 15 min) em que todos os usuarios informados estao livres. "
+                    + "Nao expoe reunioes nem bloqueios de ninguem.")
+    public ResponseEntity<HorariosLivresResponseDTO> buscarHorariosLivres(
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate data,
+            @RequestParam Long idDuracao,
+            @RequestParam List<Long> idsUsuarios,
+            @RequestParam(required = false) Long ignorarAgendamentoId) {
+        return ResponseEntity.ok(agendamentoService.buscarHorariosLivres(data, idDuracao, idsUsuarios, ignorarAgendamentoId));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Buscar agendamento por ID")
     public ResponseEntity<AgendamentoResponseDTO> buscarPorId(@PathVariable Long id) {
@@ -46,21 +61,25 @@ public class AgendamentoController {
     @Operation(summary = "Listar agendamentos de um usuario")
     public ResponseEntity<PageResponseDTO<AgendamentoResponseDTO>> listarPorUsuario(
             @PathVariable Long usuarioId,
-            @RequestParam(required = false) StatusAgendamento status,
+            @RequestParam(required = false) List<StatusAgendamento> status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(required = false) String busca,
             @ParameterObject @PageableDefault(size = 20, sort = "dataReuniao") Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarPorUsuario(usuarioId, status, dataInicio, dataFim, pageable)));
+        return ResponseEntity.ok(PageResponseDTO.de(
+                agendamentoService.listarPorUsuario(usuarioId, status, dataInicio, dataFim, busca, pageable)));
     }
 
     @GetMapping
-    @Operation(summary = "Listar todos os agendamentos", description = "Visao administrativa, com filtros de status e periodo.")
+    @Operation(summary = "Listar todos os agendamentos",
+            description = "Visao da recepcao e da administracao, com filtros de status, periodo e busca (topico ou nome).")
     public ResponseEntity<PageResponseDTO<AgendamentoResponseDTO>> listarTodos(
-            @RequestParam(required = false) StatusAgendamento status,
+            @RequestParam(required = false) List<StatusAgendamento> status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
+            @RequestParam(required = false) String busca,
             @ParameterObject @PageableDefault(size = 20, sort = "dataReuniao") Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarTodos(status, dataInicio, dataFim, pageable)));
+        return ResponseEntity.ok(PageResponseDTO.de(agendamentoService.listarTodos(status, dataInicio, dataFim, busca, pageable)));
     }
 
     @PutMapping("/{id}")
@@ -79,6 +98,15 @@ public class AgendamentoController {
     @Operation(summary = "Cancelar agendamento", description = "Exige confirmacao e motivo.")
     public ResponseEntity<AgendamentoResponseDTO> cancelar(@PathVariable Long id, @Valid @RequestBody CancelamentoRequestDTO dto) {
         return ResponseEntity.ok(agendamentoService.cancelar(id, dto));
+    }
+
+    @PostMapping("/{id}/remarcacao")
+    @Operation(summary = "Remarcar agendamento",
+            description = "Remarcacao (base do RF 08/09): cancela a reuniao original (exige motivo e confirmacao; RN 05) e cria a nova ligada a ela "
+                    + "(idAgendamentoOrigem), numa unica transacao. Se a nova for recusada por alguma regra, nada muda.")
+    public ResponseEntity<AgendamentoResponseDTO> remarcar(@PathVariable Long id, @Valid @RequestBody RemarcacaoRequestDTO dto) {
+        AgendamentoResponseDTO nova = agendamentoService.remarcar(id, dto);
+        return ResponseEntity.created(URI.create("/api/v1/agendamentos/" + nova.id())).body(nova);
     }
 
     @DeleteMapping("/{id}")

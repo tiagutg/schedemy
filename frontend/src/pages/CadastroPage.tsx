@@ -1,10 +1,11 @@
 import AuthLayout from "@/components/auth/AuthLayout";
-import CadastroForm from "@/components/auth/CadastroForm";
+import ComoObterAcesso from "@/components/auth/ComoObterAcesso";
 
+/** RF 29 - sem autocadastro até o SSO da Microsoft: a página só orienta como obter acesso. */
 export default function CadastroPage() {
   return (
     <AuthLayout>
-      <CadastroForm />
+      <ComoObterAcesso />
     </AuthLayout>
   );
 }

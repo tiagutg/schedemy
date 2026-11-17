@@ -1,10 +1,11 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { disponibilidadesApi } from "@/api/disponibilidades";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
@@ -13,22 +14,50 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import Pill from "@/components/common/Pill";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
-import { SelectField, FieldGrid, CheckboxField, FieldError } from "@/components/common/fields";
+import { SelectField, TextField, FieldGrid, CheckboxField, FieldError } from "@/components/common/fields";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DIAS_SEMANA, rotularDiaSemana } from "@/utils/domain";
+import { DIAS_SEMANA, rotularDiaSemana, rotularEnum } from "@/utils/domain";
 import type { Disponibilidade, Params } from "@/types";
+import GradeSemanal from "./GradeSemanal";
 
 const FORM_VAZIO = { idUsuario: "", diaSemana: "2", horarioInicio: "08:00", horarioFim: "12:00", ativo: true };
 
 export default function DisponibilidadesPage() {
   const toast = useToast();
+  const { pode, perfilVinculado: eu } = useAuth();
+  // O docente gerencia a própria grade; a administração, a de qualquer docente.
+  const gerenciaTodos = pode("agenda.gerenciarTodos");
+  const meuId = gerenciaTodos ? null : (eu?.id ?? null);
   const { usuarios: professores } = useUsuariosOptions();
-  const buscar = useCallback((params: Params) => disponibilidadesApi.listar(params), []);
+  const buscar = useCallback(
+    (params: Params) => disponibilidadesApi.listar(meuId ? { ...params, usuarioId: meuId } : params),
+    [meuId]
+  );
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar);
 
   const docentes = professores.filter((u) => u.tipoUsuario === "PROFESSOR" || u.tipoUsuario === "COORDENADOR");
+
+  // Grade visual da semana de um docente: o próprio, ou o escolhido no filtro pela administração.
+  const docenteDaGrade = meuId ?? (filtros.usuarioId ? Number(filtros.usuarioId) : null);
+  const [grade, setGrade] = useState<Disponibilidade[]>([]);
+  const [versaoGrade, setVersaoGrade] = useState(0);
+  useEffect(() => {
+    if (!docenteDaGrade) return;
+    let cancelado = false;
+    disponibilidadesApi
+      .listar({ usuarioId: docenteDaGrade, size: 100 })
+      .then((p) => !cancelado && setGrade(p.conteudo))
+      .catch(() => !cancelado && setGrade([]));
+    return () => {
+      cancelado = true;
+    };
+  }, [docenteDaGrade, versaoGrade]);
+  function atualizarTudo() {
+    recarregar();
+    setVersaoGrade((v) => v + 1);
+  }
 
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Disponibilidade | null>(null);
@@ -40,7 +69,7 @@ export default function DisponibilidadesPage() {
 
   function abrirCriacao() {
     setEditando(null);
-    setForm(FORM_VAZIO);
+    setForm({ ...FORM_VAZIO, idUsuario: meuId ? String(meuId) : "" });
     setErro("");
     setModalAberto(true);
   }
@@ -79,13 +108,13 @@ export default function DisponibilidadesPage() {
       };
       if (editando) {
         await disponibilidadesApi.atualizar(editando.id, payload);
-        toast.sucesso("Disponibilidade atualizada.");
+        toast.sucesso("Horário atualizado.");
       } else {
         await disponibilidadesApi.criar(payload);
-        toast.sucesso("Disponibilidade cadastrada.");
+        toast.sucesso("Horário cadastrado.");
       }
       setModalAberto(false);
-      recarregar();
+      atualizarTudo();
     } catch (e2) {
       setErro((e2 as ApiError).message);
       toast.erro((e2 as ApiError).message);
@@ -99,9 +128,9 @@ export default function DisponibilidadesPage() {
     setRemovendo(true);
     try {
       await disponibilidadesApi.remover(paraRemover.id);
-      toast.sucesso("Disponibilidade removida.");
+      toast.sucesso("Horário removido.");
       setParaRemover(null);
-      recarregar();
+      atualizarTudo();
     } catch (e) {
       toast.erro((e as ApiError).message);
     } finally {
@@ -112,25 +141,31 @@ export default function DisponibilidadesPage() {
   return (
     <>
       <PageHeader
-        titulo="Disponibilidades"
-        subtitulo="Grade semanal de horários de atendimento de professores e coordenadores."
+        titulo={gerenciaTodos ? "Horários de atendimento" : "Meus horários de atendimento"}
+        subtitulo={
+          gerenciaTodos
+            ? "Quando cada professor e coordenador atende. Fora desses horários, ninguém consegue agendar."
+            : "Quando você atende durante a semana. Alunos só conseguem agendar dentro desses horários."
+        }
         acao={
           <Button onClick={abrirCriacao}>
             <IconPlus />
-            Nova disponibilidade
+            Novo horário
           </Button>
         }
       />
 
       <FiltrosCard>
-        <SelectField
-          label="Professor / coordenador"
-          className="w-full sm:w-64"
-          placeholder="Todos"
-          options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={filtros.usuarioId || ""}
-          onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
-        />
+        {gerenciaTodos && (
+          <SelectField
+            label="Professor / coordenador"
+            className="w-full sm:w-64"
+            placeholder="Todos"
+            options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={filtros.usuarioId || ""}
+            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+          />
+        )}
         <SelectField
           label="Dia da semana"
           className="w-full sm:w-48"
@@ -141,17 +176,22 @@ export default function DisponibilidadesPage() {
         />
       </FiltrosCard>
 
+      {docenteDaGrade && <GradeSemanal disponibilidades={grade} onEditar={abrirEdicao} />}
+
       <DataTable
         carregando={carregando}
         chaveLinha={(d) => d.id}
         linhas={linhas}
         colunas={[
-          { chave: "usuario", titulo: "Professor / coordenador", render: (d) => d.nomeUsuario },
+          // A coluna do docente só faz sentido para quem vê a grade de vários.
+          ...(gerenciaTodos
+            ? [{ chave: "usuario", titulo: "Professor / coordenador", render: (d: Disponibilidade) => d.nomeUsuario }]
+            : []),
           { chave: "dia", titulo: "Dia da semana", render: (d) => rotularDiaSemana(d.diaSemana) },
           { chave: "horario", titulo: "Horário", render: (d) => `${d.horarioInicio.slice(0, 5)} – ${d.horarioFim.slice(0, 5)}` },
           { chave: "ativo", titulo: "Status", render: (d) => (
               <Pill className={d.ativo ? "bg-sage-100 text-sage-700" : "bg-brick-100 text-brick-700"}>
-                {d.ativo ? "Ativa" : "Inativa"}
+                {d.ativo ? "Ativo" : "Inativo"}
               </Pill>
             ) },
         ]}
@@ -173,17 +213,21 @@ export default function DisponibilidadesPage() {
       <Modal
         aberto={modalAberto}
         onFechar={() => setModalAberto(false)}
-        titulo={editando ? "Editar disponibilidade" : "Nova disponibilidade"}
+        titulo={editando ? "Editar horário de atendimento" : "Novo horário de atendimento"}
       >
         <form onSubmit={salvar} className="flex flex-col gap-4">
-          <SelectField
-            label="Professor / coordenador"
-            required
-            placeholder="Selecione…"
-            options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${u.tipoUsuario})` }))}
-            value={form.idUsuario}
-            onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
-          />
+          {gerenciaTodos ? (
+            <SelectField
+              label="Professor / coordenador"
+              required
+              placeholder="Selecione…"
+              options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              value={form.idUsuario}
+              onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
+            />
+          ) : (
+            <TextField label="Professor / coordenador" value={eu?.nome ?? ""} disabled />
+          )}
           <SelectField
             label="Dia da semana"
             required
@@ -215,7 +259,7 @@ export default function DisponibilidadesPage() {
           </FieldGrid>
           {erro && <FieldError>{erro}</FieldError>}
           <CheckboxField
-            label="Disponibilidade ativa"
+            label="Horário ativo"
             checked={form.ativo}
             onCheckedChange={(ativo) => setForm({ ...form, ativo })}
           />
@@ -232,8 +276,8 @@ export default function DisponibilidadesPage() {
 
       <ConfirmDialog
         aberto={!!paraRemover}
-        titulo="Remover disponibilidade"
-        descricao="Tem certeza que deseja remover esta disponibilidade?"
+        titulo="Remover horário"
+        descricao="Tem certeza que deseja remover este horário de atendimento? Reuniões já marcadas não são afetadas."
         confirmarRotulo="Remover"
         tom="danger"
         carregando={removendo}

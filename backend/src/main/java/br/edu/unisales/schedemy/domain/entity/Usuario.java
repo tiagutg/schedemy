@@ -28,6 +28,9 @@ public class Usuario {
     @Column(name = "email", nullable = false, unique = true, length = 150)
     private String email;
 
+    @Column(name = "senha", nullable = false, length = 255)
+    private String senha;
+
     @Column(name = "telefone_whatsapp", length = 20)
     private String telefoneWhatsapp;
 

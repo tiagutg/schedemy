@@ -1,10 +1,12 @@
-import { useCallback, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import { IconAlertTriangle, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { bloqueiosApi } from "@/api/bloqueios";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
@@ -18,7 +20,8 @@ import { TextField, SelectField, FieldGrid, CheckboxField, FieldError } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DIAS_SEMANA, CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
+import { DIAS_SEMANA, rotularEnum } from "@/utils/domain";
+import { situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, hojeISO } from "@/utils/format";
 import type { Agendamento, Bloqueio, Params } from "@/types";
 
@@ -35,10 +38,17 @@ const FORM_VAZIO = {
 
 export default function BloqueiosPage() {
   const toast = useToast();
+  const { pode, perfilVinculado: eu } = useAuth();
+  // O docente gerencia os próprios bloqueios; a administração, os de qualquer docente.
+  const gerenciaTodos = pode("agenda.gerenciarTodos");
+  const meuId = gerenciaTodos ? null : (eu?.id ?? null);
   const { usuarios: professores } = useUsuariosOptions();
   const docentes = professores.filter((u) => u.tipoUsuario === "PROFESSOR" || u.tipoUsuario === "COORDENADOR");
 
-  const buscar = useCallback((params: Params) => bloqueiosApi.listar(params), []);
+  const buscar = useCallback(
+    (params: Params) => bloqueiosApi.listar(meuId ? { ...params, usuarioId: meuId } : params),
+    [meuId]
+  );
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar);
 
   const [modalAberto, setModalAberto] = useState(false);
@@ -55,10 +65,19 @@ export default function BloqueiosPage() {
 
   function abrirCriacao() {
     setEditando(null);
-    setForm(FORM_VAZIO);
+    setForm({ ...FORM_VAZIO, idUsuario: meuId ? String(meuId) : "" });
     setErro("");
     setModalAberto(true);
   }
+
+  // Atalho do painel: /bloqueios?novo=1 já abre o formulário.
+  const [searchParams, setSearchParams] = useSearchParams();
+  useEffect(() => {
+    if (searchParams.get("novo") !== "1") return;
+    setSearchParams({}, { replace: true });
+    abrirCriacao();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   function abrirEdicao(b: Bloqueio) {
     setEditando(b);
@@ -80,6 +99,11 @@ export default function BloqueiosPage() {
     e.preventDefault();
     if (!form.idUsuario) {
       setErro("Selecione um professor ou coordenador.");
+      return;
+    }
+    // Mesma regra do back: com os dois horários preenchidos, o fim precisa vir depois do início.
+    if (form.horarioInicio && form.horarioFim && form.horarioFim <= form.horarioInicio) {
+      setErro("O horário de fim deve ser posterior ao de início. Para bloquear até o fim do dia, deixe o fim em branco.");
       return;
     }
     setSalvando(true);
@@ -141,8 +165,12 @@ export default function BloqueiosPage() {
   return (
     <>
       <PageHeader
-        titulo="Bloqueios de período"
-        subtitulo="Períodos de indisponibilidade na agenda de professores e coordenadores."
+        titulo={gerenciaTodos ? "Bloqueios de período" : "Meus bloqueios de período"}
+        subtitulo={
+          gerenciaTodos
+            ? "Períodos de indisponibilidade na agenda de professores e coordenadores."
+            : "Períodos em que você não está disponível para reuniões."
+        }
         acao={
           <Button onClick={abrirCriacao}>
             <IconPlus />
@@ -151,23 +179,28 @@ export default function BloqueiosPage() {
         }
       />
 
-      <FiltrosCard>
-        <SelectField
-          label="Professor / coordenador"
-          className="w-full sm:w-64"
-          placeholder="Todos"
-          options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
-          value={filtros.usuarioId || ""}
-          onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
-        />
-      </FiltrosCard>
+      {gerenciaTodos && (
+        <FiltrosCard>
+          <SelectField
+            label="Professor / coordenador"
+            className="w-full sm:w-64"
+            placeholder="Todos"
+            options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            value={filtros.usuarioId || ""}
+            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+          />
+        </FiltrosCard>
+      )}
 
       <DataTable
         carregando={carregando}
         chaveLinha={(b) => b.id}
         linhas={linhas}
         colunas={[
-          { chave: "usuario", titulo: "Professor / coordenador", render: (b) => b.nomeUsuario },
+          // A coluna do docente só faz sentido para quem vê os bloqueios de vários.
+          ...(gerenciaTodos
+            ? [{ chave: "usuario", titulo: "Professor / coordenador", render: (b: Bloqueio) => b.nomeUsuario }]
+            : []),
           { chave: "periodo", titulo: "Período", render: (b) =>
               b.dataInicio === b.dataFim ? formatarData(b.dataInicio) : `${formatarData(b.dataInicio)} – ${formatarData(b.dataFim)}` },
           { chave: "horario", titulo: "Horário", render: (b) =>
@@ -200,14 +233,18 @@ export default function BloqueiosPage() {
         titulo={editando ? "Editar bloqueio" : "Novo bloqueio"}
       >
         <form onSubmit={salvar} className="flex flex-col gap-4">
-          <SelectField
-            label="Professor / coordenador"
-            required
-            placeholder="Selecione…"
-            options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${u.tipoUsuario})` }))}
-            value={form.idUsuario}
-            onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
-          />
+          {gerenciaTodos ? (
+            <SelectField
+              label="Professor / coordenador"
+              required
+              placeholder="Selecione…"
+              options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              value={form.idUsuario}
+              onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
+            />
+          ) : (
+            <TextField label="Professor / coordenador" value={eu?.nome ?? ""} disabled />
+          )}
           <FieldGrid>
             <div className="flex flex-col gap-2">
               <Label htmlFor="bloq-data-inicio">Data de início</Label>
@@ -307,7 +344,7 @@ export default function BloqueiosPage() {
                     {formatarData(a.dataReuniao)} às {a.horarioInicio?.slice(0, 5)}
                   </p>
                 </div>
-                <Pill className={CORES_STATUS_AGENDAMENTO[a.status]}>{rotularEnum(a.status)}</Pill>
+                <Pill className={situacaoDaReuniao(a, eu?.id).cor}>{situacaoDaReuniao(a, eu?.id).rotulo}</Pill>
               </li>
             ))}
           </ul>

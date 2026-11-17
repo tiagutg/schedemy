@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.config;
 
 import br.edu.unisales.schedemy.controller.AgendamentoController;
+import br.edu.unisales.schedemy.controller.AutenticacaoController;
 import br.edu.unisales.schedemy.controller.AvaliacaoController;
 import br.edu.unisales.schedemy.controller.NotificacaoController;
 import br.edu.unisales.schedemy.controller.RegistroMotivoController;
@@ -8,7 +9,10 @@ import br.edu.unisales.schedemy.controller.BloqueioPeriodoController;
 import br.edu.unisales.schedemy.controller.DisponibilidadeController;
 import br.edu.unisales.schedemy.controller.DuracaoReuniaoController;
 import br.edu.unisales.schedemy.controller.UsuarioController;
+import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.security.ConversorDeToken;
 import br.edu.unisales.schedemy.service.AgendamentoService;
+import br.edu.unisales.schedemy.service.AutenticacaoService;
 import br.edu.unisales.schedemy.service.AvaliacaoService;
 import br.edu.unisales.schedemy.service.NotificacaoService;
 import br.edu.unisales.schedemy.service.RegistroMotivoService;
@@ -26,19 +30,28 @@ import org.springframework.http.HttpMethod;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+
+import java.util.Locale;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 
 /**
- * Verifica a matriz de autorizacao do SecurityConfig contra a secao 5.3 do
- * Documento de Definicao de Requisitos.
+ * Verifica a matriz de autorizacao do SecurityConfig (perfis do Documento de
+ * Definicao de Requisitos v3.1.0: RFs, RN 03, RN 06 e RNF 15).
  *
  * O teste olha apenas para o veredito do filtro de seguranca: 403 significa
  * barrado pelo perfil; qualquer outro status (inclusive 404, quando o endpoint
  * ainda nao existe, ou 400, quando falta corpo) significa que a autorizacao
  * deixou passar. Assim a matriz pode ser validada sem banco de dados.
+ *
+ * Cada conta e simulada com um token ja validado (jwt()) que carrega o papel; a conversao
+ * real do token em usuario (ConversorDeToken, que consulta o banco) tem teste proprio.
  */
 @WebMvcTest(controllers = {
         AgendamentoController.class,
@@ -48,9 +61,11 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         UsuarioController.class,
         AvaliacaoController.class,
         NotificacaoController.class,
-        RegistroMotivoController.class
+        RegistroMotivoController.class,
+        AutenticacaoController.class
 })
-@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class })
+@Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, NaoAutenticadoJsonEntryPoint.class, JwtConfig.class, ConversorDeToken.class,
+        br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class })
 class SecurityConfigTest {
 
     @Autowired
@@ -64,33 +79,60 @@ class SecurityConfigTest {
     @MockitoBean private AvaliacaoService avaliacaoService;
     @MockitoBean private NotificacaoService notificacaoService;
     @MockitoBean private RegistroMotivoService registroMotivoService;
+    @MockitoBean private AutenticacaoService autenticacaoService;
+    @MockitoBean private UsuarioRepository usuarioRepository;
 
-    private static final String SENHA_POR_CONTA = "123";
-
+    /** A conta do CSV ("aluno", "recepcionista"...) e o proprio papel. */
     private int statusDe(String conta, String metodo, String caminho) throws Exception {
+        var papel = new SimpleGrantedAuthority("ROLE_" + conta.toUpperCase(Locale.ROOT));
         MockHttpServletRequestBuilder req = request(HttpMethod.valueOf(metodo), caminho)
-                .with(httpBasic(conta, conta + SENHA_POR_CONTA));
+                .with(jwt().authorities(papel));
         return mockMvc.perform(req).andReturn().getResponse().getStatus();
     }
 
     @ParameterizedTest(name = "{0} {1} {2} -> permitido")
     @DisplayName("Acessos que cada perfil deve ter")
     @CsvSource({
-            // O login valida a credencial consultando os usuarios: todos precisam ler.
-            "aluno,         GET,    /api/v1/usuarios",
-            "professor,     GET,    /api/v1/usuarios",
+            // Todos leem o proprio cadastro (login) e o resumo para escolher convidados (RF 14, RF 33).
+            "aluno,         GET,    /api/v1/usuarios/me",
+            "professor,     GET,    /api/v1/usuarios/me",
+            "recepcionista, GET,    /api/v1/usuarios/me",
+            "aluno,         GET,    /api/v1/usuarios/resumo",
+            "professor,     GET,    /api/v1/usuarios/resumo",
+            "coordenador,   GET,    /api/v1/usuarios/resumo",
+            "recepcionista, GET,    /api/v1/usuarios/resumo",
+            "admin,         GET,    /api/v1/usuarios/resumo",
+            // Cadastro completo (RNF 18): administracao e recepcao.
             "recepcionista, GET,    /api/v1/usuarios",
-            "coordenador,   GET,    /api/v1/usuarios",
+            "recepcionista, GET,    /api/v1/usuarios/1",
             "admin,         GET,    /api/v1/usuarios",
+            "admin,         GET,    /api/v1/usuarios/1",
 
             // Agendamentos: RF 13, 15, 20 valem para todos os perfis.
-            "aluno,         GET,    /api/v1/agendamentos",
-            "recepcionista, GET,    /api/v1/agendamentos",
+            "admin,         GET,    /api/v1/agendamentos",
+            "aluno,         GET,    /api/v1/agendamentos/1",
+            "aluno,         GET,    /api/v1/agendamentos/usuarios/1",
             "aluno,         POST,   /api/v1/agendamentos",
             "recepcionista, POST,   /api/v1/agendamentos",
             "professor,     POST,   /api/v1/agendamentos",
             "aluno,         PATCH,  /api/v1/agendamentos/1/cancelamento",
             "recepcionista, PATCH,  /api/v1/agendamentos/1/cancelamento",
+            // Remarcacao (o service exige ser o organizador, ou recepcao/admin por ele).
+            "aluno,         POST,   /api/v1/agendamentos/1/remarcacao",
+            "professor,     POST,   /api/v1/agendamentos/1/remarcacao",
+            "coordenador,   POST,   /api/v1/agendamentos/1/remarcacao",
+            "recepcionista, POST,   /api/v1/agendamentos/1/remarcacao",
+
+            // RF 13, 20, 21: a recepcao ve todos os agendamentos, consulta, edita e cancela.
+            "recepcionista, GET,    /api/v1/agendamentos",
+            "recepcionista, GET,    /api/v1/agendamentos/1",
+            "recepcionista, PUT,    /api/v1/agendamentos/1",
+            "recepcionista, GET,    /api/v1/registros-motivo/agendamentos/1",
+
+            // RF 14: horarios livres para todos os envolvidos, sem expor a agenda de ninguem.
+            "aluno,         GET,    /api/v1/agendamentos/horarios-livres",
+            "professor,     GET,    /api/v1/agendamentos/horarios-livres",
+            "recepcionista, GET,    /api/v1/agendamentos/horarios-livres",
 
             // RF 19: convidados respondem ao convite.
             "aluno,         PATCH,  /api/v1/agendamentos/1/resposta",
@@ -127,7 +169,11 @@ class SecurityConfigTest {
             "professor,     GET,    /api/v1/avaliacoes/alunos/1",
             "coordenador,   GET,    /api/v1/avaliacoes/alunos/1",
 
-            // RF 23: log de notificacoes para a docencia e a administracao.
+            // RF 23: cada perfil le e marca como lidos os proprios avisos (escopo no service).
+            "aluno,         GET,    /api/v1/notificacoes",
+            "recepcionista, GET,    /api/v1/notificacoes",
+            "aluno,         PATCH,  /api/v1/notificacoes/1/lida",
+            "recepcionista, PATCH,  /api/v1/notificacoes/lidas",
             "professor,     GET,    /api/v1/notificacoes",
             "coordenador,   GET,    /api/v1/notificacoes",
             "admin,         GET,    /api/v1/notificacoes",
@@ -155,6 +201,16 @@ class SecurityConfigTest {
             "aluno,         DELETE, /api/v1/usuarios/1",
             "coordenador,   DELETE, /api/v1/usuarios/1",
             "coordenador,   PUT,    /api/v1/usuarios/1",
+            "recepcionista, PUT,    /api/v1/usuarios/1",
+            "recepcionista, DELETE, /api/v1/usuarios/1",
+
+            // RNF 18: e-mail e telefone de toda a base nao ficam abertos a qualquer logado.
+            "aluno,         GET,    /api/v1/usuarios",
+            "professor,     GET,    /api/v1/usuarios",
+            "coordenador,   GET,    /api/v1/usuarios",
+            "aluno,         GET,    /api/v1/usuarios/1",
+            "professor,     GET,    /api/v1/usuarios/1",
+            "coordenador,   GET,    /api/v1/usuarios/1",
 
             // RN 06: so professor e coordenador definem disponibilidade.
             "aluno,         POST,   /api/v1/disponibilidades",
@@ -182,9 +238,15 @@ class SecurityConfigTest {
             "coordenador,   DELETE, /api/v1/agendamentos/1",
             "recepcionista, DELETE, /api/v1/agendamentos/1",
 
-            // Notificacoes: log operacional da docencia/administracao.
-            "aluno,         GET,    /api/v1/notificacoes",
-            "recepcionista, GET,    /api/v1/notificacoes",
+            // Notificacoes: criar, enviar e remover sao da administracao.
+            "aluno,         POST,   /api/v1/notificacoes",
+            "professor,     DELETE, /api/v1/notificacoes/1",
+            "recepcionista, PATCH,  /api/v1/notificacoes/1/enviar",
+
+            // Listagem global de agendamentos: so recepcao e administracao (RNF 15).
+            "aluno,         GET,    /api/v1/agendamentos",
+            "professor,     GET,    /api/v1/agendamentos",
+            "coordenador,   GET,    /api/v1/agendamentos",
 
             // Avaliacoes: RF 24 restringe a criacao ao aluno.
             "professor,     POST,   /api/v1/avaliacoes",
@@ -202,12 +264,44 @@ class SecurityConfigTest {
     @DisplayName("Sem autenticacao a API responde 401")
     @CsvSource({
             "GET,  /api/v1/usuarios",
+            "GET,  /api/v1/usuarios/resumo",
             "GET,  /api/v1/agendamentos",
-            "POST, /api/v1/agendamentos"
+            "POST, /api/v1/agendamentos",
+            "POST, /api/v1/agendamentos/1/remarcacao",
+            "GET,  /api/v1/agendamentos/horarios-livres"
     })
     void deveExigirAutenticacao(String metodo, String caminho) throws Exception {
         int status = mockMvc.perform(request(HttpMethod.valueOf(metodo), caminho))
                 .andReturn().getResponse().getStatus();
         assertThat(status).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("O login e publico")
+    void loginEhPublico() throws Exception {
+        int status = mockMvc.perform(request(HttpMethod.POST, "/api/v1/auth/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"a@b.com\",\"senha\":\"x\"}"))
+                .andReturn().getResponse().getStatus();
+        assertThat(status).isEqualTo(200);
+    }
+
+    @Test
+    @DisplayName("Basic Auth nao e mais aceito (a senha so trafega no login)")
+    void basicAuthNaoValeMais() throws Exception {
+        int status = mockMvc.perform(request(HttpMethod.GET, "/api/v1/usuarios/me")
+                        .with(httpBasic("admin@hotmail.com", "admin123")))
+                .andReturn().getResponse().getStatus();
+        assertThat(status).isEqualTo(401);
+    }
+
+    @Test
+    @DisplayName("Token malformado ou de outro emissor responde 401 em JSON")
+    void tokenInvalidoResponde401() throws Exception {
+        var resposta = mockMvc.perform(request(HttpMethod.GET, "/api/v1/usuarios/me")
+                        .header("Authorization", "Bearer abc.def.ghi"))
+                .andReturn().getResponse();
+        assertThat(resposta.getStatus()).isEqualTo(401);
+        assertThat(resposta.getContentType()).contains("application/json");
     }
 }

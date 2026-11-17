@@ -1,16 +1,14 @@
 // Controle de acesso por perfil no front-end.
 //
-// Baseado na seção 5.3 ("Relação Entre Atores e Casos de Uso") do Documento de
-// Definição de Requisitos v3.1.0 e nas regras RN 03, RN 06 e RNF 15.
+// Baseado no Documento de Definição de Requisitos v3.1.0 (atores citados nos
+// RFs) e nas regras RN 03, RN 06 e RNF 15.
 //
 // IMPORTANTE: isto é apenas a camada de interface — esconder um botão não
-// protege a API. A autorização definitiva precisa ser feita no back-end
-// (SecurityConfig / @PreAuthorize), que hoje apenas exige autenticação.
+// protege a API. A autorização definitiva é feita no back-end (SecurityConfig).
 
-import type { StoredAuth } from "@/api/client";
 import type { Usuario } from "@/types";
 
-/** Perfis de acesso. Os quatro primeiros espelham o enum TipoUsuario do back-end. */
+/** Perfis de acesso. Espelham o enum TipoUsuario do back-end. */
 export const PERFIS = {
   ALUNO: "ALUNO",
   PROFESSOR: "PROFESSOR",
@@ -22,19 +20,6 @@ export const PERFIS = {
 export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
 
 /**
- * Contas fixas do SecurityConfig do back-end mapeadas para o perfil de acesso.
- * A conta "admin" acumula ADMIN/COORDENADOR/RECEPCIONISTA e é tratada como
- * superusuário administrativo.
- */
-const PERFIL_POR_USUARIO: Record<string, Perfil> = {
-  admin: PERFIS.ADMIN,
-  coordenador: PERFIS.COORDENADOR,
-  professor: PERFIS.PROFESSOR,
-  recepcionista: PERFIS.RECEPCIONISTA,
-  aluno: PERFIS.ALUNO,
-};
-
-/**
  * Permissões atribuídas a cada perfil.
  *
  * - agendamentos.*  → RF 13, 15, 16, 17, 18, 19, 20, 21, 28
@@ -42,10 +27,16 @@ const PERFIL_POR_USUARIO: Record<string, Perfil> = {
  * - duracoes → RF 01 / RN 17: durações são definidas pela instituição
  * - usuarios → gestão administrativa de cadastros
  * - avaliacoes → RF 24 (aluno avalia) e RNF 11 (coordenação acompanha)
- * - notificacoes → RF 23: o envio é do ator Sistema; a tela é um log operacional
+ * - notificacoes → RF 23: o sistema gera os avisos; cada perfil lê os seus
+ *
+ * Por padrão cada pessoa age em nome próprio (organiza, cancela, responde e
+ * avalia como o usuário logado). As permissões abaixo liberam agir por outros:
+ * - agendamentos.verTodos / organizarPorOutros → recepção agenda para terceiros (RN 03)
+ * - agenda.gerenciarTodos → disponibilidades e bloqueios de qualquer docente
+ * - avaliacoes.verTodas → docência acompanha as avaliações dos alunos (RNF 11)
  */
-// A seção 5.3 do documento trata "Professor/Coordenador" como um único ator:
-// os dois perfis compartilham exatamente as mesmas permissões.
+// Os RFs sempre citam "professor ou coordenador" juntos: os dois perfis
+// compartilham exatamente as mesmas permissões.
 const PERMISSOES_DOCENTE = [
   "agendamentos.ver",
   "agendamentos.criar",
@@ -55,6 +46,7 @@ const PERMISSOES_DOCENTE = [
   "bloqueios.gerenciar",
   "duracoes.gerenciar",
   "avaliacoes.ver",
+  "avaliacoes.verTodas",
   "notificacoes.ver",
 ];
 
@@ -66,11 +58,19 @@ const PERMISSOES_POR_PERFIL: Record<string, string[]> = {
     "agendamentos.responder",
     "avaliacoes.ver",
     "avaliacoes.criar",
+    "notificacoes.ver",
   ],
   [PERFIS.PROFESSOR]: PERMISSOES_DOCENTE,
   [PERFIS.COORDENADOR]: PERMISSOES_DOCENTE,
   // RN 03: a recepção não é convidada das reuniões, então não aceita/recusa convites.
-  [PERFIS.RECEPCIONISTA]: ["agendamentos.ver", "agendamentos.criar", "agendamentos.cancelar"],
+  [PERFIS.RECEPCIONISTA]: [
+    "agendamentos.ver",
+    "agendamentos.verTodos",
+    "agendamentos.criar",
+    "agendamentos.organizarPorOutros",
+    "agendamentos.cancelar",
+    "notificacoes.ver",
+  ],
   [PERFIS.ADMIN]: ["*"],
 };
 
@@ -86,15 +86,11 @@ export const ROTULOS_PERFIL: Record<string, string> = {
 /**
  * Descobre o perfil da sessão.
  *
- * A conta autenticada (Basic Auth) é a fonte principal, porque é ela que define
- * as roles no back-end. O perfil vinculado (Usuario) serve de reserva para
- * contas que não estejam na lista fixa do SecurityConfig.
+ * O login é feito com o e-mail de um usuário cadastrado, e o back-end usa o
+ * tipoUsuario desse cadastro como role; o perfil segue a mesma regra.
  */
-export function derivarPerfil(auth: StoredAuth | null, perfilVinculado: Usuario | null): string | null {
-  const porConta = PERFIL_POR_USUARIO[auth?.username?.trim().toLowerCase() as string];
-  if (porConta) return porConta;
-  if (perfilVinculado?.tipoUsuario) return perfilVinculado.tipoUsuario;
-  return null;
+export function derivarPerfil(perfilVinculado: Usuario | null): string | null {
+  return perfilVinculado?.tipoUsuario ?? null;
 }
 
 /** Indica se o perfil possui a permissão informada. */
