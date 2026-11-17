@@ -17,10 +17,12 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * RF 23 - avisos dentro do sistema (canal SISTEMA) para os envolvidos em cada mudanca de um agendamento.
+ * RF 23 / RN 07 - avisa os envolvidos em cada mudanca de um agendamento.
  *
- * Para o canal SISTEMA, status PENDENTE significa "nao lida" e ENVIADO significa "lida"
- * (entregue ao usuario quando ele abre o aviso).
+ * Cada aviso vira duas linhas em notificacao:
+ * - canal SISTEMA: aviso dentro do sistema; PENDENTE significa "nao lido" e ENVIADO, "lido";
+ * - canal EMAIL: fila de e-mail; PENDENTE ate o {@link EnvioDeEmails} enviar (ENVIADO) ou desistir (FALHA).
+ *   So para usuario ativo e com e-mail cadastrado.
  */
 @Component
 @RequiredArgsConstructor
@@ -136,13 +138,26 @@ public class Notificador {
     }
 
     private void enviar(Usuario usuario, Agendamento agendamento, String tipo, String mensagem) {
-        notificacaoRepository.save(Notificacao.builder()
+        String texto = limitar(mensagem, TAMANHO_MAXIMO_MENSAGEM);
+        notificacaoRepository.save(aviso(usuario, agendamento, tipo, texto, CanalEnvio.SISTEMA));
+        if (recebeEmail(usuario)) {
+            notificacaoRepository.save(aviso(usuario, agendamento, tipo, texto, CanalEnvio.EMAIL));
+        }
+    }
+
+    private static Notificacao aviso(Usuario usuario, Agendamento agendamento, String tipo, String mensagem,
+                                     CanalEnvio canal) {
+        return Notificacao.builder()
                 .usuario(usuario)
                 .agendamento(agendamento)
-                .canalEnvio(CanalEnvio.SISTEMA)
+                .canalEnvio(canal)
                 .tipoEvento(tipo)
-                .mensagem(limitar(mensagem, TAMANHO_MAXIMO_MENSAGEM))
-                .build());
+                .mensagem(mensagem)
+                .build();
+    }
+
+    private static boolean recebeEmail(Usuario usuario) {
+        return !Boolean.FALSE.equals(usuario.getAtivo()) && usuario.getEmail() != null && !usuario.getEmail().isBlank();
     }
 
     private static List<Usuario> convidados(Agendamento agendamento) {

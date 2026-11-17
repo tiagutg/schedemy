@@ -1,5 +1,6 @@
 package br.edu.unisales.schedemy.service;
 
+import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.dto.request.NotificacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.NotificacaoResponseDTO;
@@ -11,7 +12,8 @@ public interface NotificacaoService {
 
     NotificacaoResponseDTO buscarPorId(Long id);
 
-    Page<NotificacaoResponseDTO> listar(Long usuarioId, StatusEnvio status, Pageable pageable);
+    /** canal nulo = SISTEMA (os avisos que a tela mostra); EMAIL lista a fila de e-mail (RF 23). */
+    Page<NotificacaoResponseDTO> listar(Long usuarioId, CanalEnvio canal, StatusEnvio status, Pageable pageable);
 
     NotificacaoResponseDTO marcarComoEnviada(Long id);
 

@@ -156,6 +156,27 @@ Todas são opcionais. Sem elas, a API usa os valores padrão.
 | `SCHEDEMY_JWT_VALIDADE_MINUTOS` | `480` | Validade do token; depois disso é preciso entrar de novo |
 | `SCHEDEMY_FUSO` | `America/Sao_Paulo` | Fuso usado nos prazos e na rotina de status (evita deslocamento quando o servidor roda em UTC) |
 | `SPRING_PROFILES_ACTIVE` | *(vazio)* | `supabase` usa o banco PostgreSQL do Supabase (o script `subir-api-supabase.ps1` já define) |
+| `SCHEDEMY_EMAIL_ATIVO` | `false` | Liga o envio dos avisos por e-mail (RF 23). Desligado, os e-mails ficam na fila (tabela `notificacao`, canal `EMAIL`) e nada sai |
+| `SCHEDEMY_EMAIL_REMETENTE` | `Schedemy <nao-responda@unisales.edu.br>` | Remetente dos e-mails |
+| `SCHEDEMY_URL_FRONT` | `http://localhost:5173` | Endereço do front usado nos links dos e-mails |
+| `SCHEDEMY_EMAIL_INTERVALO` / `SCHEDEMY_EMAIL_LOTE` | `PT1M` / `50` | De quanto em quanto tempo a fila é enviada e quantos e-mails por vez |
+| `SCHEDEMY_EMAIL_VALIDADE` | `PT24H` | E-mail que não saiu nesse prazo (servidor fora do ar) vira `FALHA` e não sai mais |
+| `SMTP_HOST` / `SMTP_PORT` | `localhost` / `1025` | Servidor SMTP (o padrão é o Mailpit local, veja abaixo) |
+| `SMTP_USUARIO` / `SMTP_SENHA` | *(vazio)* | Conta do SMTP |
+| `SMTP_AUTH` / `SMTP_STARTTLS` | `false` / `false` | `true` nos dois para servidor real na porta 587 (faculdade, Microsoft 365, Gmail com senha de app) |
+
+#### Testar o e-mail sem enviar de verdade
+
+O [Mailpit](https://mailpit.axllent.org/) é um servidor SMTP local que recebe todos os e-mails e mostra numa caixa de
+entrada no navegador, sem entregar a ninguém:
+
+```bash
+docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit   # ou baixe o binário do site
+cd backend && SCHEDEMY_EMAIL_ATIVO=true ./mvnw spring-boot:run              # caixa de entrada: http://localhost:8025
+```
+
+**Nunca ligue `SCHEDEMY_EMAIL_ATIVO` com o perfil `supabase` e um SMTP real sem combinar com a equipe:** os e-mails
+vão para os endereços cadastrados no banco compartilhado.
 
 ### Front-end (`frontend/.env`)
 

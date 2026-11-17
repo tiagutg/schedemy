@@ -5,10 +5,13 @@ import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
+import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
+import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,7 @@ class RepositoriosNoBancoTest {
     @Autowired private AgendamentoRepository agendamentoRepository;
     @Autowired private DisponibilidadeRepository disponibilidadeRepository;
     @Autowired private BloqueioPeriodoRepository bloqueioPeriodoRepository;
+    @Autowired private NotificacaoRepository notificacaoRepository;
 
     private Usuario professor;
     private Usuario aluno;
@@ -250,6 +254,50 @@ class RepositoriosNoBancoTest {
                     .containsExactly(unico);
             assertThat(bloqueioPeriodoRepository.buscarComFiltros(null, null, null, PAGINA)).isNotEmpty();
             assertThat(bloqueioPeriodoRepository.buscarComFiltros(professor.getId(), DIA, DIA, PAGINA)).hasSize(2);
+        }
+    }
+
+    @Nested
+    @DisplayName("Notificacao")
+    class DeNotificacao {
+
+        private Notificacao aviso(Usuario usuario, Agendamento agendamento, CanalEnvio canal) {
+            return em.persist(Notificacao.builder().usuario(usuario).agendamento(agendamento).canalEnvio(canal)
+                    .tipoEvento("CONVITE").mensagem("Teste banco").build());
+        }
+
+        @Test
+        @DisplayName("buscarComFiltros separa os canais; fila de e-mail traz destinatario e reuniao; expirar so pega EMAIL antigo")
+        void filaDeEmail() {
+            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Notificacao banco");
+            Notificacao sistema = aviso(professor, a, CanalEnvio.SISTEMA);
+            Notificacao email = aviso(professor, a, CanalEnvio.EMAIL);
+            Notificacao semReuniao = aviso(aluno, null, CanalEnvio.EMAIL);
+            em.flush();
+
+            assertThat(notificacaoRepository.buscarComFiltros(professor.getId(), CanalEnvio.SISTEMA, null, PAGINA))
+                    .containsExactly(sistema);
+            assertThat(notificacaoRepository.buscarComFiltros(professor.getId(), CanalEnvio.EMAIL, StatusEnvio.PENDENTE, PAGINA))
+                    .containsExactly(email);
+            assertThat(notificacaoRepository.buscarComFiltros(null, CanalEnvio.EMAIL, null, PAGINA))
+                    .contains(email, semReuniao).doesNotContain(sistema);
+
+            assertThat(notificacaoRepository.buscarEmailsPendentes(PageRequest.of(0, 1000)))
+                    .contains(email, semReuniao).doesNotContain(sistema);
+
+            // criado_em nao e atualizavel pela entidade: envelhece direto no banco.
+            em.getEntityManager().createNativeQuery("UPDATE notificacao SET criado_em = :velho WHERE id_notificacao IN (:ids)")
+                    .setParameter("velho", LocalDateTime.now().minusDays(3))
+                    .setParameter("ids", List.of(sistema.getId(), email.getId()))
+                    .executeUpdate();
+            em.clear();
+            assertThat(notificacaoRepository.expirarEmailsPendentes(LocalDateTime.now().minusDays(1))).isPositive();
+            assertThat(notificacaoRepository.findById(email.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.FALHA);
+            assertThat(notificacaoRepository.findById(sistema.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
+            assertThat(notificacaoRepository.findById(semReuniao.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
         }
     }
 }
