@@ -117,7 +117,7 @@ class SecurityConfigTest {
             "professor,     POST,   /api/v1/agendamentos",
             "aluno,         PATCH,  /api/v1/agendamentos/1/cancelamento",
             "recepcionista, PATCH,  /api/v1/agendamentos/1/cancelamento",
-            // RF 28: remarcacao (o service exige ser o organizador, ou recepcao/admin por ele).
+            // Remarcacao (o service exige ser o organizador, ou recepcao/admin por ele).
             "aluno,         POST,   /api/v1/agendamentos/1/remarcacao",
             "professor,     POST,   /api/v1/agendamentos/1/remarcacao",
             "coordenador,   POST,   /api/v1/agendamentos/1/remarcacao",

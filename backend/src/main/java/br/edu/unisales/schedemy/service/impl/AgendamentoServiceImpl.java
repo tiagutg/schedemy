@@ -52,7 +52,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     /** Depois de confirmada, a reuniao ainda recebe respostas dos convidados que nao responderam (RN 18). */
     private static final Set<StatusAgendamento> STATUS_QUE_ACEITAM_RESPOSTA = EnumSet.of(
             StatusAgendamento.PENDENTE, StatusAgendamento.AGUARDANDO_RESPOSTA, StatusAgendamento.CONFIRMADO);
-    /** RF 28 - reunioes ainda nao iniciadas e nao canceladas. */
+    /** Remarcacao - reunioes ainda nao iniciadas e nao canceladas. */
     private static final Set<StatusAgendamento> STATUS_QUE_PODEM_SER_REMARCADOS = STATUS_QUE_ACEITAM_RESPOSTA;
     private static final DateTimeFormatter DATA_BR = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter HORA_BR = DateTimeFormatter.ofPattern("HH:mm");
@@ -119,7 +119,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                 .build();
 
         if (dto.idAgendamentoOrigem() != null) {
-            agendamento.setAgendamentoOrigem(buscarAgendamento(dto.idAgendamentoOrigem())); // RF 28
+            agendamento.setAgendamentoOrigem(buscarAgendamento(dto.idAgendamentoOrigem())); // remarcacao
         }
 
         // RN 09 - o organizador sempre participa como ORGANIZADOR, ja aceito.
@@ -335,7 +335,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.CANCELAMENTO, dto.motivo()); // RF 11
 
         agendamento = agendamentoRepository.save(agendamento);
-        // Na remarcacao (RF 28) os envolvidos ja receberam o convite da nova reuniao: nao avisa o cancelamento da antiga.
+        // Na remarcacao os envolvidos ja receberam o convite da nova reuniao: nao avisa o cancelamento da antiga.
         if (!agendamentoRepository.existsByAgendamentoOrigemIdAndStatusNot(agendamento.getId(), StatusAgendamento.CANCELADO)) {
             notificador.cancelamento(agendamento, usuario); // RF 23
         }
@@ -343,7 +343,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     }
 
     /**
-     * RF 28 - remarcacao atomica: cancela a reuniao original (com o motivo - RF 11) e cria a nova ligada a ela.
+     * Remarcacao atomica (base do RF 08/09): cancela a reuniao original (com o motivo - RF 11) e cria a nova ligada a ela.
      * Tudo na mesma transacao: se a nova reuniao for recusada por qualquer regra, a original continua como estava.
      * READ COMMITTED pelo mesmo motivo de criar() (RN 01).
      */
@@ -515,6 +515,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
      * RN 18 (Documento de Requisitos v2.7.0) - a reuniao acontece quando pelo menos um professor/coordenador
      * e pelo menos um aluno aceitam. A recusa de parte dos alunos (ou de parte dos docentes) nao impede a
      * reuniao; ela so e cancelada quando TODOS os docentes ou TODOS os alunos recusam.
+     *
+     * RNF 13 - enquanto nao confirma nem cancela, continua PENDENTE (decisao de 12/11/2026). As respostas
+     * nao levam mais a AGUARDANDO_RESPOSTA: esse status fica para a solicitacao de edicao (RF 21) e a
+     * sugestao de remarcacao (RF 08) esperando resposta. Assim a edicao direta (RN 14) segue valendo ate
+     * a reuniao ser confirmada.
      */
     static StatusAgendamento statusPelasRespostas(List<AgendamentoParticipante> participantes) {
         List<AgendamentoParticipante> docentes = participantes.stream()
@@ -527,7 +532,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
         boolean temDocenteAceito = docentes.stream().anyMatch(p -> p.getStatusResposta() == StatusResposta.ACEITO);
         boolean temAlunoAceito = alunos.stream().anyMatch(p -> p.getStatusResposta() == StatusResposta.ACEITO);
-        return temDocenteAceito && temAlunoAceito ? StatusAgendamento.CONFIRMADO : StatusAgendamento.AGUARDANDO_RESPOSTA;
+        return temDocenteAceito && temAlunoAceito ? StatusAgendamento.CONFIRMADO : StatusAgendamento.PENDENTE;
     }
 
     private static boolean todosRecusaram(List<AgendamentoParticipante> grupo) {

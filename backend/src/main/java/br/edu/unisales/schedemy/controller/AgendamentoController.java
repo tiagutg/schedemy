@@ -102,7 +102,7 @@ public class AgendamentoController {
 
     @PostMapping("/{id}/remarcacao")
     @Operation(summary = "Remarcar agendamento",
-            description = "RF 28: cancela a reuniao original (exige motivo e confirmacao; RN 05) e cria a nova ligada a ela "
+            description = "Remarcacao (base do RF 08/09): cancela a reuniao original (exige motivo e confirmacao; RN 05) e cria a nova ligada a ela "
                     + "(idAgendamentoOrigem), numa unica transacao. Se a nova for recusada por alguma regra, nada muda.")
     public ResponseEntity<AgendamentoResponseDTO> remarcar(@PathVariable Long id, @Valid @RequestBody RemarcacaoRequestDTO dto) {
         AgendamentoResponseDTO nova = agendamentoService.remarcar(id, dto);

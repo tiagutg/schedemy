@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import {
   IconCalendarPlus,
   IconCalendarRepeat,
+  IconCopy,
   IconCheck,
   IconExternalLink,
   IconPencil,
@@ -30,8 +31,8 @@ interface AgendamentoDetailModalProps {
   agendamento: Agendamento | null;
   onFechar: () => void;
   onAlterado: () => void;
-  /** Abre o formulário para editar ou remarcar este agendamento. */
-  onAlterar?: (modo: "editar" | "remarcar", agendamento: Agendamento) => void;
+  /** Abre o formulário para editar, remarcar ou agendar de novo (RF 28) a partir deste agendamento. */
+  onAlterar?: (modo: "editar" | "remarcar" | "replicar", agendamento: Agendamento) => void;
 }
 
 export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado, onAlterar }: AgendamentoDetailModalProps) {
@@ -94,6 +95,8 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
     horasAteReuniao > 0;
   const situacao = situacaoDaReuniao(a, eu?.id);
   const participo = a.participantes.some((p) => p.idUsuario === eu?.id);
+  // RF 28: quem participou (ou a recepção/administração) agenda de novo com os mesmos dados, em qualquer status.
+  const podeReplicar = pode("agendamentos.criar") && (participo || podeGerir);
   // RF 24: o aluno participante avalia a reunião concluída.
   const podeAvaliar = a.status === "CONCLUIDO" && participo && pode("avaliacoes.criar");
   const podeExportar = ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) && horasAteReuniao > 0;
@@ -365,6 +368,12 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
                 <IconCalendarRepeat />
                 Remarcar
+              </Button>
+            )}
+            {podeReplicar && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("replicar", a)}>
+                <IconCopy />
+                Agendar de novo
               </Button>
             )}
             <Button variant="outline" onClick={onFechar}>

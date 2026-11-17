@@ -16,7 +16,7 @@ import static br.edu.unisales.schedemy.domain.enums.StatusResposta.PENDENTE;
 import static br.edu.unisales.schedemy.domain.enums.StatusResposta.RECUSADO;
 import static org.assertj.core.api.Assertions.assertThat;
 
-/** RN 18 (Documento de Requisitos v2.7.0) - quando a reuniao acontece, aguarda ou e cancelada. */
+/** RN 18 e RNF 13 - quando a reuniao acontece, continua pendente ou e cancelada. */
 class StatusPelasRespostasTest {
 
     private long proximoId = 1;
@@ -31,12 +31,12 @@ class StatusPelasRespostasTest {
     }
 
     @Test
-    @DisplayName("Professor ainda nao respondeu -> AGUARDANDO_RESPOSTA")
+    @DisplayName("Professor ainda nao respondeu -> PENDENTE (RNF 13)")
     void aguardaDocente() {
         var status = AgendamentoServiceImpl.statusPelasRespostas(List.of(
                 organizador(TipoUsuario.ALUNO),
                 convidado(TipoUsuario.PROFESSOR, PENDENTE)));
-        assertThat(status).isEqualTo(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        assertThat(status).isEqualTo(StatusAgendamento.PENDENTE);
     }
 
     @Test
@@ -60,13 +60,13 @@ class StatusPelasRespostasTest {
     }
 
     @Test
-    @DisplayName("Um de dois docentes recusou e o outro ainda nao respondeu -> continua aguardando")
+    @DisplayName("Um de dois docentes recusou e o outro ainda nao respondeu -> continua PENDENTE")
     void recusaDeUmDocenteNaoCancelaSeHaOutro() {
         var status = AgendamentoServiceImpl.statusPelasRespostas(List.of(
                 organizador(TipoUsuario.ALUNO),
                 convidado(TipoUsuario.PROFESSOR, RECUSADO),
                 convidado(TipoUsuario.COORDENADOR, PENDENTE)));
-        assertThat(status).isEqualTo(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        assertThat(status).isEqualTo(StatusAgendamento.PENDENTE);
     }
 
     @Test
@@ -76,6 +76,25 @@ class StatusPelasRespostasTest {
                 organizador(TipoUsuario.ALUNO),
                 convidado(TipoUsuario.PROFESSOR, RECUSADO)));
         assertThat(status).isEqualTo(StatusAgendamento.CANCELADO);
+    }
+
+    @Test
+    @DisplayName("Resposta de um aluno sem decisao do docente nao tira a reuniao de PENDENTE (RNF 13)")
+    void respostaDeAlunoNaoMudaParaAguardando() {
+        var status = AgendamentoServiceImpl.statusPelasRespostas(List.of(
+                organizador(TipoUsuario.ALUNO),
+                convidado(TipoUsuario.ALUNO, ACEITO),
+                convidado(TipoUsuario.PROFESSOR, PENDENTE)));
+        assertThat(status).isEqualTo(StatusAgendamento.PENDENTE);
+    }
+
+    @Test
+    @DisplayName("Professor organizador e aluno ainda sem resposta -> PENDENTE")
+    void professorOrganizaEAlunoNaoRespondeu() {
+        var status = AgendamentoServiceImpl.statusPelasRespostas(List.of(
+                organizador(TipoUsuario.PROFESSOR),
+                convidado(TipoUsuario.ALUNO, PENDENTE)));
+        assertThat(status).isEqualTo(StatusAgendamento.PENDENTE);
     }
 
     private AgendamentoParticipante organizador(TipoUsuario tipo) {

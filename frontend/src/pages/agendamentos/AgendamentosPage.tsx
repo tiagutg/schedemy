@@ -151,7 +151,13 @@ export default function AgendamentosPage() {
     setVersaoSemana((v) => v + 1);
   }
   function aoAlterar(salvo: Agendamento) {
-    toast.sucesso(alteracao?.modo === "remarcar" ? "Reunião remarcada." : "Agendamento atualizado.");
+    const mensagens: Record<ModoAgendamento, string> = {
+      criar: "Agendamento criado com sucesso!",
+      replicar: "Agendamento criado com sucesso!",
+      editar: "Agendamento atualizado.",
+      remarcar: "Reunião remarcada.",
+    };
+    toast.sucesso(mensagens[alteracao?.modo ?? "editar"]);
     setAlteracao(null);
     setDetalhe(salvo);
     recarregar();

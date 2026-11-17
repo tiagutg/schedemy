@@ -176,3 +176,28 @@ test("sugere os próximos dias livres e preenche data e horário ao escolher", a
     await restaurar();
   }
 });
+
+test("aluno agenda de novo a partir da reunião cancelada, sem alterar a original (RF 28)", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  const original = await abrirDetalhe(page, topico, "Cancelada");
+  await original.getByRole("button", { name: "Agendar de novo" }).click();
+
+  const modal = page.getByRole("dialog", { name: "Agendar de novo" });
+  // Tópico e participantes vêm da reunião anterior.
+  await expect(modal.getByLabel("Tópico")).toHaveValue(topico);
+  await expect(modal.locator("label", { hasText: CONTAS.professor.nome }).getByRole("checkbox")).toBeChecked();
+
+  await modal.locator("#novo-data").fill(diaISO);
+  const mais = agendaDocentes(page).getByRole("button", { name: /horários$/ });
+  if (await mais.count()) await mais.click();
+  await horariosSugeridos(page).first().click();
+  await expect(agendaDocentes(page)).toContainText("está livre para todos os envolvidos");
+  await modal.getByRole("button", { name: "Criar agendamento" }).click();
+  await expect(page.getByText("Agendamento criado com sucesso!")).toBeVisible();
+
+  // A nova nasce pendente e a original continua cancelada.
+  await page.goto("/agendamentos");
+  const linhas = page.getByRole("row").filter({ hasText: topico });
+  await expect(linhas.filter({ hasText: "Cancelada" })).toHaveCount(1);
+  await expect(linhas.filter({ hasText: /Pendente|Aguardando/ }).first()).toBeVisible();
+});

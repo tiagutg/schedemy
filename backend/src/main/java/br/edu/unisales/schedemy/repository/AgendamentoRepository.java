@@ -60,7 +60,7 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
     /** A duracao ja foi usada em algum agendamento? (a FK impede apagar) */
     boolean existsByDuracaoId(Long duracaoId);
 
-    /** RF 28 - existe uma remarcacao ativa desta reuniao? */
+    /** Remarcacao (base do RF 08/09) - existe uma remarcacao ativa desta reuniao? */
     boolean existsByAgendamentoOrigemIdAndStatusNot(Long agendamentoOrigemId, StatusAgendamento status);
 
     /** Reunioes nos status informados ate a data (rotina de status, conclusao e lembretes - RN 08, RN 11). */

@@ -9,7 +9,7 @@ import java.time.LocalTime;
 import java.util.List;
 
 /**
- * RF 28 - remarcacao: dados da nova reuniao + motivo do cancelamento da original.
+ * Remarcacao (base do RF 08/09): dados da nova reuniao + motivo do cancelamento da original.
  * O organizador e o mesmo da reuniao original e o vinculo (idAgendamentoOrigem) vem da URL.
  */
 @Schema(description = "Dados para remarcar um agendamento: a original e cancelada e a nova e criada na mesma operacao.")

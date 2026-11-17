@@ -43,7 +43,7 @@ function dataMaxima(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export type ModoAgendamento = "criar" | "editar" | "remarcar";
+export type ModoAgendamento = "criar" | "editar" | "remarcar" | "replicar";
 
 interface NovoAgendamentoModalProps {
   aberto: boolean;
@@ -51,7 +51,9 @@ interface NovoAgendamentoModalProps {
   onSalvo?: (agendamento: Agendamento) => void;
   /**
    * criar: novo agendamento; editar: altera um agendamento PENDENTE (RN 14);
-   * remarcar: cria um novo ligado ao original (RF 28) e cancela o original.
+   * remarcar: cria um novo ligado ao original e cancela o original (RF 08/09);
+   * replicar: "Agendar de novo" (RF 28) — cria um agendamento novo com os dados do anterior,
+   * sem cancelar nem alterar nada.
    */
   modo?: ModoAgendamento;
   base?: Agendamento | null;
@@ -65,7 +67,32 @@ const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando
   criar: { titulo: "Novo agendamento", botao: "Criar agendamento", salvando: "Criando…" },
   editar: { titulo: "Editar agendamento", botao: "Salvar alterações", salvando: "Salvando…" },
   remarcar: { titulo: "Remarcar reunião", botao: "Remarcar", salvando: "Remarcando…" },
+  replicar: { titulo: "Agendar de novo", botao: "Criar agendamento", salvando: "Criando…" },
 };
+
+/**
+ * RF 28 — formulário de "Agendar de novo": mesmo tópico, formato, resumo, link e participantes
+ * da reunião anterior, no próximo dia útil e no mesmo horário. Quem replica vira o organizador
+ * (salvo recepção/administração, que mantêm o organizador original) e os demais envolvidos,
+ * inclusive o organizador anterior, viram convidados.
+ */
+function formReplicado(base: Agendamento, idOrganizador: string) {
+  return {
+    idOrganizador,
+    idDuracao: "",
+    dataReuniao: proximoDiaUtilISO(),
+    horarioInicio: formatarHora(base.horarioInicio),
+    formato: base.formato,
+    topico: base.topico,
+    resumo: base.resumo ?? "",
+    linkReuniao: base.salaVirtual?.linkTeams ?? "",
+  };
+}
+
+function convidadosReplicados(base: Agendamento, idOrganizador: string): string[] {
+  const ids = [String(base.idOrganizador), ...base.participantes.map((p) => String(p.idUsuario))];
+  return [...new Set(ids)].filter((id) => id !== idOrganizador);
+}
 
 /** Compara nomes sem diferenciar maiúsculas e acentos ("romulo" acha "Rômulo"). */
 function normalizar(texto: string): string {
@@ -74,15 +101,18 @@ function normalizar(texto: string): string {
 
 export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
   const { perfilVinculado: eu, pode } = useAuth();
-  // Na criação, quem não agenda para outros é sempre o organizador; na edição e
-  // na remarcação o organizador é o do agendamento original.
-  const escolheOrganizador = modo === "criar" && pode("agendamentos.organizarPorOutros");
+  // Na criação (e ao agendar de novo), quem não agenda para outros é sempre o organizador;
+  // na edição e na remarcação o organizador é o do agendamento original.
+  const escolheOrganizador = (modo === "criar" || modo === "replicar") && pode("agendamentos.organizarPorOutros");
+  const organizadorReplicado = base && (escolheOrganizador ? String(base.idOrganizador) : String(eu?.id ?? ""));
   const { usuarios: todos } = useUsuariosOptions();
   const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
   // O formulário nasce preenchido; a página recria o componente (key) a cada abertura.
   const [form, setForm] = useState(() =>
-    base
+    modo === "replicar" && base
+      ? formReplicado(base, organizadorReplicado ?? "")
+      : base
       ? {
           idOrganizador: String(base.idOrganizador),
           idDuracao: "",
@@ -96,7 +126,10 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       : { ...formVazio(), idOrganizador: escolheOrganizador ? "" : String(eu?.id ?? "") }
   );
   const [convidadosSelecionados, setConvidadosSelecionados] = useState<string[]>(() =>
-    base ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
+    modo === "replicar" && base
+      ? convidadosReplicados(base, organizadorReplicado ?? "")
+      : base
+      ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
   );
   const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
   const [buscaConvidado, setBuscaConvidado] = useState("");
@@ -182,9 +215,18 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
 
     setSalvando(true);
     setErro("");
+    // Ao agendar de novo, quem saiu da lista (inativo, por exemplo) não vai junto.
+    const idsConvidados =
+      modo === "replicar"
+        ? convidadosSelecionados.filter((id) => candidatosConvidado.some((u) => String(u.id) === id))
+        : convidadosSelecionados;
+    if (idsConvidados.length === 0) {
+      setSalvando(false);
+      return setErro("Selecione ao menos um convidado.");
+    }
     const payload = {
       idOrganizador: Number(form.idOrganizador),
-      idsConvidados: convidadosSelecionados.map(Number),
+      idsConvidados: idsConvidados.map(Number),
       idDuracao: Number(idDuracao),
       dataReuniao: form.dataReuniao,
       horarioInicio: `${form.horarioInicio}:00`,
@@ -199,7 +241,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       if (modo === "editar" && base) {
         salvo = await agendamentosApi.atualizar(base.id, payload);
       } else if (modo === "remarcar" && base) {
-        // RF 28: a API cancela a original e cria a nova numa só transação; se a nova
+        // Remarcação: a API cancela a original e cria a nova numa só transação; se a nova
         // for recusada, a original não muda. O organizador e o vínculo vêm da original.
         const { idOrganizador: _organizador, idAgendamentoOrigem: _origem, ...dadosDaNova } = payload;
         salvo = await agendamentosApi.remarcar(base.id, {
@@ -219,7 +261,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   }
 
   const subtitulo =
-    modo === "criar"
+    modo === "criar" || modo === "replicar"
       ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade de todos os envolvidos."
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
@@ -242,7 +284,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
               }}
             />
           ) : (
-            <TextField label="Organizador" value={base?.nomeOrganizador ?? eu?.nome ?? ""} disabled />
+            <TextField
+              label="Organizador"
+              value={(modo === "replicar" ? eu?.nome : base?.nomeOrganizador) ?? eu?.nome ?? ""}
+              disabled
+            />
           )}
           <SelectField
             label="Duração"

@@ -45,7 +45,7 @@ public interface AgendamentoService {
     AgendamentoResponseDTO cancelar(Long id, CancelamentoRequestDTO dto);
 
     // Remocao definitiva, permitida apenas para agendamentos pendentes ou ja cancelados.
-    // RF 28 - cancela a reuniao original e cria a nova ligada a ela, na mesma transacao.
+    // Remarcacao (base do RF 08/09) - cancela a reuniao original e cria a nova ligada a ela, na mesma transacao.
     AgendamentoResponseDTO remarcar(Long id, RemarcacaoRequestDTO dto);
 
     void deletar(Long id);

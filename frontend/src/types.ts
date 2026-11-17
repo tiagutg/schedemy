@@ -53,7 +53,7 @@ export interface Agendamento {
   idOrganizador: number;
   nomeOrganizador: string;
   duracaoMinutos?: number;
-  /** Agendamento original, quando este é uma remarcação (RF 28). */
+  /** Agendamento original, quando este é uma remarcação. */
   idAgendamentoOrigem?: number | null;
   participantes: Participante[];
   salaVirtual?: { linkTeams: string } | null;

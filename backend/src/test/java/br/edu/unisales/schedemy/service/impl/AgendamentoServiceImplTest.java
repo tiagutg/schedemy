@@ -397,7 +397,7 @@ class AgendamentoServiceImplTest {
     // ------------------------------------------------------------------
 
     @Nested
-    @DisplayName("Remarcar (RF 28)")
+    @DisplayName("Remarcar")
     class Remarcar {
 
         @Test
