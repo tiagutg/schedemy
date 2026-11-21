@@ -185,6 +185,11 @@
   html, body, #root {
     @apply h-full;
     }
+  /* O Tailwind 4 deixou de usar a mãozinha nos botões: sem ela, nada parece clicável. */
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
   body {
     @apply bg-background text-foreground antialiased;
     }

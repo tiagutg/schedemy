@@ -173,11 +173,17 @@ export default function NotificacoesPage() {
             const Icone = ICONES[n.tipoEvento] ?? IconBell;
             const naoLida = n.statusEnvio === "PENDENTE";
             return (
-              <li key={n.id} className={cn("flex items-center", naoLida && "bg-brand-50 dark:bg-brand-100/40")}>
+              <li
+                key={n.id}
+                className={cn(
+                  "flex items-center transition-colors hover:bg-muted/60",
+                  naoLida && "bg-brand-50 hover:bg-brand-100/70 dark:bg-brand-100/40"
+                )}
+              >
                 <button
                   type="button"
                   onClick={() => abrir(n)}
-                  className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
+                  className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left focus-visible:bg-muted/50 focus-visible:outline-none"
                 >
                   <span
                     className={cn(
@@ -195,19 +201,23 @@ export default function NotificacoesPage() {
                       {naoLida && <span className="sr-only"> · não lida</span>}
                     </span>
                   </span>
-                  {naoLida && <span aria-hidden="true" className="mt-2 size-2 shrink-0 rounded-full bg-brand-600" />}
                 </button>
-                {podeMarcar(n) && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="mr-2 shrink-0"
-                    title="Marcar como lida"
-                    aria-label={`Marcar como lida: ${n.mensagem}`}
-                    onClick={() => marcarComoLida(n)}
-                  >
-                    <IconCheck />
-                  </Button>
+                {naoLida && (
+                  // À direita: o botão de marcar como lida (círculo) e, ao lado, a bolinha de não lida.
+                  <div className="flex shrink-0 items-center gap-3 pr-4">
+                    {podeMarcar(n) && (
+                      <button
+                        type="button"
+                        title="Marcar como lida"
+                        aria-label={`Marcar como lida: ${n.mensagem}`}
+                        onClick={() => marcarComoLida(n)}
+                        className="flex size-8 items-center justify-center rounded-full border border-brand-300 bg-background text-brand-700 transition-colors hover:border-brand-600 hover:bg-brand-600 hover:text-white focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                      >
+                        <IconCheck className="size-4" aria-hidden="true" />
+                      </button>
+                    )}
+                    <span aria-hidden="true" className="size-2.5 rounded-full bg-brand-600" />
+                  </div>
                 )}
               </li>
             );
