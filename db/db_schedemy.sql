@@ -276,6 +276,8 @@ CREATE TABLE solicitacao_edicao (
     status_solicitacao ENUM('PENDENTE', 'ACEITA', 'RECUSADA', 'CANCELADA', 'EXPIRADA') NOT NULL DEFAULT 'PENDENTE',
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     respondido_em DATETIME NULL,
+    id_respondido_por BIGINT UNSIGNED NULL COMMENT 'Docente ou admin que aceitou ou recusou (RF 22); vazio se expirou ou foi cancelado',
+    motivo_recusa VARCHAR(500) NULL COMMENT 'Motivo de quem recusou (RF 11); tambem fica em registro_motivo',
 
     PRIMARY KEY (id_solicitacao),
 
@@ -294,6 +296,12 @@ CREATE TABLE solicitacao_edicao (
     CONSTRAINT fk_solicitacao_nova_duracao
         FOREIGN KEY (id_nova_duracao)
         REFERENCES duracao_reuniao (id_duracao)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_solicitacao_respondido_por
+        FOREIGN KEY (id_respondido_por)
+        REFERENCES usuario (id_usuario)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
 

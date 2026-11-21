@@ -16,6 +16,7 @@ import { useAuth } from "@/context/AuthContext";
 import Spinner from "@/components/common/Spinner";
 import AvisoSemDisponibilidade from "./AvisoSemDisponibilidade";
 import ConvitesPendentes from "./ConvitesPendentes";
+import PedidosDeAlteracaoPendentes from "./PedidosDeAlteracaoPendentes";
 import CartoesResumo from "./painel/CartoesResumo";
 import GraficoReunioes from "./painel/GraficoReunioes";
 import Pill from "@/components/common/Pill";
@@ -113,6 +114,8 @@ export default function DashboardPage() {
       <AvisoSemDisponibilidade />
 
       <ConvitesPendentes onRespondido={() => setVersao((v) => v + 1)} />
+
+      <PedidosDeAlteracaoPendentes />
 
       {dados?.paraAvaliar ? (
         <Link

@@ -71,6 +71,15 @@ public class SolicitacaoEdicao {
     @Column(name = "respondido_em")
     private LocalDateTime respondidoEm;
 
+    /** RF 22 - docente (ou admin) que aceitou ou recusou; vazio quando expirou ou foi cancelado. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "id_respondido_por")
+    private Usuario respondidoPor;
+
+    /** RF 11 - motivo da recusa (tambem gravado em registro_motivo). */
+    @Column(name = "motivo_recusa", length = 500)
+    private String motivoRecusa;
+
     /** Convidados propostos (o organizador fica de fora, como em AgendamentoRequestDTO.idsConvidados). */
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(name = "solicitacao_edicao_participante",

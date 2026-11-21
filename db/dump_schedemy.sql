@@ -448,12 +448,16 @@ CREATE TABLE `solicitacao_edicao` (
   `status_solicitacao` enum('PENDENTE','ACEITA','RECUSADA','CANCELADA','EXPIRADA') NOT NULL DEFAULT 'PENDENTE',
   `criado_em` datetime NOT NULL DEFAULT current_timestamp(),
   `respondido_em` datetime DEFAULT NULL,
+  `id_respondido_por` bigint(20) unsigned DEFAULT NULL COMMENT 'Docente ou admin que aceitou ou recusou (RF 22); vazio se expirou ou foi cancelado',
+  `motivo_recusa` varchar(500) DEFAULT NULL COMMENT 'Motivo de quem recusou (RF 11); tambem fica em registro_motivo',
   PRIMARY KEY (`id_solicitacao`),
   KEY `fk_solicitacao_usuario` (`id_usuario`),
   KEY `fk_solicitacao_nova_duracao` (`id_nova_duracao`),
   KEY `idx_solicitacao_agendamento` (`id_agendamento`),
+  KEY `fk_solicitacao_respondido_por` (`id_respondido_por`),
   CONSTRAINT `fk_solicitacao_agendamento` FOREIGN KEY (`id_agendamento`) REFERENCES `agendamento` (`id_agendamento`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `fk_solicitacao_nova_duracao` FOREIGN KEY (`id_nova_duracao`) REFERENCES `duracao_reuniao` (`id_duracao`) ON UPDATE CASCADE,
+  CONSTRAINT `fk_solicitacao_respondido_por` FOREIGN KEY (`id_respondido_por`) REFERENCES `usuario` (`id_usuario`) ON UPDATE CASCADE,
   CONSTRAINT `fk_solicitacao_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id_usuario`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Solicitações de alteração de dados de agendamentos';
 /*!40101 SET character_set_client = @saved_cs_client */;

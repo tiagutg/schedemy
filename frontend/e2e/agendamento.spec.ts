@@ -132,14 +132,24 @@ test("aluno pede a alteração da reunião confirmada e o professor aceita (RF 2
   await expect(pedido).toContainText(novoHorario);
   await expect(page.getByRole("dialog")).toContainText("Alteração pedida");
 
-  // RF 22 / RN 12: o professor da reunião decide.
+  // No painel, quem pediu acompanha o pedido até a resposta.
+  await page.goto("/");
+  await expect(
+    page.getByRole("region", { name: "Pedidos de alteração aguardando o docente" }).getByRole("link", { name: new RegExp(topico) })
+  ).toContainText("pedido por você");
+
+  // RF 22 / RN 12: o professor da reunião decide, a partir do bloco do painel.
   await entrar(page, CONTAS.professor);
-  const doProfessor = await abrirDetalhe(page, topico);
+  const paraDecidir = page.getByRole("region", { name: "Pedidos de alteração para você decidir" });
+  await paraDecidir.getByRole("link", { name: new RegExp(topico) }).click();
+  const doProfessor = page.getByRole("dialog");
   await doProfessor.getByRole("button", { name: "Aceitar alteração" }).click();
   await expect(page.getByText("Alteração aceita: a reunião foi atualizada.")).toBeVisible();
   await expect(page.getByRole("dialog")).toContainText(novoHorario);
   await expect(page.getByRole("dialog")).toContainText("Confirmada");
   await expect(page.getByRole("dialog").getByRole("region", { name: "Pedido de alteração" })).toHaveCount(0);
+  // Quem decidiu fica gravado e aparece no histórico do pedido.
+  await expect(page.getByRole("dialog")).toContainText("Aceito por você");
 });
 
 test("a visão semanal mostra a reunião no dia certo", async ({ page }) => {

@@ -112,6 +112,8 @@ public class SecurityConfig {
 
                         // --- Pedidos de alteracao (RF 21/22, RN 12) ---
                         // So professores e coordenadores decidem; quem pediu (ou a recepcao) desiste.
+                        // A lista (GET) e de todos os perfis: o escopo pelo logado e aplicado no service.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/solicitacoes-edicao").authenticated()
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/resposta")
                         .hasAnyRole(PROFESSOR, COORDENADOR, ADMIN)
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/cancelamento")

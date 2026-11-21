@@ -178,6 +178,12 @@ class SecurityConfigTest {
             "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
             "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
             "admin,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            // RF 22: a lista de pedidos e de todos os perfis (o escopo pelo logado fica no service).
+            "aluno,         GET,    /api/v1/solicitacoes-edicao",
+            "professor,     GET,    /api/v1/solicitacoes-edicao",
+            "coordenador,   GET,    /api/v1/solicitacoes-edicao",
+            "recepcionista, GET,    /api/v1/solicitacoes-edicao",
+            "admin,         GET,    /api/v1/solicitacoes-edicao",
 
             // RF 24: o aluno registra e consulta as proprias avaliacoes.
             "aluno,         POST,   /api/v1/avaliacoes",
@@ -261,7 +267,9 @@ class SecurityConfigTest {
             "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
             "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
             "professor,     PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
-            "aluno,         GET,    /api/v1/solicitacoes-edicao",
+            // So a lista e liberada: os demais caminhos sem regra propria ficam com a administracao.
+            "aluno,         GET,    /api/v1/solicitacoes-edicao/1",
+            "recepcionista, DELETE, /api/v1/solicitacoes-edicao/1",
 
             // Remocao definitiva de agendamento: so administracao.
             "aluno,         DELETE, /api/v1/agendamentos/1",

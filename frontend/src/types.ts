@@ -79,6 +79,15 @@ export interface SolicitacaoEdicao {
   motivo: string;
   criadoEm: string;
   respondidoEm?: string | null;
+  /** RF 22: quem aceitou ou recusou; vazio se expirou, foi cancelado ou é anterior a 21/11/2026. */
+  idRespondidoPor?: number | null;
+  nomeRespondidoPor?: string | null;
+  /** RF 11: só na recusa. */
+  motivoRecusa?: string | null;
+  /** A reunião como está hoje (para a lista do painel). */
+  topicoAtual: string;
+  dataAtual: string;
+  horarioInicioAtual: string;
 }
 
 /** RF 14: horários de início em que todos os envolvidos estão livres ("HH:mm:ss"). */

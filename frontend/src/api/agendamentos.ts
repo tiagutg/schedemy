@@ -31,6 +31,12 @@ export const agendamentosApi = {
   /** Pedidos de alteração da reunião, do mais recente para o mais antigo. */
   listarPedidosDeAlteracao: (id: Id) =>
     api.get<SolicitacaoEdicao[]>(`/api/v1/agendamentos/${id}/solicitacoes-edicao`),
+  /**
+   * RF 22: pedidos que o logado acompanha (docente e aluno: das próprias reuniões; recepção e admin: todos),
+   * da reunião mais próxima para a mais distante. Sem status, todos.
+   */
+  listarPedidosDeAlteracaoNoEscopo: (params?: { status?: SolicitacaoEdicao["status"]; page?: number; size?: number }) =>
+    api.get<Pagina<SolicitacaoEdicao>>("/api/v1/solicitacoes-edicao", params),
   /** RF 22: o docente aceita ou recusa (motivo obrigatório ao recusar). */
   responderPedidoDeAlteracao: (idPedido: Id, dto: { aceitar: boolean; motivo?: string | null }) =>
     api.patch<SolicitacaoEdicao>(`/api/v1/solicitacoes-edicao/${idPedido}/resposta`, dto),

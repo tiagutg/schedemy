@@ -251,9 +251,14 @@ CREATE TABLE solicitacao_edicao (
   status_solicitacao   VARCHAR(20)  NOT NULL DEFAULT 'PENDENTE'
     CONSTRAINT chk_solicitacao_status CHECK (status_solicitacao IN ('PENDENTE','ACEITA','RECUSADA','CANCELADA','EXPIRADA')),
   criado_em            TIMESTAMP    NOT NULL DEFAULT now(),
-  respondido_em        TIMESTAMP
+  respondido_em        TIMESTAMP,
+  -- RF 22: docente ou admin que aceitou ou recusou; vazio se expirou ou foi cancelado
+  id_respondido_por    BIGINT       REFERENCES usuario (id_usuario) ON UPDATE CASCADE,
+  -- RF 11: motivo de quem recusou (tambem fica em registro_motivo)
+  motivo_recusa        VARCHAR(500)
 );
 CREATE INDEX idx_solicitacao_usuario ON solicitacao_edicao (id_usuario);
+CREATE INDEX idx_solicitacao_respondido_por ON solicitacao_edicao (id_respondido_por);
 CREATE INDEX idx_solicitacao_nova_duracao ON solicitacao_edicao (id_nova_duracao);
 CREATE INDEX idx_solicitacao_agendamento ON solicitacao_edicao (id_agendamento);
 

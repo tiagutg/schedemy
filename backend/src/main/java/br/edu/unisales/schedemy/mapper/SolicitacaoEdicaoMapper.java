@@ -29,7 +29,13 @@ public class SolicitacaoEdicaoMapper {
                         .toList(),
                 s.getMotivo(),
                 s.getCriadoEm(),
-                s.getRespondidoEm()
+                s.getRespondidoEm(),
+                s.getRespondidoPor() == null ? null : s.getRespondidoPor().getId(),
+                s.getRespondidoPor() == null ? null : s.getRespondidoPor().getNome(),
+                s.getMotivoRecusa(),
+                s.getAgendamento().getTopico(),
+                s.getAgendamento().getDataReuniao(),
+                s.getAgendamento().getHorarioInicio()
         );
     }
 }

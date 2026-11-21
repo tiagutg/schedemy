@@ -300,6 +300,46 @@ class RepositoriosNoBancoTest {
                     .tipoOperacao(TipoOperacaoMotivo.RECUSA_SOLICITACAO_EDICAO).justificativa("Banca").build());
             em.flush();
         }
+
+        @Test
+        @DisplayName("quem respondeu e motivo da recusa (colunas novas); listarNoEscopo por participante, gestor e status")
+        void listaNoEscopo() {
+            Usuario outroProfessor = usuario("Outro Professor Banco", TipoUsuario.PROFESSOR, null);
+            Agendamento a = reuniao(DIA, "13:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Lista A");
+            Agendamento depois = reuniao(DIA.plusDays(2), "09:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Lista B");
+            SolicitacaoEdicao recusado = pedido(a, StatusSolicitacao.RECUSADA);
+            recusado.setRespondidoPor(professor);
+            recusado.setMotivoRecusa("Tenho banca");
+            SolicitacaoEdicao pendenteA = pedido(a, StatusSolicitacao.PENDENTE);
+            SolicitacaoEdicao pendenteB = pedido(depois, StatusSolicitacao.PENDENTE);
+            em.flush();
+            em.clear();
+
+            SolicitacaoEdicao lido = solicitacaoEdicaoRepository.findById(recusado.getId()).orElseThrow();
+            assertThat(lido.getRespondidoPor().getId()).isEqualTo(professor.getId());
+            assertThat(lido.getMotivoRecusa()).isEqualTo("Tenho banca");
+
+            var pendentes = List.of(StatusSolicitacao.PENDENTE);
+            var pagina = PageRequest.of(0, 50);
+            // Participante (convidado): so os pendentes das proprias reunioes, a mais proxima primeiro.
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(pendentes, false, professor.getId(), pagina).getContent())
+                    .extracting(SolicitacaoEdicao::getId).containsExactly(pendenteA.getId(), pendenteB.getId());
+            // Organizador tambem ve; sem filtro de status, inclui o recusado.
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(List.of(StatusSolicitacao.values()), false,
+                    aluno.getId(), pagina).getContent())
+                    .extracting(SolicitacaoEdicao::getId)
+                    .containsExactlyInAnyOrder(recusado.getId(), pendenteA.getId(), pendenteB.getId());
+            // Quem nao participa nao ve nada; a recepcao/admin ve todos (o banco pode ter outros pedidos).
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(pendentes, false, outroProfessor.getId(), pagina))
+                    .isEmpty();
+            var gestor = solicitacaoEdicaoRepository.listarNoEscopo(pendentes, true, outroProfessor.getId(), pagina);
+            assertThat(gestor.getContent()).extracting(SolicitacaoEdicao::getId)
+                    .contains(pendenteA.getId(), pendenteB.getId())
+                    .doesNotContain(recusado.getId());
+            assertThat(gestor.getTotalElements()).isGreaterThanOrEqualTo(2);
+            // Os ManyToOne vieram no JOIN FETCH: o mapper le sem consultas extras.
+            assertThat(gestor.getContent().getFirst().getAgendamento().getTopico()).isNotNull();
+        }
     }
 
     @Nested

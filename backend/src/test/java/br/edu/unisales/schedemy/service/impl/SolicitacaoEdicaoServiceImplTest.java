@@ -35,6 +35,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -49,6 +53,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.inOrder;
@@ -230,10 +235,13 @@ class SolicitacaoEdicaoServiceImplTest {
                     Set.of(professor, coordenador));
             logadoComo(professor);
 
-            service.responder(s.getId(), new RespostaSolicitacaoRequestDTO(true, null));
+            var resposta = service.responder(s.getId(), new RespostaSolicitacaoRequestDTO(true, null));
 
             assertThat(s.getStatus()).isEqualTo(StatusSolicitacao.ACEITA);
             assertThat(s.getRespondidoEm()).isNotNull();
+            assertThat(s.getRespondidoPor()).isSameAs(professor); // RF 22 - quem decidiu
+            assertThat(s.getMotivoRecusa()).isNull();
+            assertThat(resposta.nomeRespondidoPor()).isEqualTo("Rômulo Ferreira");
             assertThat(a.getDataReuniao()).isEqualTo(semanaQueVem.plusDays(1));
             assertThat(a.getHorarioInicio()).isEqualTo(LocalTime.of(14, 0));
             assertThat(a.getDuracao()).isSameAs(quarentaECinco);
@@ -274,9 +282,12 @@ class SolicitacaoEdicaoServiceImplTest {
             assertThatThrownBy(() -> service.responder(s.getId(), new RespostaSolicitacaoRequestDTO(false, " ")))
                     .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("motivo");
 
-            service.responder(s.getId(), new RespostaSolicitacaoRequestDTO(false, "Banca nesse horario"));
+            var resposta = service.responder(s.getId(), new RespostaSolicitacaoRequestDTO(false, " Banca nesse horario "));
 
             assertThat(s.getStatus()).isEqualTo(StatusSolicitacao.RECUSADA);
+            assertThat(s.getRespondidoPor()).isSameAs(professor);
+            assertThat(resposta.idRespondidoPor()).isEqualTo(9L);
+            assertThat(resposta.motivoRecusa()).isEqualTo("Banca nesse horario");
             assertThat(a.getStatus()).isEqualTo(StatusAgendamento.CONFIRMADO);
             assertThat(a.getDataReuniao()).isEqualTo(semanaQueVem);
             RegistroMotivo motivo = motivoRegistrado();
@@ -349,8 +360,53 @@ class SolicitacaoEdicaoServiceImplTest {
         service.cancelar(s.getId());
 
         assertThat(s.getStatus()).isEqualTo(StatusSolicitacao.CANCELADA);
+        assertThat(s.getRespondidoPor()).isNull(); // so quem aceita ou recusa fica gravado
         assertThat(a.getStatus()).isEqualTo(StatusAgendamento.CONFIRMADO);
         verify(notificador).pedidoEncerrado(a, aluno, aluno, false);
+    }
+
+    @Nested
+    @DisplayName("Lista no escopo do logado (RF 22, RNF 15)")
+    class Listar {
+
+        @Test
+        @DisplayName("docente e aluno: so as proprias reunioes (pelo id do login); recepcao: todos")
+        void escopo() {
+            when(solicitacaoEdicaoRepository.listarNoEscopo(anyList(), anyBoolean(), any(), any()))
+                    .thenReturn(Page.empty());
+
+            logadoComo(professor);
+            service.listar(List.of(StatusSolicitacao.PENDENTE), PageRequest.of(0, 10));
+            verify(solicitacaoEdicaoRepository).listarNoEscopo(List.of(StatusSolicitacao.PENDENTE), false, 9L,
+                    PageRequest.of(0, 10));
+
+            logadoComo(recepcionista);
+            when(usuarioAutenticado.podeGerirAgendamentosDeTerceiros()).thenReturn(true);
+            service.listar(null, PageRequest.of(1, 5, Sort.by("motivo")));
+            // Sem status, todos; o "sort" da requisicao e ignorado (ordem fixa pela data da reuniao).
+            verify(solicitacaoEdicaoRepository).listarNoEscopo(List.of(StatusSolicitacao.values()), true, 12L,
+                    PageRequest.of(1, 5));
+        }
+
+        @Test
+        @DisplayName("o item traz a reuniao atual e quem respondeu")
+        void item() {
+            Agendamento a = confirmada(10L, semanaQueVem, dezHoras);
+            SolicitacaoEdicao s = pendente(a, semanaQueVem.plusDays(1), LocalTime.of(14, 0), trinta, Set.of(professor));
+            s.setStatus(StatusSolicitacao.RECUSADA);
+            s.setRespondidoPor(professor);
+            s.setMotivoRecusa("Banca");
+            when(solicitacaoEdicaoRepository.listarNoEscopo(anyList(), anyBoolean(), any(), any()))
+                    .thenReturn(new PageImpl<>(List.of(s)));
+
+            var item = service.listar(List.of(), PageRequest.of(0, 20)).getContent().getFirst();
+
+            assertThat(item.topicoAtual()).isEqualTo("Orientacao do TCC");
+            assertThat(item.dataAtual()).isEqualTo(semanaQueVem);
+            assertThat(item.horarioInicioAtual()).isEqualTo(dezHoras);
+            assertThat(item.nomeRespondidoPor()).isEqualTo("Rômulo Ferreira");
+            assertThat(item.motivoRecusa()).isEqualTo("Banca");
+        }
     }
 
     // ------------------------------------------------------------------

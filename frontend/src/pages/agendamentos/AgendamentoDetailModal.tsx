@@ -26,6 +26,7 @@ import { useAuth } from "@/context/AuthContext";
 import { rotularEnum } from "@/utils/domain";
 import { baixarIcs, situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
+import { CORES_STATUS_PEDIDO, desfechoDoPedido } from "@/utils/pedidos";
 import type { Agendamento, Participante, RegistroMotivo, SolicitacaoEdicao } from "@/types";
 
 interface AgendamentoDetailModalProps {
@@ -89,6 +90,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   const podeEditar = podeGerir && a.status === "PENDENTE" && horasAteReuniao >= 24;
   const participoAntes = a.participantes.some((p) => p.idUsuario === eu?.id);
   const pedidoPendente = pedidos.find((p) => p.status === "PENDENTE") ?? null;
+  const pedidosEncerrados = pedidos.filter((p) => p.status !== "PENDENTE");
   // RF 21: reunião confirmada, até 24 h antes (RN 14): o aluno participante (ou a recepção) pede a alteração.
   const podePedirAlteracao =
     pode("agendamentos.pedirAlteracao") &&
@@ -407,6 +409,27 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               onVoltar={() => setRecusandoPedido(false)}
               onDesistir={desistirDoPedido}
             />
+          )}
+
+          {pedidosEncerrados.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Pedidos de alteração anteriores</p>
+              <ul className="divide-y rounded-lg border">
+                {pedidosEncerrados.map((p) => (
+                  <li key={p.id} className="flex flex-col gap-0.5 px-3.5 py-2.5 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <Pill className={CORES_STATUS_PEDIDO[p.status]}>{desfechoDoPedido(p, eu?.id)}</Pill>
+                      <span className="text-xs text-muted-foreground">{formatarDataHora(p.respondidoEm ?? p.criadoEm)}</span>
+                    </div>
+                    <p className="text-muted-foreground">
+                      {p.idSolicitante === eu?.id ? "Você pediu" : `${p.nomeSolicitante} pediu`}{" "}
+                      {formatarData(p.novaData)}, {formatarHora(p.novoHorarioInicio)}–{formatarHora(p.novoHorarioFim)}: {p.motivo}
+                    </p>
+                    {p.motivoRecusa && <p className="text-muted-foreground">Motivo da recusa: {p.motivoRecusa}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
           )}
 
           {historico.length > 0 && (

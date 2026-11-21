@@ -26,6 +26,9 @@ import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
 import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import br.edu.unisales.schedemy.service.SolicitacaoEdicaoService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
@@ -132,6 +136,22 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
                 .toList();
     }
 
+    /**
+     * RF 22 - lista do painel. Escopo pelo logado (RNF 15), nunca por id da requisicao: recepcao e administracao
+     * veem todos; os demais, so os pedidos das reunioes que organizam ou de que participam. Sem status, todos.
+     * A ordem e fixa (data da reuniao); o "sort" da requisicao e ignorado.
+     */
+    @Override
+    @Transactional(readOnly = true)
+    public Page<SolicitacaoEdicaoResponseDTO> listar(List<StatusSolicitacao> status, Pageable pageable) {
+        List<StatusSolicitacao> filtro = status == null || status.isEmpty()
+                ? Arrays.asList(StatusSolicitacao.values()) : status;
+        Pageable semOrdem = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        return solicitacaoEdicaoRepository.listarNoEscopo(filtro, usuarioAutenticado.podeGerirAgendamentosDeTerceiros(),
+                        usuarioAutenticado.id(), semOrdem)
+                .map(mapper::paraResponseDTO);
+    }
+
     /** RF 22/RN 12 - o primeiro docente que responder decide. READ COMMITTED pelo mesmo motivo de solicitar(). */
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
@@ -159,6 +179,8 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
             }
             solicitacao.setStatus(StatusSolicitacao.RECUSADA);
             solicitacao.setRespondidoEm(LocalDateTime.now());
+            solicitacao.setRespondidoPor(docente); // RF 22 - quem decidiu
+            solicitacao.setMotivoRecusa(motivo);
             agendamento.setStatus(AgendamentoServiceImpl.statusPelasRespostas(agendamento.getParticipantes()));
             agendamentoRepository.save(agendamento);
             registrar(agendamento, docente, TipoOperacaoMotivo.RECUSA_SOLICITACAO_EDICAO, motivo);
@@ -288,6 +310,7 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
 
         s.setStatus(StatusSolicitacao.ACEITA);
         s.setRespondidoEm(agora);
+        s.setRespondidoPor(docente); // RF 22 - quem decidiu
         notificador.alteracaoAceita(a, docente, removidos); // RF 23
     }
 

@@ -27,7 +27,16 @@ public record SolicitacaoEdicaoResponseDTO(
         List<ConvidadoProposto> novosConvidados,
         String motivo,
         LocalDateTime criadoEm,
-        LocalDateTime respondidoEm
+        LocalDateTime respondidoEm,
+        /** RF 22 - quem aceitou ou recusou; nulo quando o pedido expirou, foi desistido ou a reuniao foi cancelada. */
+        Long idRespondidoPor,
+        String nomeRespondidoPor,
+        /** RF 11 - so na recusa. */
+        String motivoRecusa,
+        /** A reuniao como esta hoje, para listar os pedidos sem buscar cada reuniao. */
+        String topicoAtual,
+        LocalDate dataAtual,
+        LocalTime horarioInicioAtual
 ) {
     /** Sem e-mail: so o necessario para mostrar quem entra na reuniao (RNF 18). */
     public record ConvidadoProposto(Long id, String nome, TipoUsuario tipoUsuario) {

@@ -1,13 +1,18 @@
 package br.edu.unisales.schedemy.controller;
 
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.dto.request.RespostaSolicitacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.request.SolicitacaoEdicaoRequestDTO;
+import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.dto.response.SolicitacaoEdicaoResponseDTO;
 import br.edu.unisales.schedemy.service.SolicitacaoEdicaoService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springdoc.core.annotations.ParameterObject;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -34,6 +39,16 @@ public class SolicitacaoEdicaoController {
     @Operation(summary = "Pedidos de alteracao da reuniao", description = "Do mais recente para o mais antigo.")
     public ResponseEntity<List<SolicitacaoEdicaoResponseDTO>> listar(@PathVariable Long id) {
         return ResponseEntity.ok(solicitacaoEdicaoService.listarDoAgendamento(id));
+    }
+
+    @GetMapping("/solicitacoes-edicao")
+    @Operation(summary = "Pedidos de alteracao que voce acompanha (RF 22)",
+            description = "Docente e aluno: os das reunioes que organizam ou de que participam; recepcao e admin: todos. "
+                    + "Filtre por status (ex.: PENDENTE); sem status, todos. Ordem: data da reuniao, a mais proxima primeiro.")
+    public ResponseEntity<PageResponseDTO<SolicitacaoEdicaoResponseDTO>> listarNoEscopo(
+            @RequestParam(required = false) List<StatusSolicitacao> status,
+            @ParameterObject @PageableDefault(size = 20) Pageable pageable) {
+        return ResponseEntity.ok(PageResponseDTO.de(solicitacaoEdicaoService.listar(status, pageable)));
     }
 
     @PatchMapping("/solicitacoes-edicao/{id}/resposta")
