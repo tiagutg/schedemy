@@ -6,6 +6,8 @@ import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
+import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
+import br.edu.unisales.schedemy.domain.entity.SolicitacaoEdicao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
@@ -13,6 +15,8 @@ import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
+import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +33,9 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -57,6 +63,7 @@ class RepositoriosNoBancoTest {
     @Autowired private DisponibilidadeRepository disponibilidadeRepository;
     @Autowired private BloqueioPeriodoRepository bloqueioPeriodoRepository;
     @Autowired private NotificacaoRepository notificacaoRepository;
+    @Autowired private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
 
     private Usuario professor;
     private Usuario aluno;
@@ -243,6 +250,55 @@ class RepositoriosNoBancoTest {
                     .containsExactly(seguinte.getId());
             assertThat(agendamentoRepository.contarAgendamentosDoAlunoDesde(aluno.getId(), LocalDateTime.now().minusHours(24)))
                     .isEqualTo(4);
+        }
+    }
+
+    @Nested
+    @DisplayName("Pedido de alteracao (RF 21/22)")
+    class DeSolicitacao {
+
+        private SolicitacaoEdicao pedido(Agendamento a, StatusSolicitacao status) {
+            Set<Usuario> convidados = new LinkedHashSet<>(List.of(professor));
+            return em.persist(SolicitacaoEdicao.builder().agendamento(a).solicitante(aluno).novaDuracao(duracao)
+                    .novaData(DIA.plusDays(1)).novoHorarioInicio(LocalTime.of(14, 0)).novoFormato(FormatoReuniao.ONLINE)
+                    .novoTopico("Novo topico").motivo("Prova").status(status).novosConvidados(convidados).build());
+        }
+
+        @Test
+        @DisplayName("entidade x schema (convidados propostos), consultas do pedido e encerrarPendentes")
+        void pedidos() {
+            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Com pedido");
+            SolicitacaoEdicao antigo = pedido(a, StatusSolicitacao.RECUSADA);
+            SolicitacaoEdicao atual = pedido(a, StatusSolicitacao.PENDENTE);
+            em.flush();
+            em.clear();
+
+            assertThat(solicitacaoEdicaoRepository.buscarIdDoAgendamento(atual.getId())).contains(a.getId());
+            assertThat(solicitacaoEdicaoRepository.existsByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE)).isTrue();
+            SolicitacaoEdicao lido = solicitacaoEdicaoRepository
+                    .findFirstByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE).orElseThrow();
+            assertThat(lido.getId()).isEqualTo(atual.getId());
+            assertThat(lido.getNovosConvidados()).extracting(Usuario::getId).containsExactly(professor.getId());
+            assertThat(solicitacaoEdicaoRepository.findByAgendamentoIdOrderByCriadoEmDesc(a.getId()))
+                    .extracting(SolicitacaoEdicao::getId).containsExactlyInAnyOrder(antigo.getId(), atual.getId());
+
+            assertThat(solicitacaoEdicaoRepository.encerrarPendentes(a.getId(), StatusSolicitacao.CANCELADA,
+                    LocalDateTime.now())).isEqualTo(1);
+            em.clear();
+            assertThat(solicitacaoEdicaoRepository.findById(atual.getId()).orElseThrow().getStatus())
+                    .isEqualTo(StatusSolicitacao.CANCELADA);
+            assertThat(solicitacaoEdicaoRepository.findById(antigo.getId()).orElseThrow().getStatus())
+                    .isEqualTo(StatusSolicitacao.RECUSADA);
+        }
+
+        @Test
+        @DisplayName("o schema aceita os valores novos: EXPIRADA e RECUSA_SOLICITACAO_EDICAO")
+        void valoresNovosDoSchema() {
+            Agendamento a = reuniao(DIA, "11:00", StatusAgendamento.CONFIRMADO, "Expirado");
+            pedido(a, StatusSolicitacao.EXPIRADA);
+            em.persist(RegistroMotivo.builder().agendamento(a).usuario(professor)
+                    .tipoOperacao(TipoOperacaoMotivo.RECUSA_SOLICITACAO_EDICAO).justificativa("Banca").build());
+            em.flush();
         }
     }
 

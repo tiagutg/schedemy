@@ -130,7 +130,7 @@ export default function CartoesResumo({
               : "Nenhuma depende de você"
         }
         detalhe="Reuniões de hoje em diante sem confirmação"
-        para="/agendamentos?status=PENDENTE,AGUARDANDO_RESPOSTA"
+        para="/agendamentos?status=PENDENTE"
       />
       <Cartao
         titulo={`Concluídas em ${mes}`}

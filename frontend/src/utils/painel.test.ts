@@ -67,7 +67,7 @@ describe("resumoDoMes", () => {
         reuniao(1, "2026-10-05", "CONCLUIDO"),
         reuniao(2, "2026-10-20", "CANCELADO"),
         reuniao(3, "2026-10-31", "PENDENTE"),
-        reuniao(4, "2026-11-04", "AGUARDANDO_RESPOSTA"),
+        reuniao(4, "2026-11-04", "AGUARDANDO_RESPOSTA"), // confirmada com pedido de alteração (RF 21)
         reuniao(5, "2026-09-10", "CONCLUIDO"),
         reuniao(6, "2026-10-29", "PENDENTE"), // passou sem resposta: não conta como aguardando
       ],
@@ -75,7 +75,7 @@ describe("resumoDoMes", () => {
     );
     expect(resumo.atual).toEqual({ total: 3, concluidas: 1, canceladas: 1, taxaCancelamento: 25 });
     expect(resumo.anterior).toEqual({ total: 1, concluidas: 1, canceladas: 0, taxaCancelamento: 0 });
-    expect(resumo.aguardando).toBe(2);
+    expect(resumo.aguardando).toBe(1);
   });
 });
 

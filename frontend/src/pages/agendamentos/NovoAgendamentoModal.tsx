@@ -43,7 +43,7 @@ function dataMaxima(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export type ModoAgendamento = "criar" | "editar" | "remarcar" | "replicar";
+export type ModoAgendamento = "criar" | "editar" | "remarcar" | "replicar" | "solicitar";
 
 interface NovoAgendamentoModalProps {
   aberto: boolean;
@@ -53,7 +53,9 @@ interface NovoAgendamentoModalProps {
    * criar: novo agendamento; editar: altera um agendamento PENDENTE (RN 14);
    * remarcar: cria um novo ligado ao original e cancela o original (RF 08/09);
    * replicar: "Agendar de novo" (RF 28) — cria um agendamento novo com os dados do anterior,
-   * sem cancelar nem alterar nada.
+   * sem cancelar nem alterar nada;
+   * solicitar: pede a alteração de uma reunião confirmada (RF 21) — o docente aceita ou recusa,
+   * e até lá a reunião continua como está.
    */
   modo?: ModoAgendamento;
   base?: Agendamento | null;
@@ -68,6 +70,7 @@ const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando
   editar: { titulo: "Editar agendamento", botao: "Salvar alterações", salvando: "Salvando…" },
   remarcar: { titulo: "Remarcar reunião", botao: "Remarcar", salvando: "Remarcando…" },
   replicar: { titulo: "Agendar de novo", botao: "Criar agendamento", salvando: "Criando…" },
+  solicitar: { titulo: "Pedir alteração", botao: "Enviar pedido", salvando: "Enviando…" },
 };
 
 /**
@@ -214,6 +217,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     if (!form.dataReuniao || !form.horarioInicio) return setErro("Escolha a data e o horário da reunião.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
     if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
+    if (modo === "solicitar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo do pedido.");
     if (form.formato !== "PRESENCIAL" && form.linkReuniao.trim() && !/^https?:\/\/\S+$/.test(form.linkReuniao.trim())) {
       return setErro("O link da reunião deve começar com http:// ou https://.");
     }
@@ -245,6 +249,19 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       let salvo: Agendamento;
       if (modo === "editar" && base) {
         salvo = await agendamentosApi.atualizar(base.id, payload);
+      } else if (modo === "solicitar" && base) {
+        // RF 21: o pedido vai ao docente; a reunião só muda quando ele aceitar (o link da sala não entra).
+        await agendamentosApi.pedirAlteracao(base.id, {
+          idsConvidados: payload.idsConvidados,
+          idDuracao: payload.idDuracao,
+          dataReuniao: payload.dataReuniao,
+          horarioInicio: payload.horarioInicio,
+          formato: payload.formato,
+          topico: payload.topico,
+          resumo: payload.resumo,
+          motivo: motivoRemarcacao.trim(),
+        });
+        salvo = await agendamentosApi.buscarPorId(base.id);
       } else if (modo === "remarcar" && base) {
         // Remarcação: a API cancela a original e cria a nova numa só transação; se a nova
         // for recusada, a original não muda. O organizador e o vínculo vêm da original.
@@ -270,6 +287,8 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       ? "Mesmos participantes e tópico da reunião cancelada. Escolha abaixo um dia e um horário livre para todos."
       : modo === "criar" || modo === "replicar"
       ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade de todos os envolvidos."
+      : modo === "solicitar"
+        ? `A reunião está confirmada: o pedido vai para o professor ou coordenador, que aceita ou recusa. Até a resposta, ela continua em ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)}.`
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
         : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
@@ -400,7 +419,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             dataISO={form.dataReuniao}
             duracaoMinutos={duracaoMinutos}
             horario={form.horarioInicio}
-            ignorarAgendamentoId={modo === "editar" ? base?.id : null}
+            ignorarAgendamentoId={modo === "editar" || modo === "solicitar" ? base?.id : null}
             onEscolherHorario={(horarioInicio) => setForm((atual) => ({ ...atual, horarioInicio }))}
             onEscolherData={(dataReuniao, horarioInicio) => setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }))}
             idOrganizador={organizadorUsuario?.id ?? null}
@@ -424,11 +443,11 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           dataISO={form.dataReuniao}
           horario={form.horarioInicio}
           duracaoMinutos={duracaoMinutos}
-          ignorarAgendamentoId={modo === "editar" ? base?.id : null}
-          verificarLimite={modo !== "editar"}
+          ignorarAgendamentoId={modo === "editar" || modo === "solicitar" ? base?.id : null}
+          verificarLimite={modo !== "editar" && modo !== "solicitar"}
         />
 
-        {form.formato !== "PRESENCIAL" && (
+        {form.formato !== "PRESENCIAL" && modo !== "solicitar" && (
           <TextField
             label="Link da reunião (opcional)"
             type="url"
@@ -451,12 +470,12 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           value={form.resumo}
           onChange={(e) => setForm({ ...form, resumo: e.target.value })}
         />
-        {modo === "remarcar" && (
+        {(modo === "remarcar" || modo === "solicitar") && (
           <TextAreaField
-            label="Motivo da remarcação"
+            label={modo === "solicitar" ? "Motivo do pedido" : "Motivo da remarcação"}
             required
             placeholder="Ex.: Conflito com prova"
-            maxLength={400}
+            maxLength={modo === "solicitar" ? 200 : 400}
             value={motivoRemarcacao}
             onChange={(e) => setMotivoRemarcacao(e.target.value)}
           />

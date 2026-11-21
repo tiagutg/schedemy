@@ -19,6 +19,7 @@ import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.BloqueioPeriodoRepository;
 import br.edu.unisales.schedemy.repository.DisponibilidadeRepository;
 import br.edu.unisales.schedemy.repository.RegistroMotivoRepository;
+import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import org.junit.jupiter.api.BeforeEach;
@@ -69,6 +70,7 @@ class ImpactoNaAgendaTest {
     @Mock private RegistroMotivoRepository registroMotivoRepository;
     @Mock private Notificador notificador;
     @Mock private UsuarioAutenticado usuarioAutenticado;
+    @Mock private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
 
     private ImpactoNaAgenda impacto;
 
@@ -83,7 +85,7 @@ class ImpactoNaAgendaTest {
         CalculadoraDeAgenda calculadora = new CalculadoraDeAgenda(disponibilidadeRepository,
                 mock(BloqueioPeriodoRepository.class), agendamentoRepository);
         impacto = new ImpactoNaAgenda(agendamentoRepository, disponibilidadeRepository, usuarioRepository,
-                registroMotivoRepository, calculadora, notificador, usuarioAutenticado);
+                registroMotivoRepository, calculadora, notificador, usuarioAutenticado, solicitacaoEdicaoRepository);
         when(agendamentoRepository.buscarDoParticipanteNoPeriodo(eq(docente.getId()), any(), any(), any()))
                 .thenAnswer(c -> doDocente.stream()
                         .filter(a -> !a.getDataReuniao().isBefore(c.getArgument(1, LocalDate.class))
@@ -276,6 +278,9 @@ class ImpactoNaAgendaTest {
         assertThat(registro.getValue().getJustificativa()).isEqualTo("Agenda de Rômulo Ferreira mudou: Colegiado");
         verify(agendamentoRepository).save(logo);
         verify(notificador).canceladaPorMudancaDeAgenda(logo, docente, admin, "Colegiado");
+        // RF 21 - pedido de alteracao pendente deixa de valer junto com a reuniao
+        verify(solicitacaoEdicaoRepository).encerrarPendentes(eq(logo.getId()),
+                eq(br.edu.unisales.schedemy.domain.enums.StatusSolicitacao.CANCELADA), any());
     }
 
     @Test

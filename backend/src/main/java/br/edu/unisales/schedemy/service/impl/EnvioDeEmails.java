@@ -170,6 +170,10 @@ public class EnvioDeEmails {
             case Notificador.CANCELAMENTO, Notificador.CANCELAMENTO_AGENDA -> "Reunião cancelada";
             case Notificador.LEMBRETE -> "Lembrete";
             case Notificador.AVALIACAO_PENDENTE -> "Avalie a reunião";
+            case Notificador.SOLICITACAO_EDICAO -> "Pedido de alteração";
+            case Notificador.SOLICITACAO_ACEITA -> "Alteração aceita";
+            case Notificador.SOLICITACAO_RECUSADA -> "Alteração recusada";
+            case Notificador.SOLICITACAO_ENCERRADA -> "Pedido de alteração encerrado";
             default -> "Aviso";
         };
         Agendamento a = n.getAgendamento();

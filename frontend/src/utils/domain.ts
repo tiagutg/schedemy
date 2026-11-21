@@ -30,6 +30,7 @@ export const TIPOS_OPERACAO_MOTIVO = [
   "SOLICITACAO_EDICAO",
   "RECUSA_AGENDAMENTO",
   "RECUSA_REMARCACAO",
+  "RECUSA_SOLICITACAO_EDICAO",
 ];
 
 /** Mapeia o status do agendamento para a classe de cor usada nas pílulas (pill) da UI. */

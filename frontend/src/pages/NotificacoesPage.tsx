@@ -42,6 +42,11 @@ const ICONES: Record<string, Icon> = {
   CANCELAMENTO_AGENDA: IconCalendarX,
   LEMBRETE: IconClockHour4,
   AVALIACAO_PENDENTE: IconStar,
+  // RF 21/22: pedido de alteração e a decisão do docente.
+  SOLICITACAO_EDICAO: IconPencil,
+  SOLICITACAO_ACEITA: IconCalendarCheck,
+  SOLICITACAO_RECUSADA: IconCalendarX,
+  SOLICITACAO_ENCERRADA: IconCalendarX,
 };
 
 const FILTROS_LEITURA = [

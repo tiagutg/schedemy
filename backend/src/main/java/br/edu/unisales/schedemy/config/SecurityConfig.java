@@ -96,6 +96,10 @@ public class SecurityConfig {
                         // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/agendamentos/*/resposta")
                         .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        // RF 21: o aluno (ou a recepcao por ele) pede a alteracao de reuniao confirmada.
+                        // A consulta dos pedidos (GET) cai na regra geral de agendamentos.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/agendamentos/*/solicitacoes-edicao")
+                        .hasAnyRole(ALUNO, RECEPCIONISTA, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
                         // Listagem global: a recepcao agenda, altera e cancela por terceiros (RF 13, 20, 21).
@@ -105,6 +109,14 @@ public class SecurityConfig {
                         // GET /agendamentos/horarios-livres (RF 14), que nao expoe a agenda de ninguem.
                         // A posse do recurso e verificada nos services (UsuarioAutenticado.java).
                         .requestMatchers("/api/v1/agendamentos", "/api/v1/agendamentos/**").authenticated()
+
+                        // --- Pedidos de alteracao (RF 21/22, RN 12) ---
+                        // So professores e coordenadores decidem; quem pediu (ou a recepcao) desiste.
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/resposta")
+                        .hasAnyRole(PROFESSOR, COORDENADOR, ADMIN)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/cancelamento")
+                        .hasAnyRole(ALUNO, RECEPCIONISTA, ADMIN)
+                        .requestMatchers("/api/v1/solicitacoes-edicao", "/api/v1/solicitacoes-edicao/**").hasRole(ADMIN)
 
                         // --- Avaliacoes (RF 24) ---
                         // Somente o aluno avalia; a docencia acompanha (RNF 11).

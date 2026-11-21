@@ -156,6 +156,7 @@ export default function AgendamentosPage() {
       replicar: "Agendamento criado com sucesso!",
       editar: "Agendamento atualizado.",
       remarcar: "Reunião remarcada.",
+      solicitar: "Pedido de alteração enviado ao docente.",
     };
     toast.sucesso(mensagens[alteracao?.modo ?? "editar"]);
     setAlteracao(null);

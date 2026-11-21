@@ -7,6 +7,7 @@ import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
+import br.edu.unisales.schedemy.domain.enums.StatusResposta;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.repository.NotificacaoRepository;
 import lombok.RequiredArgsConstructor;
@@ -37,6 +38,11 @@ public class Notificador {
     /** RF 06/RF 10 - cancelada porque a agenda do docente mudou; o aviso leva ao "Agendar de novo" (RF 28). */
     public static final String CANCELAMENTO_AGENDA = "CANCELAMENTO_AGENDA";
     public static final String LEMBRETE = "LEMBRETE";
+    /** RF 21/22 - pedido de alteracao de reuniao confirmada e a decisao do docente. */
+    public static final String SOLICITACAO_EDICAO = "SOLICITACAO_EDICAO";
+    public static final String SOLICITACAO_ACEITA = "SOLICITACAO_ACEITA";
+    public static final String SOLICITACAO_RECUSADA = "SOLICITACAO_RECUSADA";
+    public static final String SOLICITACAO_ENCERRADA = "SOLICITACAO_ENCERRADA";
     public static final String AVALIACAO_PENDENTE = "AVALIACAO_PENDENTE";
 
     private static final int TAMANHO_MAXIMO_MENSAGEM = 200;
@@ -126,15 +132,76 @@ public class Notificador {
         String inicio = "\"%s\" de %s foi cancelada porque a agenda de %s mudou"
                 .formatted(topico(agendamento), quando(agendamento), primeiroNome(docente));
         String fim = ". Use \"Agendar de novo\" para escolher outro horário.";
-        String texto = inicio + fim;
-        int espaco = TAMANHO_MAXIMO_MENSAGEM - texto.length() - " ()".length();
-        String motivoLimpo = motivo == null ? "" : motivo.trim().replaceAll("\\s+", " ");
-        if (!motivoLimpo.isEmpty() && espaco >= TAMANHO_MINIMO_MOTIVO) {
-            texto = inicio + " (" + limitar(motivoLimpo, espaco) + ")" + fim;
-        }
+        String texto = comMotivo(inicio, fim, motivo);
         for (Usuario envolvido : envolvidos(agendamento)) {
             if (!envolvido.getId().equals(autor.getId())) {
                 enviar(envolvido, agendamento, CANCELAMENTO_AGENDA, texto);
+            }
+        }
+    }
+
+    /** RF 21 - pede aos docentes (RN 12) que decidam; o organizador e avisado se a recepcao pediu por ele. */
+    public void pedidoDeAlteracao(Agendamento agendamento, Usuario solicitante, String novoQuando) {
+        for (Usuario envolvido : envolvidos(agendamento)) {
+            if (envolvido.getId().equals(solicitante.getId())) {
+                continue;
+            }
+            if (CalculadoraDeAgenda.ehDocente(envolvido)) {
+                enviar(envolvido, agendamento, SOLICITACAO_EDICAO,
+                        "%s pediu para alterar \"%s\" de %s para %s. Aceite ou recuse o pedido."
+                                .formatted(primeiroNome(solicitante), topico(agendamento), quando(agendamento), novoQuando));
+            } else if (envolvido.getId().equals(agendamento.getOrganizador().getId())) {
+                enviar(envolvido, agendamento, SOLICITACAO_EDICAO,
+                        "%s pediu, em seu nome, para alterar \"%s\" para %s. Aguarde a resposta do docente."
+                                .formatted(primeiroNome(solicitante), topico(agendamento), novoQuando));
+            }
+        }
+    }
+
+    /**
+     * RF 22 - pedido aceito: a reuniao ja esta com os dados novos. Quem ainda precisa responder (convidado novo)
+     * recebe o pedido de confirmacao; quem saiu da reuniao, o aviso de que nao participa mais.
+     */
+    public void alteracaoAceita(Agendamento agendamento, Usuario docente, List<Usuario> removidos) {
+        for (AgendamentoParticipante p : agendamento.getParticipantes()) {
+            Usuario u = p.getUsuario();
+            if (u == null || u.getId().equals(docente.getId())) {
+                continue;
+            }
+            boolean responder = p.getStatusResposta() == StatusResposta.PENDENTE;
+            enviar(u, agendamento, SOLICITACAO_ACEITA, (responder
+                    ? "%s aceitou o pedido: \"%s\" agora é em %s. Confirme se pode participar."
+                    : "%s aceitou o pedido: \"%s\" agora é em %s.")
+                    .formatted(primeiroNome(docente), topico(agendamento), quando(agendamento)));
+        }
+        for (Usuario u : removidos) {
+            enviar(u, agendamento, SOLICITACAO_ACEITA, "Você não participa mais de \"%s\": a reunião foi alterada."
+                    .formatted(topico(agendamento)));
+        }
+    }
+
+    /** RF 22 - pedido recusado: a reuniao continua como estava. */
+    public void alteracaoRecusada(Agendamento agendamento, Usuario solicitante, Usuario docente, String motivo) {
+        String texto = "%s recusou o pedido de alteração de \"%s\", que continua em %s"
+                .formatted(primeiroNome(docente), topico(agendamento), quando(agendamento));
+        texto = comMotivo(texto, ".", motivo);
+        for (Usuario u : envolvidosEMais(agendamento, solicitante)) {
+            if (!u.getId().equals(docente.getId())) {
+                enviar(u, agendamento, SOLICITACAO_RECUSADA, texto);
+            }
+        }
+    }
+
+    /** RF 21 - o pedido deixou de valer: quem pediu desistiu ou o prazo (24 h antes, RN 14) passou sem resposta. */
+    public void pedidoEncerrado(Agendamento agendamento, Usuario solicitante, Usuario autor, boolean expirou) {
+        String texto = expirou
+                ? "O pedido de alteração de \"%s\" expirou sem resposta: a reunião continua em %s."
+                .formatted(topico(agendamento), quando(agendamento))
+                : "%s desistiu do pedido de alteração de \"%s\": a reunião continua em %s."
+                .formatted(primeiroNome(autor), topico(agendamento), quando(agendamento));
+        for (Usuario u : envolvidosEMais(agendamento, solicitante)) {
+            if (autor == null || !u.getId().equals(autor.getId())) {
+                enviar(u, agendamento, SOLICITACAO_ENCERRADA, texto);
             }
         }
     }
@@ -161,6 +228,25 @@ public class Notificador {
                         "\"%s\" foi concluída. Conte como foi: avalie a reunião.".formatted(topico(agendamento)));
             }
         }
+    }
+
+    /** Coloca o motivo entre parenteses antes do final, encurtado para caber no aviso; sem espaco, fica de fora. */
+    private static String comMotivo(String inicio, String fim, String motivo) {
+        int espaco = TAMANHO_MAXIMO_MENSAGEM - inicio.length() - fim.length() - " ()".length();
+        String motivoLimpo = motivo == null ? "" : motivo.trim().replaceAll("\\s+", " ");
+        if (!motivoLimpo.isEmpty() && espaco >= TAMANHO_MINIMO_MOTIVO) {
+            return inicio + " (" + limitar(motivoLimpo, espaco) + ")" + fim;
+        }
+        return inicio + fim;
+    }
+
+    /** Envolvidos da reuniao e, se nao for um deles (recepcao), quem fez o pedido. */
+    private static List<Usuario> envolvidosEMais(Agendamento agendamento, Usuario extra) {
+        List<Usuario> lista = new java.util.ArrayList<>(envolvidos(agendamento));
+        if (extra != null && lista.stream().noneMatch(u -> u.getId().equals(extra.getId()))) {
+            lista.add(extra);
+        }
+        return lista;
     }
 
     private void enviar(Usuario usuario, Agendamento agendamento, String tipo, String mensagem) {
@@ -202,7 +288,12 @@ public class Notificador {
     }
 
     private static String quando(Agendamento agendamento) {
-        return "%s às %s".formatted(agendamento.getDataReuniao().format(DATA), agendamento.getHorarioInicio().format(HORA));
+        return quando(agendamento.getDataReuniao(), agendamento.getHorarioInicio());
+    }
+
+    /** "dd/MM às HH:mm", como nos demais avisos. */
+    static String quando(java.time.LocalDate data, java.time.LocalTime horario) {
+        return "%s às %s".formatted(data.format(DATA), horario.format(HORA));
     }
 
     private static String topico(Agendamento agendamento) {

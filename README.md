@@ -63,6 +63,8 @@ Instale e configure estas ferramentas na sua máquina:
 > ⚠️ **Atenção:** o dump apaga e recria todas as tabelas do `schedemy_db`. Faça backup antes se tiver dados que queira manter.
 >
 > Já tem o banco criado antes de 10/11/2026? Rode também `db/migracoes/2026-11-10_justificativa_text.sql` (amplia o campo de motivo).
+> Criado antes de 21/11/2026? Rode `db/migracoes/2026-11-21_solicitacao_edicao_mysql.sql` (pedido de alteração de reunião;
+> no PostgreSQL/Supabase, `..._postgresql.sql`, combinando com a equipe).
 >
 > Para criar o banco vazio, sem usuários, use `db/db_schedemy.sql`. Não existe autocadastro (o RF 29 prevê o cadastro pela
 > conta Microsoft), e só o administrador cria usuários. Por isso, crie o primeiro administrador direto no banco. A senha é `admin123`; troque-a depois pela tela de usuários:

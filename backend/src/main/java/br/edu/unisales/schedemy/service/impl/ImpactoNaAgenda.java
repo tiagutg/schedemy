@@ -7,6 +7,7 @@ import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.CancelamentoDeAfetadasRequestDTO;
@@ -16,6 +17,7 @@ import br.edu.unisales.schedemy.exception.ReunioesAfetadasException;
 import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.DisponibilidadeRepository;
 import br.edu.unisales.schedemy.repository.RegistroMotivoRepository;
+import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import lombok.RequiredArgsConstructor;
@@ -64,6 +66,7 @@ public class ImpactoNaAgenda {
     private final CalculadoraDeAgenda calculadoraDeAgenda;
     private final Notificador notificador;
     private final UsuarioAutenticado usuarioAutenticado;
+    private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
 
     /**
      * Reunioes que cabiam na janela {@code atual} e nao cabem em nenhuma janela do docente depois da mudanca.
@@ -146,6 +149,8 @@ public class ImpactoNaAgenda {
                     .justificativa("Agenda de %s mudou: %s".formatted(docente.getNome(), motivo))
                     .build());
             agendamentoRepository.save(reuniao);
+            // RF 21 - um pedido de alteracao pendente deixa de valer junto com a reuniao.
+            solicitacaoEdicaoRepository.encerrarPendentes(reuniao.getId(), StatusSolicitacao.CANCELADA, LocalDateTime.now());
             notificador.canceladaPorMudancaDeAgenda(reuniao, docente, autor, motivo); // RF 23
         }
     }

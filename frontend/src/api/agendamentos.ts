@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { Agendamento, HorariosLivres, Pagina, Params } from "@/types";
+import type { Agendamento, HorariosLivres, Pagina, Params, SolicitacaoEdicao } from "@/types";
 
 type Id = number | string;
 
@@ -25,4 +25,16 @@ export const agendamentosApi = {
   /** Remarcação: cancela a original e cria a nova (com idAgendamentoOrigem) numa só transação. */
   remarcar: (id: Id, dto: unknown) => api.post<Agendamento>(`/api/v1/agendamentos/${id}/remarcacao`, dto),
   remover: (id: Id) => api.del(`/api/v1/agendamentos/${id}`),
+  /** RF 21: pede a alteração de reunião confirmada (aluno participante ou recepção). */
+  pedirAlteracao: (id: Id, dto: unknown) =>
+    api.post<SolicitacaoEdicao>(`/api/v1/agendamentos/${id}/solicitacoes-edicao`, dto),
+  /** Pedidos de alteração da reunião, do mais recente para o mais antigo. */
+  listarPedidosDeAlteracao: (id: Id) =>
+    api.get<SolicitacaoEdicao[]>(`/api/v1/agendamentos/${id}/solicitacoes-edicao`),
+  /** RF 22: o docente aceita ou recusa (motivo obrigatório ao recusar). */
+  responderPedidoDeAlteracao: (idPedido: Id, dto: { aceitar: boolean; motivo?: string | null }) =>
+    api.patch<SolicitacaoEdicao>(`/api/v1/solicitacoes-edicao/${idPedido}/resposta`, dto),
+  /** Quem pediu (ou a recepção) desiste. */
+  desistirDoPedidoDeAlteracao: (idPedido: Id) =>
+    api.patch<SolicitacaoEdicao>(`/api/v1/solicitacoes-edicao/${idPedido}/cancelamento`),
 };

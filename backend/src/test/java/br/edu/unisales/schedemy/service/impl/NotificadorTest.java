@@ -100,6 +100,34 @@ class NotificadorTest {
                 .endsWith("Use \"Agendar de novo\" para escolher outro horário."));
     }
 
+    @Test
+    @DisplayName("RF 21/22: pedido vai aos docentes; recusa avisa os demais e quem pediu, com o motivo")
+    void pedidoDeAlteracao() {
+        Usuario aluno = usuario(1L, "Kevin Lins", TipoUsuario.ALUNO, "kevin.aluno@unisales.edu.br", true);
+        Usuario professor = usuario(2L, "Rômulo Ferreira", TipoUsuario.PROFESSOR, "romulo.professor@unisales.edu.br", true);
+        Usuario recepcao = usuario(12L, "Ana Recepcao", TipoUsuario.RECEPCIONISTA, "ana.recepcao@unisales.edu.br", true);
+        Agendamento a = reuniao(aluno, professor);
+        Notificador notificador = new Notificador(notificacaoRepository);
+
+        // a recepcao pede pelo aluno: o docente decide, o aluno (organizador) fica sabendo
+        notificador.pedidoDeAlteracao(a, recepcao, "21/11 às 15:00");
+        notificador.alteracaoRecusada(a, recepcao, professor, "Banca nesse horário");
+
+        ArgumentCaptor<Notificacao> captor = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository, atLeastOnce()).save(captor.capture());
+        List<Notificacao> sistema = captor.getAllValues().stream().filter(n -> n.getCanalEnvio() == CanalEnvio.SISTEMA).toList();
+        assertThat(sistema).extracting(n -> n.getUsuario().getId(), Notificacao::getTipoEvento, Notificacao::getMensagem)
+                .containsExactly(
+                        tuple(1L, Notificador.SOLICITACAO_EDICAO,
+                                "Ana pediu, em seu nome, para alterar \"TCC\" para 21/11 às 15:00. Aguarde a resposta do docente."),
+                        tuple(2L, Notificador.SOLICITACAO_EDICAO,
+                                "Ana pediu para alterar \"TCC\" de 20/11 às 14:00 para 21/11 às 15:00. Aceite ou recuse o pedido."),
+                        tuple(1L, Notificador.SOLICITACAO_RECUSADA,
+                                "Rômulo recusou o pedido de alteração de \"TCC\", que continua em 20/11 às 14:00 (Banca nesse horário)."),
+                        tuple(12L, Notificador.SOLICITACAO_RECUSADA,
+                                "Rômulo recusou o pedido de alteração de \"TCC\", que continua em 20/11 às 14:00 (Banca nesse horário)."));
+    }
+
     private static Agendamento reuniao(Usuario organizador, Usuario... convidados) {
         Agendamento a = Agendamento.builder()
                 .id(10L)

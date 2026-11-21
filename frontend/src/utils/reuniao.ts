@@ -11,12 +11,14 @@ export interface Situacao {
   suaVez: boolean;
 }
 
-const AGUARDANDO = ["PENDENTE", "AGUARDANDO_RESPOSTA"];
-
-/** Filtro de status da lista: "Aguardando resposta" junta PENDENTE e AGUARDANDO_RESPOSTA. */
+/**
+ * Filtro de status da lista. AGUARDANDO_RESPOSTA é reunião confirmada com pedido de alteração esperando o
+ * docente (RF 21): entra em "Confirmadas" e tem filtro próprio.
+ */
 export const FILTROS_STATUS = [
-  { valor: AGUARDANDO.join(","), rotulo: "Aguardando resposta" },
-  { valor: "CONFIRMADO", rotulo: "Confirmadas" },
+  { valor: "PENDENTE", rotulo: "Aguardando resposta" },
+  { valor: "CONFIRMADO,AGUARDANDO_RESPOSTA", rotulo: "Confirmadas" },
+  { valor: "AGUARDANDO_RESPOSTA", rotulo: "Com pedido de alteração" },
   { valor: "CONCLUIDO", rotulo: "Concluídas" },
   { valor: "CANCELADO", rotulo: "Canceladas" },
 ];
@@ -40,8 +42,11 @@ export function situacaoDaReuniao(a: Agendamento, euId: number | null | undefine
       return { rotulo: "Concluída", cor: "bg-marinho-700 text-white", suaVez: false };
     case "CANCELADO":
       return { rotulo: "Cancelada", cor: "bg-brick-100 text-brick-700", suaVez: false };
+    case "AGUARDANDO_RESPOSTA":
+      // RF 21: confirmada, com pedido de alteração esperando o docente; vale no horário original.
+      return { rotulo: "Alteração pedida", cor: "bg-brand-100 text-brand-700", suaVez: false };
   }
-  if (AGUARDANDO.includes(a.status)) {
+  if (a.status === "PENDENTE") {
     if (inicioDaReuniao(a) <= agora) {
       return { rotulo: "Não confirmada", cor: "bg-ink-100 text-ink-800", suaVez: false };
     }

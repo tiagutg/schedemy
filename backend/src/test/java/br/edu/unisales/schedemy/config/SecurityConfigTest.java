@@ -169,6 +169,16 @@ class SecurityConfigTest {
             "admin,         POST,   /api/v1/duracoes-reuniao",
             "admin,         GET,    /api/v1/bloqueios-periodo",
 
+            // RF 21/22: o aluno (ou a recepcao) pede a alteracao; a docencia decide; todos consultam (escopo no service).
+            "aluno,         POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "recepcionista, POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "professor,     GET,    /api/v1/agendamentos/1/solicitacoes-edicao",
+            "professor,     PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "coordenador,   PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            "admin,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+
             // RF 24: o aluno registra e consulta as proprias avaliacoes.
             "aluno,         POST,   /api/v1/avaliacoes",
             "aluno,         GET,    /api/v1/avaliacoes/alunos/1",
@@ -244,6 +254,14 @@ class SecurityConfigTest {
 
             // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
             "recepcionista, PATCH,  /api/v1/agendamentos/1/resposta",
+
+            // RF 21/RN 12: docente nao pede alteracao (cancela e agenda de novo); so a docencia decide.
+            "professor,     POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "coordenador,   POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "professor,     PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            "aluno,         GET,    /api/v1/solicitacoes-edicao",
 
             // Remocao definitiva de agendamento: so administracao.
             "aluno,         DELETE, /api/v1/agendamentos/1",

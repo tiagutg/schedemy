@@ -60,6 +60,27 @@ export interface Agendamento {
   criadoEm?: string;
 }
 
+/** RF 21/22: pedido de alteração de reunião confirmada; o primeiro docente que responder decide. */
+export interface SolicitacaoEdicao {
+  id: number;
+  idAgendamento: number;
+  idSolicitante: number;
+  nomeSolicitante: string;
+  status: "PENDENTE" | "ACEITA" | "RECUSADA" | "CANCELADA" | "EXPIRADA";
+  novaData: string;
+  novoHorarioInicio: string;
+  novoHorarioFim: string;
+  idNovaDuracao: number;
+  novaDuracaoMinutos: number;
+  novoFormato: string;
+  novoTopico: string;
+  novoResumo?: string | null;
+  novosConvidados: { id: number; nome: string; tipoUsuario: string }[];
+  motivo: string;
+  criadoEm: string;
+  respondidoEm?: string | null;
+}
+
 /** RF 14: horários de início em que todos os envolvidos estão livres ("HH:mm:ss"). */
 export interface HorariosLivres {
   data: string;

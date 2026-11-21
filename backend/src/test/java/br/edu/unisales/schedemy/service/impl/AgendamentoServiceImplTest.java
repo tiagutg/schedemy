@@ -9,6 +9,7 @@ import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.AgendamentoRequestDTO;
@@ -22,6 +23,7 @@ import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.DuracaoReuniaoRepository;
 import br.edu.unisales.schedemy.repository.NotificacaoRepository;
 import br.edu.unisales.schedemy.repository.RegistroMotivoRepository;
+import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
 import br.edu.unisales.schedemy.repository.SalaVirtualRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.security.UsuarioAutenticado;
@@ -75,6 +77,7 @@ class AgendamentoServiceImplTest {
     @Mock private CalculadoraDeAgenda calculadoraDeAgenda;
     @Mock private Notificador notificador;
     @Mock private NotificacaoRepository notificacaoRepository;
+    @Mock private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
 
     private AgendamentoServiceImpl service;
 
@@ -92,7 +95,9 @@ class AgendamentoServiceImplTest {
     void preparar() {
         service = new AgendamentoServiceImpl(agendamentoRepository, usuarioRepository, duracaoReuniaoRepository,
                 salaVirtualRepository, registroMotivoRepository, agendamentoMapper, usuarioAutenticado,
-                calculadoraDeAgenda, notificador, notificacaoRepository);
+                calculadoraDeAgenda, notificador, notificacaoRepository,
+                new RegrasDeAgendamento(usuarioRepository, duracaoReuniaoRepository, calculadoraDeAgenda),
+                solicitacaoEdicaoRepository);
 
         for (Usuario u : List.of(aluno, outroAluno, professor, recepcionista)) {
             when(usuarioRepository.findById(u.getId())).thenReturn(Optional.of(u));
@@ -288,7 +293,7 @@ class AgendamentoServiceImplTest {
             assertThatThrownBy(() -> service.atualizar(confirmada.getId(), pedido(aluno, List.of(professor), semanaQueVem,
                     LocalTime.of(11, 0))))
                     .isInstanceOf(RegraDeNegocioException.class)
-                    .hasMessageContaining("remarcacao");
+                    .hasMessageContaining("peca a alteracao");
         }
 
         @Test
@@ -349,6 +354,8 @@ class AgendamentoServiceImplTest {
             assertThat(motivo.getJustificativa()).isEqualTo("Imprevisto");
             verify(agendamentoRepository).travarPorId(10L);
             verify(notificador).cancelamento(reuniao, aluno);
+            // RF 21 - pedido de alteracao pendente deixa de valer
+            verify(solicitacaoEdicaoRepository).encerrarPendentes(eq(10L), eq(StatusSolicitacao.CANCELADA), any());
         }
 
         @Test
@@ -568,6 +575,32 @@ class AgendamentoServiceImplTest {
 
             assertThat(reuniao.getStatus()).isEqualTo(StatusAgendamento.CANCELADO);
             assertThat(motivoRegistrado().getTipoOperacao()).isEqualTo(TipoOperacaoMotivo.RECUSA_AGENDAMENTO);
+        }
+
+        @Test
+        @DisplayName("RF 21 - com pedido de alteracao pendente, aceitar o convite mantem AGUARDANDO_RESPOSTA")
+        void respostaComPedidoPendente() {
+            Agendamento reuniao = noBanco(agendamento(10L, aluno, professor, StatusAgendamento.AGUARDANDO_RESPOSTA,
+                    semanaQueVem, dezHoras));
+            logadoComo(professor);
+
+            service.responder(reuniao.getId(), new RespostaAgendamentoRequestDTO(professor.getId(), true, null));
+
+            assertThat(reuniao.getStatus()).isEqualTo(StatusAgendamento.AGUARDANDO_RESPOSTA);
+            verify(solicitacaoEdicaoRepository, never()).encerrarPendentes(any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("RF 21 - se a resposta cancelar a reuniao (RN 18), o pedido pendente deixa de valer")
+        void recusaComPedidoPendente() {
+            Agendamento reuniao = noBanco(agendamento(10L, aluno, professor, StatusAgendamento.AGUARDANDO_RESPOSTA,
+                    semanaQueVem, dezHoras));
+            logadoComo(professor);
+
+            service.responder(reuniao.getId(), new RespostaAgendamentoRequestDTO(professor.getId(), false, "Viagem"));
+
+            assertThat(reuniao.getStatus()).isEqualTo(StatusAgendamento.CANCELADO);
+            verify(solicitacaoEdicaoRepository).encerrarPendentes(eq(10L), eq(StatusSolicitacao.CANCELADA), any());
         }
 
         @Test

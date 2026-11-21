@@ -5,5 +5,7 @@ public enum TipoOperacaoMotivo {
     CANCELAMENTO,
     SOLICITACAO_EDICAO,
     RECUSA_AGENDAMENTO,
-    RECUSA_REMARCACAO
+    RECUSA_REMARCACAO,
+    /** RF 22 - motivo de quem recusa o pedido de alteracao (RF 11). */
+    RECUSA_SOLICITACAO_EDICAO
 }

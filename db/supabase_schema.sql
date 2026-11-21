@@ -218,7 +218,7 @@ CREATE TABLE registro_motivo (
   id_usuario          BIGINT      NOT NULL REFERENCES usuario (id_usuario) ON UPDATE CASCADE,
   tipo_operacao       VARCHAR(30) NOT NULL
     CONSTRAINT chk_motivo_tipo CHECK (tipo_operacao IN
-      ('CANCELAMENTO','SOLICITACAO_EDICAO','RECUSA_AGENDAMENTO','RECUSA_REMARCACAO')),
+      ('CANCELAMENTO','SOLICITACAO_EDICAO','RECUSA_AGENDAMENTO','RECUSA_REMARCACAO','RECUSA_SOLICITACAO_EDICAO')),
   -- TEXT, como na entidade RegistroMotivo (columnDefinition = "TEXT").
   justificativa       TEXT        NOT NULL,
   criado_em           TIMESTAMP   NOT NULL DEFAULT now()
@@ -249,7 +249,7 @@ CREATE TABLE solicitacao_edicao (
   novo_resumo          VARCHAR(500),
   motivo               VARCHAR(200) NOT NULL,
   status_solicitacao   VARCHAR(20)  NOT NULL DEFAULT 'PENDENTE'
-    CONSTRAINT chk_solicitacao_status CHECK (status_solicitacao IN ('PENDENTE','ACEITA','RECUSADA')),
+    CONSTRAINT chk_solicitacao_status CHECK (status_solicitacao IN ('PENDENTE','ACEITA','RECUSADA','CANCELADA','EXPIRADA')),
   criado_em            TIMESTAMP    NOT NULL DEFAULT now(),
   respondido_em        TIMESTAMP
 );
