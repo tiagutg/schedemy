@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -254,12 +255,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </p>
           )}
 
-          {a.resumo && (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm font-medium">Resumo</p>
-              <p className="text-sm text-muted-foreground">{a.resumo}</p>
-            </div>
-          )}
+          {/* RF 16: o resumo aparece sempre, para ficar claro quando o organizador não preencheu. */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium">Resumo</p>
+            <p className={cn("text-sm text-muted-foreground", !a.resumo && "italic")}>
+              {a.resumo || "Nenhum resumo informado."}
+            </p>
+          </div>
 
           {linkSala && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3.5">

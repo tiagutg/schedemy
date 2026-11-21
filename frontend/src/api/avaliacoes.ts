@@ -4,6 +4,8 @@ import type { Avaliacao, Pagina, Params } from "@/types";
 type Id = number | string;
 
 export const avaliacoesApi = {
+  /** No escopo de quem está logado: aluno, as próprias; docente, as das suas reuniões; admin, todas. */
+  listar: (params?: Params) => api.get<Pagina<Avaliacao>>("/api/v1/avaliacoes", params),
   listarPorAluno: (alunoId: Id, params?: Params) =>
     api.get<Pagina<Avaliacao>>(`/api/v1/avaliacoes/alunos/${alunoId}`, params),
   buscarPorId: (id: Id) => api.get<Avaliacao>(`/api/v1/avaliacoes/${id}`),

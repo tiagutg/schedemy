@@ -34,8 +34,10 @@ export default function AvaliacoesPage() {
     (params: Params) =>
       alunoId
         ? avaliacoesApi.listarPorAluno(alunoId, params)
-        : Promise.resolve({ conteudo: [], totalPaginas: 0 } as unknown as Pagina<Avaliacao>),
-    [alunoId]
+        : verTodas
+          ? avaliacoesApi.listar(params) // sem aluno escolhido: todas as do escopo (RNF 11)
+          : Promise.resolve({ conteudo: [], totalPaginas: 0 } as unknown as Pagina<Avaliacao>),
+    [alunoId, verTodas]
   );
   const { pagina, linhas, carregando, setPaginaAtual, recarregar } = usePaginatedList(buscar, { ordenarPor: "criadoEm,desc" });
 
@@ -155,7 +157,7 @@ export default function AvaliacoesPage() {
           <SelectField
             label="Aluno"
             className="w-full sm:w-72"
-            placeholder="Selecione um aluno…"
+            placeholder="Todos os alunos"
             options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
             value={alunoEscolhido}
             onChange={(e) => {
@@ -166,9 +168,7 @@ export default function AvaliacoesPage() {
         </FiltrosCard>
       )}
 
-      {!alunoId ? (
-        <EmptyState titulo="Selecione um aluno" descricao="Escolha um aluno acima para ver as avaliações registradas por ele." />
-      ) : (
+      {!alunoId && !verTodas ? null : (
         <>
           <DataTable
             carregando={carregando}
@@ -177,7 +177,13 @@ export default function AvaliacoesPage() {
             linhaVazia={
               <EmptyState
                 titulo="Nenhuma avaliação ainda"
-                descricao={verTodas ? "Este aluno ainda não avaliou reuniões." : "Avalie uma reunião depois que ela for concluída."}
+                descricao={
+                  !verTodas
+                    ? "Avalie uma reunião depois que ela for concluída."
+                    : alunoEscolhido
+                      ? "Este aluno ainda não avaliou reuniões."
+                      : "Os alunos ainda não avaliaram reuniões suas."
+                }
               />
             }
             colunas={[
@@ -194,6 +200,10 @@ export default function AvaliacoesPage() {
                     `#${a.idAgendamento}`
                   );
                 } },
+              // Com todos os alunos na lista, mostra de quem é cada avaliação.
+              ...(verTodas && !alunoEscolhido
+                ? [{ chave: "aluno", titulo: "Aluno", render: (a: Avaliacao) => a.nomeAluno }]
+                : []),
               { chave: "nota", titulo: "Nota", render: (a) => <Estrelas nota={a.nota} /> },
               { chave: "comentario", titulo: "Comentário", render: (a) => a.comentario || "—" },
               { chave: "data", titulo: "Registrada em", render: (a) => formatarDataHora(a.criadoEm) },

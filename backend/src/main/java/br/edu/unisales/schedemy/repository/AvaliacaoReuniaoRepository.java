@@ -21,6 +21,15 @@ public interface AvaliacaoReuniaoRepository extends JpaRepository<AvaliacaoReuni
                                                                  @Param("participanteId") Long participanteId,
                                                                  Pageable pageable);
 
+    /** RNF 11/15 - todas as avaliacoes das reunioes de que o usuario informado participou (visao da docencia). */
+    @Query("""
+            SELECT av FROM AvaliacaoReuniao av
+            WHERE EXISTS (SELECT 1 FROM AgendamentoParticipante p
+                          WHERE p.agendamento = av.agendamento AND p.usuario.id = :participanteId)
+            """)
+    Page<AvaliacaoReuniao> buscarEmReunioesDoParticipante(@Param("participanteId") Long participanteId,
+                                                          Pageable pageable);
+
     /** Apoia a restricao uk_avaliacao_aluno_agendamento (uma avaliacao por aluno/reuniao). */
     boolean existsByAgendamentoIdAndAlunoId(Long agendamentoId, Long alunoId);
 }

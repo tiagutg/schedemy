@@ -204,6 +204,9 @@ class SecurityConfigTest {
             // A docencia acompanha as avaliacoes (RNF 11).
             "professor,     GET,    /api/v1/avaliacoes/alunos/1",
             "coordenador,   GET,    /api/v1/avaliacoes/alunos/1",
+            "professor,     GET,    /api/v1/avaliacoes",
+            "coordenador,   GET,    /api/v1/avaliacoes",
+            "aluno,         GET,    /api/v1/avaliacoes",
 
             // RF 23: cada perfil le e marca como lidos os proprios avisos (escopo no service).
             "aluno,         GET,    /api/v1/notificacoes",

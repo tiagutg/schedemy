@@ -129,6 +129,9 @@ export interface Bloqueio {
 export interface Avaliacao {
   id: number;
   idAgendamento: number;
+  topicoAgendamento?: string;
+  idAluno: number;
+  nomeAluno: string;
   nota: number;
   comentario?: string | null;
   criadoEm: string;

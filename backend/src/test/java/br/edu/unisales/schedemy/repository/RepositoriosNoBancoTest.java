@@ -2,6 +2,7 @@ package br.edu.unisales.schedemy.repository;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
+import br.edu.unisales.schedemy.domain.entity.AvaliacaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
@@ -70,6 +71,7 @@ class RepositoriosNoBancoTest {
     @Autowired private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
     @Autowired private LogAuditoriaRepository logAuditoriaRepository;
     @Autowired private ConsentimentoTermoRepository consentimentoTermoRepository;
+    @Autowired private AvaliacaoReuniaoRepository avaliacaoReuniaoRepository;
 
     private Usuario professor;
     private Usuario aluno;
@@ -481,6 +483,26 @@ class RepositoriosNoBancoTest {
                     .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
             assertThat(notificacaoRepository.findById(semReuniao.getId())).get()
                     .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
+        }
+    }
+
+    @Nested
+    @DisplayName("Avaliacao")
+    class DeAvaliacao {
+
+        @Test
+        @DisplayName("buscarEmReunioesDoParticipante traz so as avaliacoes das reunioes de que o docente participou")
+        void doParticipante() {
+            Agendamento comProfessor = reuniao(DIA, "10:00", StatusAgendamento.CONCLUIDO, "Avaliacao banco");
+            Usuario outroProfessor = usuario("Outro Professor Banco", TipoUsuario.PROFESSOR, null);
+            AvaliacaoReuniao avaliacao = em.persist(AvaliacaoReuniao.builder().agendamento(comProfessor).aluno(aluno)
+                    .nota(5).comentario("Teste banco").build());
+            em.flush();
+
+            assertThat(avaliacaoReuniaoRepository.buscarEmReunioesDoParticipante(professor.getId(), PAGINA))
+                    .containsExactly(avaliacao);
+            assertThat(avaliacaoReuniaoRepository.buscarEmReunioesDoParticipante(outroProfessor.getId(), PAGINA))
+                    .isEmpty();
         }
     }
 }
