@@ -8,6 +8,7 @@ import {
   IconExternalLink,
   IconMessageQuestion,
   IconPencil,
+  IconShieldSearch,
   IconStar,
   IconVideo,
   IconX,
@@ -484,6 +485,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               <Button variant="outline" onClick={() => onAlterar("replicar", a)}>
                 <IconCopy />
                 Agendar de novo
+              </Button>
+            )}
+            {/* RNF 19: a administração vê a trilha desta reunião */}
+            {pode("auditoria.ver") && (
+              <Button variant="ghost" onClick={() => navigate(`/auditoria?tabela=agendamento&idRegistro=${a.id}`)}>
+                <IconShieldSearch />
+                Ver na auditoria
               </Button>
             )}
             <Button variant="outline" onClick={onFechar}>

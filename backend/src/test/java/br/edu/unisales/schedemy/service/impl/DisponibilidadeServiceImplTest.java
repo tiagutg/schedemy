@@ -35,6 +35,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** Disponibilidade: horario valido, RN 06 (so docente) e janelas ativas sem sobreposicao no mesmo dia. */
@@ -56,7 +57,7 @@ class DisponibilidadeServiceImplTest {
     @BeforeEach
     void preparar() {
         service = new DisponibilidadeServiceImpl(disponibilidadeRepository, usuarioRepository,
-                new DisponibilidadeMapper(), usuarioAutenticado, impactoNaAgenda);
+                new DisponibilidadeMapper(), usuarioAutenticado, impactoNaAgenda, mock(Auditoria.class));
         docente = Usuario.builder().id(ID_DOCENTE).nome("Docente").tipoUsuario(TipoUsuario.PROFESSOR).build();
         when(usuarioRepository.findById(ID_DOCENTE)).thenReturn(Optional.of(docente));
         when(disponibilidadeRepository.save(any())).then(returnsFirstArg());

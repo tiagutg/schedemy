@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.exception;
 
+import br.edu.unisales.schedemy.security.ExigeAceiteDoTermoFilter;
+import br.edu.unisales.schedemy.security.TermoPendenteException;
 import br.edu.unisales.schedemy.dto.response.ErrorResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -56,6 +58,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AcessoNegadoNegocioException.class)
     public ResponseEntity<ErrorResponseDTO> tratarAcessoNegadoNegocio(AcessoNegadoNegocioException ex, HttpServletRequest request) {
         return construirResposta(HttpStatus.FORBIDDEN, "Acesso negado", ex.getMessage(), request);
+    }
+
+    /** RNF 18 - o front reconhece o erro "TERMO_PENDENTE" e mostra o termo para aceite. */
+    @ExceptionHandler(TermoPendenteException.class)
+    public ResponseEntity<ErrorResponseDTO> tratarTermoPendente(TermoPendenteException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.FORBIDDEN, ExigeAceiteDoTermoFilter.TERMO_PENDENTE, ex.getMessage(), request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)

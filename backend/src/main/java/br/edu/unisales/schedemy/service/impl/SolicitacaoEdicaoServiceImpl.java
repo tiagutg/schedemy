@@ -6,6 +6,7 @@ import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
 import br.edu.unisales.schedemy.domain.entity.SolicitacaoEdicao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -68,6 +69,7 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
     private final UsuarioAutenticado usuarioAutenticado;
     private final Notificador notificador;
     private final SolicitacaoEdicaoMapper mapper;
+    private final Auditoria auditoria;
 
     /** RN 01 - READ COMMITTED como no agendamento: a checagem de horario livre enxerga o que acabou de ser gravado. */
     @Override
@@ -122,6 +124,8 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
         registrar(agendamento, solicitante, TipoOperacaoMotivo.SOLICITACAO_EDICAO, dto.motivo().trim()); // RF 11
         notificador.pedidoDeAlteracao(agendamento, solicitante,
                 Notificador.quando(dto.dataReuniao(), dto.horarioInicio())); // RF 23
+        auditoria.registrar(AcaoAuditoria.PEDIDO_ALTERACAO_CRIADO, solicitacao.getId(), // RNF 19
+                "Reuniao %d: %s - motivo: %s".formatted(agendamento.getId(), Auditoria.descrever(agendamento), dto.motivo().trim()));
         return mapper.paraResponseDTO(solicitacao);
     }
 
@@ -185,6 +189,8 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
             agendamentoRepository.save(agendamento);
             registrar(agendamento, docente, TipoOperacaoMotivo.RECUSA_SOLICITACAO_EDICAO, motivo);
             notificador.alteracaoRecusada(agendamento, solicitacao.getSolicitante(), docente, motivo); // RF 23
+            auditoria.registrar(AcaoAuditoria.PEDIDO_ALTERACAO_RECUSADO, solicitacao.getId(), // RNF 19
+                    "Reuniao %d - motivo: %s".formatted(agendamento.getId(), motivo));
         }
         return mapper.paraResponseDTO(solicitacaoEdicaoRepository.save(solicitacao));
     }
@@ -205,6 +211,8 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
         agendamento.setStatus(AgendamentoServiceImpl.statusPelasRespostas(agendamento.getParticipantes()));
         agendamentoRepository.save(agendamento);
         notificador.pedidoEncerrado(agendamento, solicitacao.getSolicitante(), usuario, false); // RF 23
+        auditoria.registrar(AcaoAuditoria.PEDIDO_ALTERACAO_DESISTIDO, solicitacao.getId(), // RNF 19
+                "Reuniao %d: %s".formatted(agendamento.getId(), Auditoria.descrever(agendamento)));
         return mapper.paraResponseDTO(solicitacaoEdicaoRepository.save(solicitacao));
     }
 
@@ -312,6 +320,8 @@ public class SolicitacaoEdicaoServiceImpl implements SolicitacaoEdicaoService {
         s.setRespondidoEm(agora);
         s.setRespondidoPor(docente); // RF 22 - quem decidiu
         notificador.alteracaoAceita(a, docente, removidos); // RF 23
+        auditoria.registrar(AcaoAuditoria.PEDIDO_ALTERACAO_ACEITO, s.getId(), // RNF 19
+                "Reuniao %d agora: %s".formatted(a.getId(), Auditoria.descrever(a)));
     }
 
     private static void exigirPendente(SolicitacaoEdicao s) {

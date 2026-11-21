@@ -37,6 +37,7 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /** Bloqueio de agenda (RF 04/05): so de docente, periodo e horario coerentes. */
@@ -57,7 +58,7 @@ class BloqueioPeriodoServiceImplTest {
     @BeforeEach
     void preparar() {
         service = new BloqueioPeriodoServiceImpl(bloqueioPeriodoRepository, usuarioRepository,
-                new BloqueioPeriodoMapper(), usuarioAutenticado, impactoNaAgenda);
+                new BloqueioPeriodoMapper(), usuarioAutenticado, impactoNaAgenda, mock(Auditoria.class));
         usuarioDoTipo(TipoUsuario.PROFESSOR);
         when(bloqueioPeriodoRepository.save(any())).then(returnsFirstArg());
     }

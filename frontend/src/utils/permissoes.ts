@@ -31,6 +31,8 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * - usuarios → gestão administrativa de cadastros
  * - avaliacoes → RF 24 (aluno avalia) e RNF 11 (coordenação acompanha)
  * - notificacoes → RF 23: o sistema gera os avisos; cada perfil lê os seus
+ * - auditoria.ver → RNF 19: trilha de auditoria, só administração (o admin tem "*")
+ * - o termo LGPD (RNF 18) vale para todos os perfis: sem aceitar, nada abre (RotaProtegida e a API)
  *
  * Por padrão cada pessoa age em nome próprio (organiza, cancela, responde e
  * avalia como o usuário logado). As permissões abaixo liberam agir por outros:

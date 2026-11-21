@@ -6,6 +6,7 @@ import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
@@ -67,6 +68,7 @@ public class ImpactoNaAgenda {
     private final Notificador notificador;
     private final UsuarioAutenticado usuarioAutenticado;
     private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    private final Auditoria auditoria;
 
     /**
      * Reunioes que cabiam na janela {@code atual} e nao cabem em nenhuma janela do docente depois da mudanca.
@@ -152,6 +154,8 @@ public class ImpactoNaAgenda {
             // RF 21 - um pedido de alteracao pendente deixa de valer junto com a reuniao.
             solicitacaoEdicaoRepository.encerrarPendentes(reuniao.getId(), StatusSolicitacao.CANCELADA, LocalDateTime.now());
             notificador.canceladaPorMudancaDeAgenda(reuniao, docente, autor, motivo); // RF 23
+            auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CANCELADO, reuniao.getId(), // RNF 19
+                    "Agenda de %s mudou: %s - motivo: %s".formatted(docente.getNome(), Auditoria.descrever(reuniao), motivo));
         }
     }
 

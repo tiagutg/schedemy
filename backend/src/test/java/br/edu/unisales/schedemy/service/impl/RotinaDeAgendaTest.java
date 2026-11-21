@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -31,6 +32,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -46,6 +48,7 @@ class RotinaDeAgendaTest {
     @Mock private AgendamentoRepository agendamentoRepository;
     @Mock private NotificacaoRepository notificacaoRepository;
     @Mock private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    @Mock private Auditoria auditoria;
     private RotinaDeAgenda rotina;
 
     private final Usuario professor = usuario(1L, "Rômulo Ferreira", TipoUsuario.PROFESSOR);
@@ -54,7 +57,7 @@ class RotinaDeAgendaTest {
     @BeforeEach
     void preparar() {
         rotina = new RotinaDeAgenda(agendamentoRepository, notificacaoRepository, new Notificador(notificacaoRepository),
-                solicitacaoEdicaoRepository);
+                solicitacaoEdicaoRepository, auditoria);
     }
 
     @Test
@@ -146,6 +149,8 @@ class RotinaDeAgendaTest {
 
         assertThat(vencida.getStatus()).isEqualTo(StatusAgendamento.CANCELADO);
         assertThat(avisosSalvos(2)).allSatisfy(n -> assertThat(n.getTipoEvento()).isEqualTo(Notificador.CANCELAMENTO));
+        // RNF 19 - na trilha como acao do sistema (sem autor)
+        verify(auditoria).registrarDoSistema(eq(AcaoAuditoria.AGENDAMENTO_EXPIRADO), eq(vencida.getId()), anyString());
     }
 
     @Test
@@ -178,6 +183,7 @@ class RotinaDeAgendaTest {
         assertThat(pedido.getRespondidoEm()).isNotNull();
         assertThat(a.getStatus()).isEqualTo(StatusAgendamento.CONFIRMADO);
         verify(solicitacaoEdicaoRepository).save(pedido);
+        verify(auditoria).registrarDoSistema(eq(AcaoAuditoria.PEDIDO_ALTERACAO_EXPIRADO), eq(3L), anyString()); // RNF 19
         // aviso de expiracao para os dois (sistema; sem e-mail cadastrado) + lembrete das 24 h para os dois
         assertThat(avisosSalvos(4)).extracting(Notificacao::getTipoEvento)
                 .containsExactlyInAnyOrder(Notificador.SOLICITACAO_ENCERRADA, Notificador.SOLICITACAO_ENCERRADA,

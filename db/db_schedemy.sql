@@ -429,7 +429,7 @@ CREATE TABLE notificacao (
 -- LOG AUDITORIA
 CREATE TABLE log_auditoria (
     id_log BIGINT UNSIGNED AUTO_INCREMENT,
-    id_usuario BIGINT UNSIGNED NOT NULL,
+    id_usuario BIGINT UNSIGNED NULL COMMENT 'Autor; vazio quando a acao e automatica (RotinaDeAgenda)',
     acao VARCHAR(100) NOT NULL,
     tabela_afetada VARCHAR(50) NOT NULL,
     id_tabela_afetada BIGINT UNSIGNED,
@@ -447,6 +447,25 @@ CREATE TABLE log_auditoria (
     INDEX idx_log_usuario_data (id_usuario, criado_em),
     INDEX idx_log_tabela_registro (tabela_afetada, id_tabela_afetada)
 ) COMMENT='Trilha auditável de operações no sistema para conformidade com LGPD e RNF 19';
+
+-- CONSENTIMENTO DO TERMO (RNF 18)
+CREATE TABLE consentimento_termo (
+    id_consentimento BIGINT UNSIGNED AUTO_INCREMENT,
+    id_usuario BIGINT UNSIGNED NOT NULL,
+    versao_termo VARCHAR(20) NOT NULL,
+    aceito_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ip_origem VARCHAR(45) NULL,
+
+    PRIMARY KEY (id_consentimento),
+
+    CONSTRAINT fk_consentimento_usuario
+        FOREIGN KEY (id_usuario)
+        REFERENCES usuario (id_usuario)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    UNIQUE KEY uk_consentimento_usuario_versao (id_usuario, versao_termo)
+) COMMENT='Aceite do termo de uso e da política de privacidade, por versão (RNF 18)';
 
 -- EVENTO EXTERNO
 CREATE TABLE evento_externo (

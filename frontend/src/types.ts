@@ -187,3 +187,41 @@ export interface ErrorResponse {
   reunioesAfetadas?: ReuniaoAfetada[] | null;
   [campo: string]: unknown;
 }
+
+/** RNF 18: termo de uso/consentimento e política de privacidade em vigor (GET /api/v1/termos). */
+export interface DocumentoLgpd {
+  titulo: string;
+  secoes: { titulo: string; paragrafos: string[] }[];
+}
+
+export interface Termo {
+  versao: string;
+  publicadoEm: string;
+  /** Texto-base ainda em revisão: a tela mostra o aviso. */
+  rascunho: boolean;
+  avisoRascunho?: string | null;
+  termo: DocumentoLgpd;
+  politica: DocumentoLgpd;
+}
+
+/** RNF 18: situação do aceite do usuário logado. */
+export interface Consentimento {
+  versaoAtual: string;
+  versaoAceita?: string | null;
+  aceitoEm?: string | null;
+  pendente: boolean;
+}
+
+/** RNF 19: linha da trilha de auditoria (autor nulo = ação automática do sistema). */
+export interface LogAuditoria {
+  id: number;
+  idUsuario?: number | null;
+  nomeUsuario?: string | null;
+  tipoUsuario?: string | null;
+  acao: string;
+  tabelaAfetada: string;
+  idRegistro?: number | null;
+  detalhes?: string | null;
+  ipOrigem?: string | null;
+  criadoEm: string;
+}

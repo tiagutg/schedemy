@@ -45,7 +45,6 @@ public class AgendamentoMapper {
         return new ParticipanteResponseDTO(
                 participante.getUsuario().getId(),
                 participante.getUsuario().getNome(),
-                participante.getUsuario().getEmail(),
                 participante.getPapel(),
                 participante.getStatusResposta(),
                 participante.getDataResposta()

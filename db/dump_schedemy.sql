@@ -183,6 +183,34 @@ LOCK TABLES `bloqueio_periodo` WRITE;
 UNLOCK TABLES;
 
 --
+-- Table structure for table `consentimento_termo`
+--
+
+DROP TABLE IF EXISTS `consentimento_termo`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE `consentimento_termo` (
+  `id_consentimento` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
+  `id_usuario` bigint(20) unsigned NOT NULL,
+  `versao_termo` varchar(20) NOT NULL,
+  `aceito_em` datetime NOT NULL DEFAULT current_timestamp(),
+  `ip_origem` varchar(45) DEFAULT NULL,
+  PRIMARY KEY (`id_consentimento`),
+  UNIQUE KEY `uk_consentimento_usuario_versao` (`id_usuario`,`versao_termo`),
+  CONSTRAINT `fk_consentimento_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id_usuario`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Aceite do termo de uso e da política de privacidade, por versão (RNF 18)';
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Dumping data for table `consentimento_termo`
+--
+
+LOCK TABLES `consentimento_termo` WRITE;
+/*!40000 ALTER TABLE `consentimento_termo` DISABLE KEYS */;
+/*!40000 ALTER TABLE `consentimento_termo` ENABLE KEYS */;
+UNLOCK TABLES;
+
+--
 -- Table structure for table `convidado_favorito`
 --
 
@@ -312,7 +340,7 @@ DROP TABLE IF EXISTS `log_auditoria`;
 /*!50503 SET character_set_client = utf8mb4 */;
 CREATE TABLE `log_auditoria` (
   `id_log` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
-  `id_usuario` bigint(20) unsigned NOT NULL,
+  `id_usuario` bigint(20) unsigned DEFAULT NULL COMMENT 'Autor; vazio quando a acao e automatica (RotinaDeAgenda)',
   `acao` varchar(100) NOT NULL,
   `tabela_afetada` varchar(50) NOT NULL,
   `id_tabela_afetada` bigint(20) unsigned DEFAULT NULL,

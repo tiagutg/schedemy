@@ -32,7 +32,7 @@ class AutenticacaoServiceImplTest {
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
     private final JwtConfig config = new JwtConfig("segredo-de-teste-com-pelo-menos-32-caracteres");
     private final AutenticacaoServiceImpl service = new AutenticacaoServiceImpl(
-            usuarioRepository, encoder, new EmissorDeToken(config.jwtEncoder(), 480));
+            usuarioRepository, encoder, new EmissorDeToken(config.jwtEncoder(), 480), mock(Auditoria.class));
 
     private Usuario usuario;
 

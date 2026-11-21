@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -50,12 +51,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -78,6 +82,7 @@ class AgendamentoServiceImplTest {
     @Mock private Notificador notificador;
     @Mock private NotificacaoRepository notificacaoRepository;
     @Mock private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    @Mock private Auditoria auditoria;
 
     private AgendamentoServiceImpl service;
 
@@ -97,7 +102,7 @@ class AgendamentoServiceImplTest {
                 salaVirtualRepository, registroMotivoRepository, agendamentoMapper, usuarioAutenticado,
                 calculadoraDeAgenda, notificador, notificacaoRepository,
                 new RegrasDeAgendamento(usuarioRepository, duracaoReuniaoRepository, calculadoraDeAgenda),
-                solicitacaoEdicaoRepository);
+                solicitacaoEdicaoRepository, auditoria);
 
         for (Usuario u : List.of(aluno, outroAluno, professor, recepcionista)) {
             when(usuarioRepository.findById(u.getId())).thenReturn(Optional.of(u));
@@ -356,6 +361,8 @@ class AgendamentoServiceImplTest {
             verify(notificador).cancelamento(reuniao, aluno);
             // RF 21 - pedido de alteracao pendente deixa de valer
             verify(solicitacaoEdicaoRepository).encerrarPendentes(eq(10L), eq(StatusSolicitacao.CANCELADA), any());
+            // RNF 19 - trilha de auditoria com o motivo
+            verify(auditoria).registrar(eq(AcaoAuditoria.AGENDAMENTO_CANCELADO), eq(10L), contains("Imprevisto"));
         }
 
         @Test
@@ -369,6 +376,7 @@ class AgendamentoServiceImplTest {
                     .isInstanceOf(RegraDeNegocioException.class)
                     .hasMessageContaining("1 hora");
             assertThat(reuniao.getStatus()).isEqualTo(StatusAgendamento.CONFIRMADO);
+            verifyNoInteractions(auditoria); // operacao recusada nao entra na trilha
         }
 
         @Test

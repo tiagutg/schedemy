@@ -67,6 +67,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private final NotificacaoRepository notificacaoRepository;
     private final RegrasDeAgendamento regras;
     private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    private final Auditoria auditoria;
 
     /**
      * RN 01 - READ COMMITTED (padrao do PostgreSQL; o MySQL usa REPEATABLE READ): depois de esperar a trava dos
@@ -76,7 +77,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
-        return agendamentoMapper.paraResponseDTO(novoAgendamento(dto, null));
+        Agendamento criado = novoAgendamento(dto, null);
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CRIADO, criado.getId(), Auditoria.descrever(criado)); // RNF 19
+        return agendamentoMapper.paraResponseDTO(criado);
     }
 
     /**
@@ -270,6 +273,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
         agendamento = agendamentoRepository.save(agendamento);
         notificador.alteracao(agendamento, usuarioAutenticado.obter()); // RF 23
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_EDITADO, agendamento.getId(), Auditoria.descrever(agendamento)); // RNF 19
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -325,6 +329,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
         agendamento = agendamentoRepository.save(agendamento);
         notificador.resposta(agendamento, usuario, Boolean.TRUE.equals(dto.aceitar()), statusAnterior); // RF 23
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_RESPONDIDO, agendamento.getId(), // RNF 19
+                (Boolean.TRUE.equals(dto.aceitar()) ? "Aceitou: " : "Recusou: ") + Auditoria.descrever(agendamento));
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -349,6 +355,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         if (!agendamentoRepository.existsByAgendamentoOrigemIdAndStatusNot(agendamento.getId(), StatusAgendamento.CANCELADO)) {
             notificador.cancelamento(agendamento, usuario); // RF 23
         }
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CANCELADO, agendamento.getId(), // RNF 19
+                Auditoria.descrever(agendamento) + " - motivo: " + dto.motivo());
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -384,6 +392,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         // A original deixa de existir para a checagem de conflito: a nova pode ocupar o mesmo horario (ou parte dele).
         // Os envolvidos recebem o aviso de remarcacao da nova reuniao, nao o de cancelamento da original.
         Agendamento nova = novoAgendamento(dadosNovos, original.getId());
+        // RNF 19 - a original (cancelada) aponta para a nova, e a nova nasce como remarcacao da original.
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_REMARCADO, original.getId(),
+                "Remarcada para a reuniao %d (%s) - motivo: %s".formatted(nova.getId(), Auditoria.descrever(nova), dto.motivo()));
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CRIADO, nova.getId(),
+                "Remarcacao da reuniao %d: %s".formatted(original.getId(), Auditoria.descrever(nova)));
         return agendamentoMapper.paraResponseDTO(nova);
     }
 
@@ -396,6 +409,8 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                             "Para os demais casos, utilize o cancelamento.");
         }
         notificacaoRepository.removerDoAgendamento(agendamento.getId());
+        // RNF 19 - o registro some, a trilha fica (id_tabela_afetada nao tem FK).
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_REMOVIDO, agendamento.getId(), Auditoria.descrever(agendamento));
         agendamentoRepository.delete(agendamento);
     }
 

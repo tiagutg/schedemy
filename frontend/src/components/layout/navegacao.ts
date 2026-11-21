@@ -5,6 +5,7 @@ import {
   IconDashboard,
   IconBell,
   IconHourglass,
+  IconShieldSearch,
   IconStar,
   IconUsers,
   type Icon,
@@ -37,6 +38,7 @@ export const ITENS_AGENDA: ItemNav[] = [
 export const ITENS_CONFIGURACAO: ItemNav[] = [
   { to: "/usuarios", rotulo: "Usuários", icone: IconUsers, permissao: "usuarios.gerenciar" },
   { to: "/duracoes", rotulo: "Durações de reunião", icone: IconHourglass, permissao: "duracoes.gerenciar" },
+  { to: "/auditoria", rotulo: "Auditoria", icone: IconShieldSearch, permissao: "auditoria.ver" },
 ];
 
 /** Título exibido no cabeçalho para a rota atual. */

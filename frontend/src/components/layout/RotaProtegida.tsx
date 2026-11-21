@@ -3,6 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/context/AuthContext";
 import CarregandoPagina from "@/components/common/CarregandoPagina";
 import AcessoNegado from "./AcessoNegado";
+import AceiteDoTermo from "./AceiteDoTermo";
 
 /**
  * Protege uma rota. Sem sessão, manda para o login; com sessão mas sem a
@@ -10,7 +11,7 @@ import AcessoNegado from "./AcessoNegado";
  * para que o usuário entenda o que aconteceu.
  */
 export default function RotaProtegida({ children, permissao }: { children: ReactNode; permissao?: string }) {
-  const { estaAutenticado, buscandoPerfil, pode } = useAuth();
+  const { estaAutenticado, buscandoPerfil, pode, termoPendente } = useAuth();
   const local = useLocation();
 
   if (!estaAutenticado) {
@@ -18,8 +19,13 @@ export default function RotaProtegida({ children, permissao }: { children: React
   }
 
   // Sem o cadastro do usuário logado o perfil é desconhecido; espera em vez de negar o acesso.
-  if (buscandoPerfil) {
+  if (buscandoPerfil || termoPendente === null) {
     return <CarregandoPagina telaCheia />;
+  }
+
+  // RNF 18: sem aceitar a versão em vigor do termo, nada do sistema abre (a API também recusa).
+  if (termoPendente) {
+    return <AceiteDoTermo />;
   }
 
   if (permissao && !pode(permissao)) {

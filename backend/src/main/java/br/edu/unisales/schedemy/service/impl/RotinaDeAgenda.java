@@ -2,6 +2,7 @@ package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
 import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
@@ -42,6 +43,7 @@ public class RotinaDeAgenda {
     private final NotificacaoRepository notificacaoRepository;
     private final Notificador notificador;
     private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    private final Auditoria auditoria;
 
     @Scheduled(initialDelayString = "${schedemy.rotina-agenda.atraso-inicial:PT30S}",
             fixedDelayString = "${schedemy.rotina-agenda.intervalo:PT5M}")
@@ -72,6 +74,8 @@ public class RotinaDeAgenda {
                         a.setStatus(StatusAgendamento.CANCELADO);
                         agendamentoRepository.save(a);
                         notificador.naoConfirmada(a);
+                        auditoria.registrarDoSistema(AcaoAuditoria.AGENDAMENTO_EXPIRADO, a.getId(), // RNF 19
+                                "Sem confirmacao ate o inicio (RN 18): " + Auditoria.descrever(a));
                         expiradas++;
                     }
                 }
@@ -117,6 +121,8 @@ public class RotinaDeAgenda {
                     s.setRespondidoEm(agora);
                     solicitacaoEdicaoRepository.save(s);
                     notificador.pedidoEncerrado(a, s.getSolicitante(), null, true);
+                    auditoria.registrarDoSistema(AcaoAuditoria.PEDIDO_ALTERACAO_EXPIRADO, s.getId(), // RNF 19
+                            "Sem resposta ate 24 h antes - reuniao %d: %s".formatted(a.getId(), Auditoria.descrever(a)));
                     return 1;
                 })
                 .orElse(0);

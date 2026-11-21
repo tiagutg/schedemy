@@ -85,7 +85,7 @@ class ImpactoNaAgendaTest {
         CalculadoraDeAgenda calculadora = new CalculadoraDeAgenda(disponibilidadeRepository,
                 mock(BloqueioPeriodoRepository.class), agendamentoRepository);
         impacto = new ImpactoNaAgenda(agendamentoRepository, disponibilidadeRepository, usuarioRepository,
-                registroMotivoRepository, calculadora, notificador, usuarioAutenticado, solicitacaoEdicaoRepository);
+                registroMotivoRepository, calculadora, notificador, usuarioAutenticado, solicitacaoEdicaoRepository, mock(Auditoria.class));
         when(agendamentoRepository.buscarDoParticipanteNoPeriodo(eq(docente.getId()), any(), any(), any()))
                 .thenAnswer(c -> doDocente.stream()
                         .filter(a -> !a.getDataReuniao().isBefore(c.getArgument(1, LocalDate.class))

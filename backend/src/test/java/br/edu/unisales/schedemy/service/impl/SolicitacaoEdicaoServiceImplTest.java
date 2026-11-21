@@ -60,6 +60,7 @@ import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 /**
@@ -96,7 +97,7 @@ class SolicitacaoEdicaoServiceImplTest {
     void preparar() {
         RegrasDeAgendamento regras = new RegrasDeAgendamento(usuarioRepository, duracaoReuniaoRepository, calculadoraDeAgenda);
         service = new SolicitacaoEdicaoServiceImpl(solicitacaoEdicaoRepository, agendamentoRepository,
-                registroMotivoRepository, regras, usuarioAutenticado, notificador, new SolicitacaoEdicaoMapper());
+                registroMotivoRepository, regras, usuarioAutenticado, notificador, new SolicitacaoEdicaoMapper(), mock(Auditoria.class));
         for (Usuario u : List.of(aluno, outroAluno, professor, coordenador, recepcionista)) {
             when(usuarioRepository.findById(u.getId())).thenReturn(Optional.of(u));
         }

@@ -19,6 +19,8 @@ const AgendamentosPage = lazy(() => import("@/pages/agendamentos/AgendamentosPag
 const AvaliacoesPage = lazy(() => import("@/pages/AvaliacoesPage"));
 const NotificacoesPage = lazy(() => import("@/pages/NotificacoesPage"));
 const PerfilPage = lazy(() => import("@/pages/PerfilPage"));
+const AuditoriaPage = lazy(() => import("@/pages/AuditoriaPage"));
+const PrivacidadePage = lazy(() => import("@/pages/PrivacidadePage"));
 const NaoEncontradaPage = lazy(() => import("@/pages/NaoEncontradaPage"));
 
 export default function App() {
@@ -31,6 +33,8 @@ export default function App() {
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/cadastro" element={<CadastroPage />} />
+              {/* RNF 18: termo e política abertos a todos, antes e depois do login */}
+              <Route path="/privacidade" element={<PrivacidadePage />} />
 
               <Route
                 path="/"
@@ -94,6 +98,14 @@ export default function App() {
                   element={
                     <RotaProtegida permissao="notificacoes.ver">
                       <NotificacoesPage />
+                    </RotaProtegida>
+                  }
+                />
+                <Route
+                  path="auditoria"
+                  element={
+                    <RotaProtegida permissao="auditoria.ver">
+                      <AuditoriaPage />
                     </RotaProtegida>
                   }
                 />

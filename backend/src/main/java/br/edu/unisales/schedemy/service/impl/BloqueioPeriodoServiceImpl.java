@@ -4,6 +4,7 @@ import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.BloqueioPeriodoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.BloqueioPeriodoResponseDTO;
@@ -34,6 +35,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     private final BloqueioPeriodoMapper bloqueioPeriodoMapper;
     private final UsuarioAutenticado usuarioAutenticado;
     private final ImpactoNaAgenda impactoNaAgenda;
+    private final Auditoria auditoria;
 
     /**
      * RF 04/RF 06 - as reunioes dentro do bloqueio sao canceladas na mesma transacao, se o docente confirmou
@@ -45,7 +47,9 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
         Usuario usuario = validarNovoEstado(dto);
         BloqueioPeriodo entidade = bloqueioPeriodoMapper.paraEntidade(dto, usuario);
         impactoNaAgenda.cancelarAfetadas(usuario, () -> impactoNaAgenda.afetadasPeloBloqueio(entidade), dto.cancelarAfetadas());
-        return bloqueioPeriodoMapper.paraResponseDTO(bloqueioPeriodoRepository.save(entidade));
+        BloqueioPeriodo salvo = bloqueioPeriodoRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.BLOQUEIO_CRIADO, salvo.getId(), descrever(salvo)); // RNF 19
+        return bloqueioPeriodoMapper.paraResponseDTO(salvo);
     }
 
     /** RF 06/RF 07 - reunioes que o bloqueio novo cancelaria, sem gravar nada. */
@@ -95,14 +99,29 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
         BloqueioPeriodo depois = bloqueioPeriodoMapper.paraEntidade(dto, usuario);
         impactoNaAgenda.cancelarAfetadas(usuario, () -> impactoNaAgenda.afetadasPeloBloqueio(depois), dto.cancelarAfetadas());
 
+        String antes = descrever(entidade);
         bloqueioPeriodoMapper.atualizarEntidade(entidade, dto, usuario);
-        return bloqueioPeriodoMapper.paraResponseDTO(bloqueioPeriodoRepository.save(entidade));
+        BloqueioPeriodo salvo = bloqueioPeriodoRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.BLOQUEIO_EDITADO, salvo.getId(), antes + " -> " + descrever(salvo)); // RNF 19
+        return bloqueioPeriodoMapper.paraResponseDTO(salvo);
     }
 
     /** RF 06 - remover um bloqueio so libera horarios: nunca afeta reunioes. */
     @Override
     public void deletar(Long id) {
-        bloqueioPeriodoRepository.delete(buscarEntidadeDoDono(id));
+        BloqueioPeriodo entidade = buscarEntidadeDoDono(id);
+        auditoria.registrar(AcaoAuditoria.BLOQUEIO_REMOVIDO, entidade.getId(), descrever(entidade)); // RNF 19
+        bloqueioPeriodoRepository.delete(entidade);
+    }
+
+    /** Para a trilha de auditoria: "Romulo: 01/12/2026 a 05/12/2026, 08:00-12:00 - Congresso". */
+    private static String descrever(BloqueioPeriodo b) {
+        String horario = b.getHorarioInicio() == null && b.getHorarioFim() == null ? "dia inteiro"
+                : "%s-%s".formatted(b.getHorarioInicio() == null ? "inicio" : b.getHorarioInicio(),
+                b.getHorarioFim() == null ? "fim" : b.getHorarioFim());
+        String recorrencia = Boolean.TRUE.equals(b.getERecorrente()) ? ", toda semana (dia " + b.getDiaSemanaRecorrente() + ")" : "";
+        return "%s: %s a %s, %s%s - %s".formatted(b.getUsuario() == null ? "?" : b.getUsuario().getNome(),
+                b.getDataInicio(), b.getDataFim(), horario, recorrencia, b.getMotivo() == null ? "" : b.getMotivo());
     }
 
     /** Regras comuns ao salvar e a previa; devolve o docente do bloqueio. */

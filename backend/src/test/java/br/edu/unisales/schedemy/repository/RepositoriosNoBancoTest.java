@@ -7,6 +7,8 @@ import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
+import br.edu.unisales.schedemy.domain.entity.ConsentimentoTermo;
+import br.edu.unisales.schedemy.domain.entity.LogAuditoria;
 import br.edu.unisales.schedemy.domain.entity.SolicitacaoEdicao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
@@ -15,6 +17,7 @@ import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
@@ -39,6 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Queries dos repositories rodando no banco de verdade (MySQL ou PostgreSQL, conforme o perfil ativo).
@@ -64,6 +68,8 @@ class RepositoriosNoBancoTest {
     @Autowired private BloqueioPeriodoRepository bloqueioPeriodoRepository;
     @Autowired private NotificacaoRepository notificacaoRepository;
     @Autowired private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    @Autowired private LogAuditoriaRepository logAuditoriaRepository;
+    @Autowired private ConsentimentoTermoRepository consentimentoTermoRepository;
 
     private Usuario professor;
     private Usuario aluno;
@@ -339,6 +345,75 @@ class RepositoriosNoBancoTest {
             assertThat(gestor.getTotalElements()).isGreaterThanOrEqualTo(2);
             // Os ManyToOne vieram no JOIN FETCH: o mapper le sem consultas extras.
             assertThat(gestor.getContent().getFirst().getAgendamento().getTopico()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Auditoria e LGPD (RNF 18/19)")
+    class DeAuditoria {
+
+        private LogAuditoria log(Usuario autor, AcaoAuditoria acao, Long idRegistro) {
+            return em.persist(LogAuditoria.builder().usuario(autor).acao(acao).tabelaAfetada(acao.getTabela())
+                    .idTabelaAfetada(idRegistro).detalhes("teste banco").ipOrigem("127.0.0.1").build());
+        }
+
+        @Test
+        @DisplayName("linha sem autor (sistema); buscarComFiltros com todos os filtros nulos e com cada filtro")
+        void trilha() {
+            long idReuniao = 990_000L + (long) (Math.random() * 1000);
+            LogAuditoria doAluno = log(aluno, AcaoAuditoria.AGENDAMENTO_CRIADO, idReuniao);
+            LogAuditoria doSistema = log(null, AcaoAuditoria.AGENDAMENTO_EXPIRADO, idReuniao);
+            LogAuditoria login = log(professor, AcaoAuditoria.LOGIN, professor.getId());
+            em.flush();
+            em.clear();
+
+            var todas = List.of(AcaoAuditoria.values());
+            var pagina = PageRequest.of(0, 500);
+            // Todos os opcionais nulos/vazios: o PostgreSQL precisa aceitar os parametros sem tipo.
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "", null, null, null, pagina)
+                    .getContent()).extracting(LogAuditoria::getId)
+                    .contains(doAluno.getId(), doSistema.getId(), login.getId());
+            // Por registro: a reuniao, da mais recente para a mais antiga, com o autor ja carregado.
+            var daReuniao = logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    null, null, pagina).getContent();
+            assertThat(daReuniao).extracting(LogAuditoria::getId).containsExactly(doSistema.getId(), doAluno.getId());
+            assertThat(daReuniao.get(1).getUsuario().getNome()).isEqualTo("Aluno Teste Banco");
+            assertThat(daReuniao.get(0).getUsuario()).isNull();
+            // Por autor e por acao.
+            assertThat(logAuditoriaRepository.buscarComFiltros(professor.getId(), false, List.of(AcaoAuditoria.LOGIN), "",
+                    null, null, null, pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(login.getId());
+            // So o sistema.
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, true, todas, "agendamento", idReuniao, null, null,
+                    pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(doSistema.getId());
+            // Periodo [desde, ate): hoje entra, amanha em diante nao.
+            LocalDateTime hoje = LocalDate.now().atStartOfDay();
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    hoje, hoje.plusDays(1), pagina).getTotalElements()).isEqualTo(2);
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    hoje.plusDays(1), null, pagina).getTotalElements()).isZero();
+
+            assertThat(logAuditoriaRepository.existsByUsuarioId(aluno.getId())).isTrue();
+            assertThat(logAuditoriaRepository.existsByUsuarioId(usuario("Sem Trilha", TipoUsuario.ALUNO, null).getId())).isFalse();
+        }
+
+        @Test
+        @DisplayName("consentimento por versao: existe, ultimo aceite e unico por usuario e versao")
+        void consentimento() {
+            em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-01-01").ipOrigem("10.0.0.1").build());
+            ConsentimentoTermo atual = em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-11-21").build());
+            em.flush();
+            em.clear();
+
+            assertThat(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(aluno.getId(), "2026-11-21")).isTrue();
+            assertThat(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(professor.getId(), "2026-11-21")).isFalse();
+            assertThat(consentimentoTermoRepository.findFirstByUsuarioIdOrderByAceitoEmDescIdDesc(aluno.getId()))
+                    .get().extracting(ConsentimentoTermo::getId).isEqualTo(atual.getId());
+
+            // Com id IDENTITY o insert sai no persist; o flush cobre o caso de o provedor adiar.
+            assertThatThrownBy(() -> {
+                em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-11-21").build());
+                em.flush();
+            }).isInstanceOf(jakarta.persistence.PersistenceException.class);
         }
     }
 

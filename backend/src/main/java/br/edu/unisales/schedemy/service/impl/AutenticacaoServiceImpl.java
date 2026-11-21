@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.dto.request.LoginRequestDTO;
 import br.edu.unisales.schedemy.dto.response.TokenResponseDTO;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
@@ -26,6 +27,7 @@ public class AutenticacaoServiceImpl implements AutenticacaoService {
     private final UsuarioRepository usuarioRepository;
     private final PasswordEncoder passwordEncoder;
     private final EmissorDeToken emissorDeToken;
+    private final Auditoria auditoria;
 
     /**
      * Hash de uma senha qualquer: conferido quando o e-mail nao existe, para a resposta levar
@@ -34,10 +36,11 @@ public class AutenticacaoServiceImpl implements AutenticacaoService {
     private final String hashFicticio;
 
     public AutenticacaoServiceImpl(UsuarioRepository usuarioRepository, PasswordEncoder passwordEncoder,
-                                   EmissorDeToken emissorDeToken) {
+                                   EmissorDeToken emissorDeToken, Auditoria auditoria) {
         this.usuarioRepository = usuarioRepository;
         this.passwordEncoder = passwordEncoder;
         this.emissorDeToken = emissorDeToken;
+        this.auditoria = auditoria;
         this.hashFicticio = passwordEncoder.encode("usuario-inexistente");
     }
 
@@ -47,8 +50,14 @@ public class AutenticacaoServiceImpl implements AutenticacaoService {
         Usuario usuario = usuarioRepository.findByEmail(dto.email().trim()).orElse(null);
         boolean senhaConfere = senhaConfere(dto.senha(), usuario == null ? hashFicticio : usuario.getSenha());
         if (usuario == null || !senhaConfere || !Boolean.TRUE.equals(usuario.getAtivo())) {
+            // RNF 19 - tentativa contra uma conta existente fica na trilha (a resposta continua a mesma para todos).
+            if (usuario != null) {
+                auditoria.registrarEmSeparado(usuario, AcaoAuditoria.LOGIN_RECUSADO, usuario.getId(),
+                        senhaConfere ? "Conta inativa" : "Senha incorreta");
+            }
             throw new BadCredentialsException(CREDENCIAIS_INVALIDAS);
         }
+        auditoria.registrarEmSeparado(usuario, AcaoAuditoria.LOGIN, usuario.getId(), null); // RNF 19
         EmissorDeToken.TokenEmitido emitido = emissorDeToken.emitir(usuario);
         return new TokenResponseDTO(emitido.token(), "Bearer", emitido.expiraEm());
     }

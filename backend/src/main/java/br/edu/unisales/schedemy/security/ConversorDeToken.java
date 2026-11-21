@@ -1,16 +1,20 @@
 package br.edu.unisales.schedemy.security;
 
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.repository.ConsentimentoTermoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.service.impl.TermoDePrivacidade;
 import lombok.RequiredArgsConstructor;
 import org.springframework.core.convert.converter.Converter;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,6 +31,8 @@ public class ConversorDeToken implements Converter<Jwt, AbstractAuthenticationTo
     private static final String SESSAO_INVALIDA = "Sessao expirada ou invalida. Entre novamente.";
 
     private final UsuarioRepository usuarioRepository;
+    private final ConsentimentoTermoRepository consentimentoTermoRepository;
+    private final TermoDePrivacidade termoDePrivacidade;
 
     @Override
     public AbstractAuthenticationToken convert(Jwt jwt) {
@@ -42,9 +48,14 @@ public class ConversorDeToken implements Converter<Jwt, AbstractAuthenticationTo
         }
 
         UsuarioAutenticado.guardarNaRequisicao(usuario);
-        var papel = new SimpleGrantedAuthority("ROLE_" + usuario.getTipoUsuario().name());
+        List<GrantedAuthority> autoridades = new ArrayList<>();
+        autoridades.add(new SimpleGrantedAuthority("ROLE_" + usuario.getTipoUsuario().name()));
+        // RNF 18 - sem o aceite da versao em vigor do termo, o ExigeAceiteDoTermoFilter barra quase tudo.
+        if (!consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(usuario.getId(), termoDePrivacidade.versao())) {
+            autoridades.add(new SimpleGrantedAuthority(ExigeAceiteDoTermoFilter.TERMO_PENDENTE));
+        }
         // O nome da autenticacao e o e-mail, como era no Basic Auth (UsuarioAutenticado.obter).
-        return new JwtAuthenticationToken(jwt, List.of(papel), usuario.getEmail());
+        return new JwtAuthenticationToken(jwt, autoridades, usuario.getEmail());
     }
 
     private static Long idDoToken(Jwt jwt) {

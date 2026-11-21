@@ -40,8 +40,12 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </div>
 
-        <p className="hidden text-center text-xs text-muted-foreground md:text-left [@media(min-height:700px)]:block">
-          Sistema de agendamentos acadêmicos
+        <p className="text-center text-xs text-muted-foreground md:text-left">
+          <span className="hidden [@media(min-height:700px)]:inline">Sistema de agendamentos acadêmicos · </span>
+          {/* RNF 18: termo e política acessíveis antes do login */}
+          <Link to="/privacidade" className="underline-offset-4 hover:text-foreground hover:underline">
+            Termo de uso e privacidade
+          </Link>
         </p>
       </div>
 

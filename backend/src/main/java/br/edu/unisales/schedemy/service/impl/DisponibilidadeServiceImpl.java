@@ -4,6 +4,7 @@ import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.CancelamentoDeAfetadasRequestDTO;
 import br.edu.unisales.schedemy.dto.request.DisponibilidadeRequestDTO;
@@ -35,6 +36,7 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
     private final DisponibilidadeMapper disponibilidadeMapper;
     private final UsuarioAutenticado usuarioAutenticado;
     private final ImpactoNaAgenda impactoNaAgenda;
+    private final Auditoria auditoria;
 
     // Sem id na criacao: nenhum id real e negativo, entao nada e ignorado na checagem de sobreposicao.
     private static final long SEM_ID = -1L;
@@ -53,6 +55,7 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
 
         Disponibilidade entidade = disponibilidadeMapper.paraEntidade(dto, usuario);
         entidade = disponibilidadeRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.DISPONIBILIDADE_CRIADA, entidade.getId(), descrever(entidade)); // RNF 19
         return disponibilidadeMapper.paraResponseDTO(entidade);
     }
 
@@ -85,8 +88,11 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
             validarSemSobreposicao(usuario.getId(), dto.diaSemana(), dto.horarioInicio(), dto.horarioFim(), entidade.getId());
         }
 
+        String antes = descrever(entidade);
         disponibilidadeMapper.atualizarEntidade(entidade, dto, usuario);
-        return disponibilidadeMapper.paraResponseDTO(disponibilidadeRepository.save(entidade));
+        Disponibilidade salva = disponibilidadeRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.DISPONIBILIDADE_EDITADA, salva.getId(), antes + " -> " + descrever(salva)); // RNF 19
+        return disponibilidadeMapper.paraResponseDTO(salva);
     }
 
     /** RF 06/RF 07 - reunioes que a edicao cancelaria, sem gravar nada. */
@@ -123,7 +129,15 @@ public class DisponibilidadeServiceImpl implements DisponibilidadeService {
         Disponibilidade entidade = buscarEntidadeDoDono(id);
         impactoNaAgenda.cancelarAfetadas(entidade.getUsuario(),
                 () -> impactoNaAgenda.afetadasPelaDisponibilidade(entidade, null), confirmacao);
+        auditoria.registrar(AcaoAuditoria.DISPONIBILIDADE_REMOVIDA, entidade.getId(), descrever(entidade)); // RNF 19
         disponibilidadeRepository.delete(entidade);
+    }
+
+    /** Para a trilha de auditoria: "Romulo: dia 2 (1 = domingo) 08:00-12:00, ativa". */
+    private static String descrever(Disponibilidade d) {
+        return "%s: dia %d (1 = domingo) %s-%s, %s".formatted(
+                d.getUsuario() == null ? "?" : d.getUsuario().getNome(), d.getDiaSemana(),
+                d.getHorarioInicio(), d.getHorarioFim(), Boolean.TRUE.equals(d.getAtivo()) ? "ativa" : "inativa");
     }
 
     /** Regras comuns a edicao e a sua previa; devolve o docente que ficara com a janela. */
