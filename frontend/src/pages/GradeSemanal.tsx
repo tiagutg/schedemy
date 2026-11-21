@@ -76,7 +76,8 @@ export default function GradeSemanal({
                     title={`${rotulo}${d.ativo ? "" : " (inativa)"}`}
                     aria-label={`${dia.curto} ${rotulo}${d.ativo ? "" : ", inativa"}`}
                     className={cn(
-                      "absolute inset-x-0.5 overflow-hidden rounded-md px-1 py-0.5 text-left text-[10px] leading-tight font-medium sm:text-xs",
+                      // Rótulo no topo do bloco, com respiro: o <button> centraliza o texto na vertical por padrão.
+                      "absolute inset-x-1 flex flex-col items-start justify-start overflow-hidden rounded-md px-2 py-1 text-left text-[10px] leading-tight font-medium tabular-nums sm:text-xs",
                       d.ativo
                         ? "bg-primary text-primary-foreground hover:bg-primary/90"
                         : "border border-dashed border-muted-foreground/50 bg-background text-muted-foreground",
@@ -84,7 +85,8 @@ export default function GradeSemanal({
                     )}
                     style={{ top: topo(ini), height: Math.max(topo(fimBloco) - topo(ini), 18) }}
                   >
-                    {rotulo}
+                    <span className="max-w-full truncate">{rotulo}</span>
+                    {!d.ativo && <span className="max-w-full truncate font-normal">Inativo</span>}
                   </button>
                 );
               })}

@@ -5,6 +5,7 @@ import {
   IconCalendarCheck,
   IconCalendarRepeat,
   IconCalendarX,
+  IconCheck,
   IconChecks,
   IconClockHour4,
   IconMail,
@@ -77,8 +78,10 @@ export default function NotificacoesPage() {
   });
   const minhas = !verDeTodos || filtros.usuarioId === String(eu?.id);
 
+  const podeMarcar = (n: Notificacao) => n.statusEnvio === "PENDENTE" && n.idUsuario === eu?.id;
+
   async function abrir(n: Notificacao) {
-    if (n.statusEnvio === "PENDENTE" && n.idUsuario === eu?.id) {
+    if (podeMarcar(n)) {
       try {
         await notificacoesApi.marcarComoLida(n.id);
         atualizarContador();
@@ -90,6 +93,17 @@ export default function NotificacoesPage() {
     if (n.idAgendamento && n.tipoEvento === "CANCELAMENTO_AGENDA") navigate(`/agendamentos?reagendar=${n.idAgendamento}`);
     else if (n.idAgendamento) navigate(`/agendamentos?abrir=${n.idAgendamento}`);
     else recarregar();
+  }
+
+  // Marca uma só, sem abrir a reunião.
+  async function marcarComoLida(n: Notificacao) {
+    try {
+      await notificacoesApi.marcarComoLida(n.id);
+      atualizarContador();
+      recarregar();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    }
   }
 
   async function marcarTodas() {
@@ -159,14 +173,11 @@ export default function NotificacoesPage() {
             const Icone = ICONES[n.tipoEvento] ?? IconBell;
             const naoLida = n.statusEnvio === "PENDENTE";
             return (
-              <li key={n.id}>
+              <li key={n.id} className={cn("flex items-center", naoLida && "bg-brand-50 dark:bg-brand-100/40")}>
                 <button
                   type="button"
                   onClick={() => abrir(n)}
-                  className={cn(
-                    "flex w-full items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none",
-                    naoLida && "bg-brand-50 dark:bg-brand-100/40"
-                  )}
+                  className="flex min-w-0 flex-1 items-start gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
                 >
                   <span
                     className={cn(
@@ -186,6 +197,18 @@ export default function NotificacoesPage() {
                   </span>
                   {naoLida && <span aria-hidden="true" className="mt-2 size-2 shrink-0 rounded-full bg-brand-600" />}
                 </button>
+                {podeMarcar(n) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="mr-2 shrink-0"
+                    title="Marcar como lida"
+                    aria-label={`Marcar como lida: ${n.mensagem}`}
+                    onClick={() => marcarComoLida(n)}
+                  >
+                    <IconCheck />
+                  </Button>
+                )}
               </li>
             );
           })}
