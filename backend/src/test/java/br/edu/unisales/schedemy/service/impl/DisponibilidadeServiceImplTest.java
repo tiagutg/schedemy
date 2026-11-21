@@ -3,8 +3,10 @@ package br.edu.unisales.schedemy.service.impl;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
+import br.edu.unisales.schedemy.dto.request.CancelamentoDeAfetadasRequestDTO;
 import br.edu.unisales.schedemy.dto.request.DisponibilidadeRequestDTO;
 import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
+import br.edu.unisales.schedemy.exception.ReunioesAfetadasException;
 import br.edu.unisales.schedemy.mapper.DisponibilidadeMapper;
 import br.edu.unisales.schedemy.repository.DisponibilidadeRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
@@ -28,6 +30,8 @@ import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -44,6 +48,7 @@ class DisponibilidadeServiceImplTest {
     @Mock private DisponibilidadeRepository disponibilidadeRepository;
     @Mock private UsuarioRepository usuarioRepository;
     @Mock private UsuarioAutenticado usuarioAutenticado;
+    @Mock private ImpactoNaAgenda impactoNaAgenda;
 
     private DisponibilidadeServiceImpl service;
     private Usuario docente;
@@ -51,14 +56,14 @@ class DisponibilidadeServiceImplTest {
     @BeforeEach
     void preparar() {
         service = new DisponibilidadeServiceImpl(disponibilidadeRepository, usuarioRepository,
-                new DisponibilidadeMapper(), usuarioAutenticado);
+                new DisponibilidadeMapper(), usuarioAutenticado, impactoNaAgenda);
         docente = Usuario.builder().id(ID_DOCENTE).nome("Docente").tipoUsuario(TipoUsuario.PROFESSOR).build();
         when(usuarioRepository.findById(ID_DOCENTE)).thenReturn(Optional.of(docente));
         when(disponibilidadeRepository.save(any())).then(returnsFirstArg());
     }
 
     private static DisponibilidadeRequestDTO pedido(String inicio, String fim, Boolean ativo) {
-        return new DisponibilidadeRequestDTO(ID_DOCENTE, QUARTA, LocalTime.parse(inicio), LocalTime.parse(fim), ativo);
+        return new DisponibilidadeRequestDTO(ID_DOCENTE, QUARTA, LocalTime.parse(inicio), LocalTime.parse(fim), ativo, null);
     }
 
     private void haSobreposicao(boolean resposta) {
@@ -161,5 +166,60 @@ class DisponibilidadeServiceImplTest {
         assertThatThrownBy(() -> service.criar(pedido("12:00", "08:00", null)))
                 .isInstanceOf(RegraDeNegocioException.class)
                 .hasMessageContaining("posterior");
+    }
+
+    // ------------------------------------------------------------------
+    // RF 06 - reunioes afetadas (a regra em si esta em ImpactoNaAgendaTest)
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("edicao cancela as afetadas confirmadas antes de gravar a janela")
+    void edicaoCancelaAfetadasAntesDeGravar() {
+        existente(7L, true);
+        CancelamentoDeAfetadasRequestDTO confirmacao = new CancelamentoDeAfetadasRequestDTO(List.of(30L), "Colegiado");
+
+        service.atualizar(7L, new DisponibilidadeRequestDTO(ID_DOCENTE, QUARTA, LocalTime.of(8, 0), LocalTime.of(10, 0),
+                null, confirmacao));
+
+        InOrder ordem = inOrder(impactoNaAgenda, disponibilidadeRepository);
+        ordem.verify(impactoNaAgenda).cancelarAfetadas(eq(docente), any(), eq(confirmacao));
+        ordem.verify(disponibilidadeRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("sem a confirmacao das afetadas, a edicao nao grava nada")
+    void edicaoRecusadaNaoGrava() {
+        existente(7L, true);
+        doThrow(new ReunioesAfetadasException("afeta", List.of()))
+                .when(impactoNaAgenda).cancelarAfetadas(any(), any(), any());
+
+        assertThatThrownBy(() -> service.atualizar(7L, pedido("08:00", "10:00", false)))
+                .isInstanceOf(ReunioesAfetadasException.class);
+        verify(disponibilidadeRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("DELETE sem confirmacao confere as afetadas (null) antes de remover")
+    void remocaoSemConfirmacao() {
+        Disponibilidade d = existente(7L, true);
+
+        service.deletar(7L);
+
+        InOrder ordem = inOrder(impactoNaAgenda, disponibilidadeRepository);
+        ordem.verify(impactoNaAgenda).cancelarAfetadas(eq(docente), any(), isNull());
+        ordem.verify(disponibilidadeRepository).delete(d);
+    }
+
+    @Test
+    @DisplayName("a previa nao grava nem cancela nada")
+    void previaNaoGrava() {
+        existente(7L, true);
+
+        service.previaDaEdicao(7L, pedido("08:00", "10:00", null));
+        service.previaDaRemocao(7L);
+
+        verify(impactoNaAgenda, never()).cancelarAfetadas(any(), any(), any());
+        verify(disponibilidadeRepository, never()).save(any());
+        verify(disponibilidadeRepository, never()).delete(any());
     }
 }

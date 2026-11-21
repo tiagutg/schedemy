@@ -2,6 +2,7 @@ package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
+import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.repository.AgendamentoRepository;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -80,7 +82,7 @@ public class CalculadoraDeAgenda {
             int diaSemana = diaSemanaDoBanco(data);
             janelas = disponibilidadeRepository.findByUsuarioIdAndAtivoTrue(usuario.getId()).stream()
                     .filter(d -> d.getDiaSemana() != null && d.getDiaSemana() == diaSemana)
-                    .map(d -> new Intervalo(minutos(d.getHorarioInicio()), minutos(d.getHorarioFim())))
+                    .map(CalculadoraDeAgenda::intervaloDaJanela)
                     .toList();
             bloqueios = bloqueioPeriodoRepository.buscarQueImpactamData(usuario.getId(), data, diaSemana).stream()
                     .map(CalculadoraDeAgenda::intervaloDoBloqueio)
@@ -146,6 +148,21 @@ public class CalculadoraDeAgenda {
         return livres;
     }
 
+    /**
+     * RN 15 / RF 06 - a reuniao cabe inteira em alguma das janelas ativas do dia da semana dela? Mesma regra de
+     * {@link #verificar}, aplicada a uma lista de janelas que ainda nao foi gravada (a agenda como ficara depois
+     * de editar, desativar ou remover uma disponibilidade).
+     */
+    public boolean cabeEmAlgumaJanela(Agendamento reuniao, Collection<Disponibilidade> janelas) {
+        int diaSemana = diaSemanaDoBanco(reuniao.getDataReuniao());
+        Intervalo r = intervaloDaReuniao(reuniao);
+        return janelas.stream()
+                .filter(d -> Boolean.TRUE.equals(d.getAtivo()))
+                .filter(d -> d.getDiaSemana() != null && d.getDiaSemana() == diaSemana)
+                .map(CalculadoraDeAgenda::intervaloDaJanela)
+                .anyMatch(j -> j.contem(r.inicio(), r.fim()));
+    }
+
     /** RF 06 - o bloqueio cobre a reuniao (data, recorrencia e horario)? */
     public boolean bloqueioAfetaReuniao(BloqueioPeriodo bloqueio, Agendamento reuniao) {
         LocalDate data = reuniao.getDataReuniao();
@@ -165,6 +182,10 @@ public class CalculadoraDeAgenda {
         int inicio = b.getHorarioInicio() == null ? 0 : minutos(b.getHorarioInicio());
         int fim = b.getHorarioFim() == null ? FIM_DO_DIA : minutosDoFim(b.getHorarioInicio(), b.getHorarioFim());
         return new Intervalo(inicio, fim);
+    }
+
+    private static Intervalo intervaloDaJanela(Disponibilidade d) {
+        return new Intervalo(minutos(d.getHorarioInicio()), minutos(d.getHorarioFim()));
     }
 
     private static Intervalo intervaloDaReuniao(Agendamento a) {

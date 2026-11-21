@@ -150,10 +150,17 @@ class SecurityConfigTest {
             "aluno,         GET,    /api/v1/disponibilidades",
             "professor,     POST,   /api/v1/disponibilidades",
             "coordenador,   POST,   /api/v1/disponibilidades",
+            // RF 06: previa e remocao com cancelamento das reunioes afetadas.
+            "professor,     POST,   /api/v1/disponibilidades/1/previa",
+            "coordenador,   POST,   /api/v1/disponibilidades/1/remocao/previa",
+            "professor,     POST,   /api/v1/disponibilidades/1/remocao",
+            "admin,         POST,   /api/v1/disponibilidades/1/remocao",
 
             // Bloqueios: gestao de agenda da docencia.
             "professor,     GET,    /api/v1/bloqueios-periodo",
             "coordenador,   POST,   /api/v1/bloqueios-periodo",
+            "professor,     POST,   /api/v1/bloqueios-periodo/previa",
+            "coordenador,   POST,   /api/v1/bloqueios-periodo/1/previa",
 
             // Admin tem acesso total.
             "admin,         POST,   /api/v1/usuarios",
@@ -217,12 +224,18 @@ class SecurityConfigTest {
             "recepcionista, POST,   /api/v1/disponibilidades",
             "aluno,         DELETE, /api/v1/disponibilidades/1",
             "recepcionista, PUT,    /api/v1/disponibilidades/1",
+            // RF 06: a previa e o cancelamento das afetadas sao da docencia (o aluno so consulta a grade).
+            "aluno,         POST,   /api/v1/disponibilidades/1/previa",
+            "recepcionista, POST,   /api/v1/disponibilidades/1/remocao/previa",
+            "aluno,         POST,   /api/v1/disponibilidades/1/remocao",
 
             // Bloqueios de periodo: area da docencia.
             "aluno,         GET,    /api/v1/bloqueios-periodo",
             "recepcionista, GET,    /api/v1/bloqueios-periodo",
             "aluno,         POST,   /api/v1/bloqueios-periodo",
             "recepcionista, POST,   /api/v1/bloqueios-periodo",
+            "aluno,         POST,   /api/v1/bloqueios-periodo/previa",
+            "recepcionista, POST,   /api/v1/bloqueios-periodo/1/previa",
 
             // Duracoes: parametro academico, aluno e recepcao nao alteram.
             "aluno,         POST,   /api/v1/duracoes-reuniao",

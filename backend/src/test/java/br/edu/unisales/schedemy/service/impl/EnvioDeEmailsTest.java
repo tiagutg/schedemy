@@ -179,6 +179,16 @@ class EnvioDeEmailsTest {
         assertThat(EnvioDeEmails.corpo(presencial, "http://front")).contains("Formato: Presencial").doesNotContain("Sala virtual");
     }
 
+    @Test
+    @DisplayName("RF 06/RF 28: cancelada por mudanca de agenda leva direto ao Agendar de novo")
+    void corpoComAgendarDeNovo() throws IOException, MessagingException {
+        Notificacao n = email(aluno, Notificador.CANCELAMENTO_AGENDA, "Cancelada porque a agenda mudou.");
+        assertThat(EnvioDeEmails.assunto(n)).isEqualTo("Schedemy: Reunião cancelada - TCC");
+        assertThat(EnvioDeEmails.corpo(n, "http://front"))
+                .contains("Agendar de novo: http://front/agendamentos?reagendar=" + n.getAgendamento().getId())
+                .doesNotContain("?abrir=");
+    }
+
     private void naFila(Notificacao... notificacoes) {
         when(notificacaoRepository.buscarEmailsPendentes(any())).thenReturn(List.of(notificacoes));
     }

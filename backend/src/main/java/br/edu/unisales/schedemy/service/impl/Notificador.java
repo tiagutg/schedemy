@@ -34,11 +34,15 @@ public class Notificador {
     public static final String RESPOSTA = "RESPOSTA";
     public static final String CONFIRMACAO = "CONFIRMACAO";
     public static final String CANCELAMENTO = "CANCELAMENTO";
+    /** RF 06/RF 10 - cancelada porque a agenda do docente mudou; o aviso leva ao "Agendar de novo" (RF 28). */
+    public static final String CANCELAMENTO_AGENDA = "CANCELAMENTO_AGENDA";
     public static final String LEMBRETE = "LEMBRETE";
     public static final String AVALIACAO_PENDENTE = "AVALIACAO_PENDENTE";
 
     private static final int TAMANHO_MAXIMO_MENSAGEM = 200;
     private static final int TAMANHO_MAXIMO_TOPICO = 60;
+    /** Abaixo disso o motivo encurtado nao diz nada: fica so no registro_motivo. */
+    private static final int TAMANHO_MINIMO_MOTIVO = 10;
     private static final DateTimeFormatter DATA = DateTimeFormatter.ofPattern("dd/MM");
     private static final DateTimeFormatter HORA = DateTimeFormatter.ofPattern("HH:mm");
 
@@ -109,6 +113,28 @@ public class Notificador {
                 enviar(envolvido, agendamento, CANCELAMENTO,
                         "%s cancelou \"%s\" de %s."
                                 .formatted(primeiroNome(autor), topico(agendamento), quando(agendamento)));
+            }
+        }
+    }
+
+    /**
+     * RF 06/RF 10 - a reuniao foi cancelada porque a agenda do docente mudou. Avisa todos os envolvidos menos quem
+     * fez a mudanca: se foi a administracao, o proprio docente tambem recebe. O motivo e encurtado para caber no
+     * aviso (o texto inteiro fica no registro_motivo).
+     */
+    public void canceladaPorMudancaDeAgenda(Agendamento agendamento, Usuario docente, Usuario autor, String motivo) {
+        String inicio = "\"%s\" de %s foi cancelada porque a agenda de %s mudou"
+                .formatted(topico(agendamento), quando(agendamento), primeiroNome(docente));
+        String fim = ". Use \"Agendar de novo\" para escolher outro horário.";
+        String texto = inicio + fim;
+        int espaco = TAMANHO_MAXIMO_MENSAGEM - texto.length() - " ()".length();
+        String motivoLimpo = motivo == null ? "" : motivo.trim().replaceAll("\\s+", " ");
+        if (!motivoLimpo.isEmpty() && espaco >= TAMANHO_MINIMO_MOTIVO) {
+            texto = inicio + " (" + limitar(motivoLimpo, espaco) + ")" + fim;
+        }
+        for (Usuario envolvido : envolvidos(agendamento)) {
+            if (!envolvido.getId().equals(autor.getId())) {
+                enviar(envolvido, agendamento, CANCELAMENTO_AGENDA, texto);
             }
         }
     }

@@ -129,8 +129,31 @@ export interface RegistroMotivo {
 }
 
 /** Corpo padronizado de erro da API (ErrorResponseDTO). */
+/** RF 06/RF 07: reunião que uma mudança na agenda do docente cancelaria. */
+export interface ReuniaoAfetada {
+  id: number;
+  topico: string;
+  dataReuniao: string;
+  horarioInicio: string;
+  horarioFim?: string | null;
+  status: string;
+  alunos: string[];
+  /** A reunião é cancelada para todos, inclusive estes docentes. */
+  outrosDocentes: string[];
+  /** RN 05: começa em menos de 1 hora (é cancelada mesmo assim). */
+  menosDeUmaHora: boolean;
+}
+
+/** Confirmação enviada ao salvar: os ids vistos na prévia e o motivo (RF 11). */
+export interface CancelamentoDeAfetadas {
+  idsAgendamentos: number[];
+  motivo: string;
+}
+
 export interface ErrorResponse {
   mensagem?: string;
   camposInvalidos?: { campo: string; mensagem: string }[] | null;
+  /** RF 06: 422 de mudança na agenda que cancelaria reuniões ainda não confirmadas. */
+  reunioesAfetadas?: ReuniaoAfetada[] | null;
   [campo: string]: unknown;
 }

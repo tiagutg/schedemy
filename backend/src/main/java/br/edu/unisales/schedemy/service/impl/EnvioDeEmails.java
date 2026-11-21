@@ -167,7 +167,7 @@ public class EnvioDeEmails {
             case Notificador.ALTERACAO -> "Reunião alterada";
             case Notificador.RESPOSTA -> "Resposta ao convite";
             case Notificador.CONFIRMACAO -> "Reunião confirmada";
-            case Notificador.CANCELAMENTO -> "Reunião cancelada";
+            case Notificador.CANCELAMENTO, Notificador.CANCELAMENTO_AGENDA -> "Reunião cancelada";
             case Notificador.LEMBRETE -> "Lembrete";
             case Notificador.AVALIACAO_PENDENTE -> "Avalie a reunião";
             default -> "Aviso";
@@ -190,7 +190,12 @@ public class EnvioDeEmails {
                 String link = a.getSalaVirtual() == null ? null : a.getSalaVirtual().getLinkTeams();
                 texto.append("Sala virtual: ").append(link == null || link.isBlank() ? "ainda sem link" : link).append('\n');
             }
-            texto.append("\nVer no Schedemy: ").append(urlFront).append("/agendamentos?abrir=").append(a.getId()).append('\n');
+            // RF 06/RF 28 - cancelada por mudanca na agenda: o link ja abre o "Agendar de novo".
+            if (Notificador.CANCELAMENTO_AGENDA.equals(n.getTipoEvento())) {
+                texto.append("\nAgendar de novo: ").append(urlFront).append("/agendamentos?reagendar=").append(a.getId()).append('\n');
+            } else {
+                texto.append("\nVer no Schedemy: ").append(urlFront).append("/agendamentos?abrir=").append(a.getId()).append('\n');
+            }
         } else {
             texto.append("Ver no Schedemy: ").append(urlFront).append("/notificacoes\n");
         }

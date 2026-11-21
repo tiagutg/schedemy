@@ -4,10 +4,10 @@ import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.request.BloqueioPeriodoRequestDTO;
+import br.edu.unisales.schedemy.dto.request.CancelamentoDeAfetadasRequestDTO;
 import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
-import br.edu.unisales.schedemy.mapper.AgendamentoMapper;
+import br.edu.unisales.schedemy.exception.ReunioesAfetadasException;
 import br.edu.unisales.schedemy.mapper.BloqueioPeriodoMapper;
-import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.BloqueioPeriodoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.security.UsuarioAutenticado;
@@ -18,6 +18,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.EnumSource;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -25,11 +26,15 @@ import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.AdditionalAnswers.returnsFirstArg;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,17 +49,15 @@ class BloqueioPeriodoServiceImplTest {
 
     @Mock private BloqueioPeriodoRepository bloqueioPeriodoRepository;
     @Mock private UsuarioRepository usuarioRepository;
-    @Mock private AgendamentoRepository agendamentoRepository;
-    @Mock private AgendamentoMapper agendamentoMapper;
     @Mock private UsuarioAutenticado usuarioAutenticado;
-    @Mock private CalculadoraDeAgenda calculadoraDeAgenda;
+    @Mock private ImpactoNaAgenda impactoNaAgenda;
 
     private BloqueioPeriodoServiceImpl service;
 
     @BeforeEach
     void preparar() {
-        service = new BloqueioPeriodoServiceImpl(bloqueioPeriodoRepository, usuarioRepository, agendamentoRepository,
-                new BloqueioPeriodoMapper(), agendamentoMapper, usuarioAutenticado, calculadoraDeAgenda);
+        service = new BloqueioPeriodoServiceImpl(bloqueioPeriodoRepository, usuarioRepository,
+                new BloqueioPeriodoMapper(), usuarioAutenticado, impactoNaAgenda);
         usuarioDoTipo(TipoUsuario.PROFESSOR);
         when(bloqueioPeriodoRepository.save(any())).then(returnsFirstArg());
     }
@@ -68,7 +71,7 @@ class BloqueioPeriodoServiceImplTest {
     private static BloqueioPeriodoRequestDTO pedido(String inicio, String fim) {
         return new BloqueioPeriodoRequestDTO(ID_USUARIO, DIA, DIA,
                 inicio == null ? null : LocalTime.parse(inicio), fim == null ? null : LocalTime.parse(fim),
-                false, null, "Congresso");
+                false, null, "Congresso", null);
     }
 
     @ParameterizedTest(name = "{0}")
@@ -127,5 +130,45 @@ class BloqueioPeriodoServiceImplTest {
         assertThatThrownBy(() -> service.atualizar(5L, pedido(null, null)))
                 .isInstanceOf(RegraDeNegocioException.class);
         verify(bloqueioPeriodoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF 06 - criar confere e cancela as afetadas antes de gravar; a previa nao grava")
+    void criarConfereAfetadas() {
+        CancelamentoDeAfetadasRequestDTO confirmacao = new CancelamentoDeAfetadasRequestDTO(List.of(30L), "Congresso");
+        BloqueioPeriodoRequestDTO dto = new BloqueioPeriodoRequestDTO(ID_USUARIO, DIA, DIA, null, null, false, null,
+                "Congresso", confirmacao);
+
+        service.previaDaCriacao(dto);
+        verify(impactoNaAgenda, never()).cancelarAfetadas(any(), any(), any());
+        verify(bloqueioPeriodoRepository, never()).save(any());
+
+        service.criar(dto);
+        InOrder ordem = inOrder(impactoNaAgenda, bloqueioPeriodoRepository);
+        ordem.verify(impactoNaAgenda).cancelarAfetadas(any(), any(), eq(confirmacao));
+        ordem.verify(bloqueioPeriodoRepository).save(any());
+    }
+
+    @Test
+    @DisplayName("RF 06 - sem a confirmacao das afetadas, o bloqueio nao e gravado")
+    void criarRecusadoNaoGrava() {
+        doThrow(new ReunioesAfetadasException("afeta", List.of()))
+                .when(impactoNaAgenda).cancelarAfetadas(any(), any(), any());
+
+        assertThatThrownBy(() -> service.criar(pedido(null, null))).isInstanceOf(ReunioesAfetadasException.class);
+        verify(bloqueioPeriodoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF 06 - remover bloqueio nunca afeta reunioes")
+    void removerNaoConfere() {
+        BloqueioPeriodo existente = BloqueioPeriodo.builder().id(5L)
+                .usuario(usuarioDoTipo(TipoUsuario.PROFESSOR)).dataInicio(DIA).dataFim(DIA).build();
+        when(bloqueioPeriodoRepository.findById(5L)).thenReturn(Optional.of(existente));
+
+        service.deletar(5L);
+
+        verify(impactoNaAgenda, never()).cancelarAfetadas(any(), any(), any());
+        verify(bloqueioPeriodoRepository).delete(existente);
     }
 }

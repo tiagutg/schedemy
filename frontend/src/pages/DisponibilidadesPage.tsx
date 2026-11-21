@@ -4,6 +4,7 @@ import { disponibilidadesApi } from "@/api/disponibilidades";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
+import { useReunioesAfetadas } from "@/hooks/useReunioesAfetadas";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
@@ -21,6 +22,7 @@ import { Label } from "@/components/ui/label";
 import { DIAS_SEMANA, rotularDiaSemana, rotularEnum } from "@/utils/domain";
 import type { Disponibilidade, Params } from "@/types";
 import GradeSemanal from "./GradeSemanal";
+import ReunioesAfetadasModal from "./ReunioesAfetadasModal";
 
 const FORM_VAZIO = { idUsuario: "", diaSemana: "2", horarioInicio: "08:00", horarioFim: "12:00", ativo: true };
 
@@ -66,6 +68,8 @@ export default function DisponibilidadesPage() {
   const [salvando, setSalvando] = useState(false);
   const [paraRemover, setParaRemover] = useState<Disponibilidade | null>(null);
   const [removendo, setRemovendo] = useState(false);
+  // RF 06: editar, desativar ou remover pode cancelar reuniões; a API mostra quais antes de gravar.
+  const afetadas = useReunioesAfetadas();
 
   function abrirCriacao() {
     setEditando(null);
@@ -107,14 +111,22 @@ export default function DisponibilidadesPage() {
         ativo: form.ativo,
       };
       if (editando) {
-        await disponibilidadesApi.atualizar(editando.id, payload);
-        toast.sucesso("Horário atualizado.");
+        const id = editando.id;
+        await afetadas.executar(
+          () => disponibilidadesApi.previaDaEdicao(id, payload),
+          (cancelarAfetadas) => disponibilidadesApi.atualizar(id, { ...payload, cancelarAfetadas }),
+          () => {
+            toast.sucesso("Horário atualizado.");
+            setModalAberto(false);
+            atualizarTudo();
+          }
+        );
       } else {
         await disponibilidadesApi.criar(payload);
         toast.sucesso("Horário cadastrado.");
+        setModalAberto(false);
+        atualizarTudo();
       }
-      setModalAberto(false);
-      atualizarTudo();
     } catch (e2) {
       setErro((e2 as ApiError).message);
       toast.erro((e2 as ApiError).message);
@@ -125,17 +137,30 @@ export default function DisponibilidadesPage() {
 
   async function confirmarRemocao() {
     if (!paraRemover) return;
+    const id = paraRemover.id;
     setRemovendo(true);
     try {
-      await disponibilidadesApi.remover(paraRemover.id);
-      toast.sucesso("Horário removido.");
-      setParaRemover(null);
-      atualizarTudo();
+      await afetadas.executar(
+        () => disponibilidadesApi.previaDaRemocao(id),
+        (cancelarAfetadas) =>
+          cancelarAfetadas ? disponibilidadesApi.removerCancelando(id, cancelarAfetadas) : disponibilidadesApi.remover(id),
+        () => {
+          toast.sucesso("Horário removido.");
+          setParaRemover(null);
+          atualizarTudo();
+        }
+      );
     } catch (e) {
       toast.erro((e as ApiError).message);
     } finally {
       setRemovendo(false);
     }
+  }
+
+  function voltarDasAfetadas() {
+    afetadas.desistir();
+    // Na remoção não há formulário para voltar; na edição, o formulário reaparece como estava.
+    setParaRemover(null);
   }
 
   return (
@@ -211,7 +236,7 @@ export default function DisponibilidadesPage() {
       <Pagination pagina={pagina} onMudarPagina={setPaginaAtual} />
 
       <Modal
-        aberto={modalAberto}
+        aberto={modalAberto && !afetadas.pendente}
         onFechar={() => setModalAberto(false)}
         titulo={editando ? "Editar horário de atendimento" : "Novo horário de atendimento"}
       >
@@ -275,14 +300,24 @@ export default function DisponibilidadesPage() {
       </Modal>
 
       <ConfirmDialog
-        aberto={!!paraRemover}
+        aberto={!!paraRemover && !afetadas.pendente}
         titulo="Remover horário"
-        descricao="Tem certeza que deseja remover este horário de atendimento? Reuniões já marcadas não são afetadas."
+        descricao="Tem certeza que deseja remover este horário de atendimento? Se houver reuniões marcadas nele, você verá quais antes de confirmar."
         confirmarRotulo="Remover"
         tom="danger"
         carregando={removendo}
         onConfirmar={confirmarRemocao}
         onCancelar={() => setParaRemover(null)}
+      />
+
+      <ReunioesAfetadasModal
+        key={afetadas.pendente ? "afetadas" : "sem-afetadas"}
+        reunioes={afetadas.pendente?.reunioes ?? null}
+        aviso={afetadas.pendente?.aviso}
+        confirmando={afetadas.confirmando}
+        erro={afetadas.erro}
+        onConfirmar={afetadas.confirmar}
+        onVoltar={voltarDasAfetadas}
       />
     </>
   );

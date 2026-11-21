@@ -40,6 +40,14 @@ public class GlobalExceptionHandler {
         return construirResposta(HttpStatus.UNPROCESSABLE_CONTENT, "Regra de negocio violada", ex.getMessage(), request);
     }
 
+    /** RF 06 - 422 com a lista de reunioes que a mudanca na agenda cancelaria (o front pede a confirmacao). */
+    @ExceptionHandler(ReunioesAfetadasException.class)
+    public ResponseEntity<ErrorResponseDTO> tratarReunioesAfetadas(ReunioesAfetadasException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.UNPROCESSABLE_CONTENT;
+        return ResponseEntity.status(status).body(ErrorResponseDTO.comReunioesAfetadas(status.value(),
+                "Regra de negocio violada", ex.getMessage(), request.getRequestURI(), ex.getReunioes()));
+    }
+
     @ExceptionHandler(RecursoDuplicadoException.class)
     public ResponseEntity<ErrorResponseDTO> tratarDuplicado(RecursoDuplicadoException ex, HttpServletRequest request) {
         return construirResposta(HttpStatus.CONFLICT, "Recurso duplicado", ex.getMessage(), request);

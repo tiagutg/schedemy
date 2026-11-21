@@ -39,6 +39,7 @@ const ICONES: Record<string, Icon> = {
   RESPOSTA: IconChecks,
   CONFIRMACAO: IconCalendarCheck,
   CANCELAMENTO: IconCalendarX,
+  CANCELAMENTO_AGENDA: IconCalendarX,
   LEMBRETE: IconClockHour4,
   AVALIACAO_PENDENTE: IconStar,
 };
@@ -80,7 +81,9 @@ export default function NotificacoesPage() {
         /* abrir a reunião é o que importa; a marcação pode ser refeita */
       }
     }
-    if (n.idAgendamento) navigate(`/agendamentos?abrir=${n.idAgendamento}`);
+    // RF 06/RF 28: reunião cancelada porque a agenda do docente mudou abre direto o "Agendar de novo".
+    if (n.idAgendamento && n.tipoEvento === "CANCELAMENTO_AGENDA") navigate(`/agendamentos?reagendar=${n.idAgendamento}`);
+    else if (n.idAgendamento) navigate(`/agendamentos?abrir=${n.idAgendamento}`);
     else recarregar();
   }
 

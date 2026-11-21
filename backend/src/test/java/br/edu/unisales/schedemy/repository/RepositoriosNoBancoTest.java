@@ -221,16 +221,28 @@ class RepositoriosNoBancoTest {
         }
 
         @Test
-        @DisplayName("buscarImpactadosPorPeriodo e contarAgendamentosDoAlunoDesde")
-        void impactadosEContagem() {
-            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Impactada");
-            reuniao(DIA, "11:00", StatusAgendamento.CANCELADO, "Cancelada");
+        @DisplayName("RF 06 - buscarDoParticipanteNoPeriodo, buscarIdsDoParticipanteDesde e contarAgendamentosDoAlunoDesde")
+        void afetadasEContagem() {
+            List<StatusAgendamento> afetaveis = List.of(StatusAgendamento.PENDENTE,
+                    StatusAgendamento.AGUARDANDO_RESPOSTA, StatusAgendamento.CONFIRMADO);
+            Agendamento depois = reuniao(DIA, "11:00", StatusAgendamento.CONFIRMADO, "Confirmada");
+            Agendamento antes = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Pendente");
+            reuniao(DIA, "12:00", StatusAgendamento.CANCELADO, "Cancelada");
+            reuniao(DIA, "13:00", StatusAgendamento.EM_ANDAMENTO, "Em andamento");
+            Agendamento seguinte = reuniao(DIA.plusDays(2), "09:00", StatusAgendamento.PENDENTE, "Outro dia");
             em.flush();
 
-            assertThat(agendamentoRepository.buscarImpactadosPorPeriodo(professor.getId(), DIA.minusDays(1), DIA.plusDays(1)))
-                    .containsExactly(a);
+            // ordenadas por data e horario; o professor (convidado) e o aluno (organizador) enxergam as mesmas
+            assertThat(agendamentoRepository.buscarDoParticipanteNoPeriodo(professor.getId(), DIA.minusDays(1), DIA.plusDays(1), afetaveis))
+                    .containsExactly(antes, depois);
+            assertThat(agendamentoRepository.buscarDoParticipanteNoPeriodo(aluno.getId(), DIA, DIA.plusDays(2), afetaveis))
+                    .containsExactly(antes, depois, seguinte);
+            assertThat(agendamentoRepository.buscarIdsDoParticipanteDesde(professor.getId(), DIA, afetaveis))
+                    .containsExactly(depois.getId(), antes.getId(), seguinte.getId());
+            assertThat(agendamentoRepository.buscarIdsDoParticipanteDesde(professor.getId(), DIA.plusDays(1), afetaveis))
+                    .containsExactly(seguinte.getId());
             assertThat(agendamentoRepository.contarAgendamentosDoAlunoDesde(aluno.getId(), LocalDateTime.now().minusHours(24)))
-                    .isEqualTo(1);
+                    .isEqualTo(4);
         }
     }
 

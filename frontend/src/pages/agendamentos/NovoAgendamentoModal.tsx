@@ -75,13 +75,17 @@ const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando
  * da reunião anterior, no próximo dia útil e no mesmo horário. Quem replica vira o organizador
  * (salvo recepção/administração, que mantêm o organizador original) e os demais envolvidos,
  * inclusive o organizador anterior, viram convidados.
+ *
+ * Reunião cancelada (por qualquer motivo, inclusive mudança na agenda do docente — RF 06): data e
+ * horário em branco, para a pessoa escolher entre os horários livres (RF 14).
  */
 function formReplicado(base: Agendamento, idOrganizador: string) {
+  const cancelada = base.status === "CANCELADO";
   return {
     idOrganizador,
     idDuracao: "",
-    dataReuniao: proximoDiaUtilISO(),
-    horarioInicio: formatarHora(base.horarioInicio),
+    dataReuniao: cancelada ? "" : proximoDiaUtilISO(),
+    horarioInicio: cancelada ? "" : formatarHora(base.horarioInicio),
     formato: base.formato,
     topico: base.topico,
     resumo: base.resumo ?? "",
@@ -207,6 +211,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     if (!form.idOrganizador) return setErro("Selecione o organizador do agendamento.");
     if (!idDuracao) return setErro("Selecione a duração da reunião.");
     if (convidadosSelecionados.length === 0) return setErro("Selecione ao menos um convidado.");
+    if (!form.dataReuniao || !form.horarioInicio) return setErro("Escolha a data e o horário da reunião.");
     if (!form.topico.trim()) return setErro("Informe o tópico da reunião.");
     if (modo === "remarcar" && !motivoRemarcacao.trim()) return setErro("Informe o motivo da remarcação.");
     if (form.formato !== "PRESENCIAL" && form.linkReuniao.trim() && !/^https?:\/\/\S+$/.test(form.linkReuniao.trim())) {
@@ -261,7 +266,9 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   }
 
   const subtitulo =
-    modo === "criar" || modo === "replicar"
+    modo === "replicar" && base?.status === "CANCELADO"
+      ? "Mesmos participantes e tópico da reunião cancelada. Escolha abaixo um dia e um horário livre para todos."
+      : modo === "criar" || modo === "replicar"
       ? "Ao salvar, o sistema confere conflitos de horário, prazos e a disponibilidade de todos os envolvidos."
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."

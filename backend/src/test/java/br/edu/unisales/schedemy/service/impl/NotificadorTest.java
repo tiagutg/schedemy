@@ -60,6 +60,46 @@ class NotificadorTest {
         });
     }
 
+    @Test
+    @DisplayName("RF 06: cancelada por mudanca de agenda - avisa todos menos quem mudou, com o motivo e o Agendar de novo")
+    void canceladaPorMudancaDeAgenda() {
+        Usuario aluno = usuario(1L, "Kevin Lins", TipoUsuario.ALUNO, "kevin.aluno@unisales.edu.br", true);
+        Usuario professor = usuario(2L, "Rômulo Ferreira", TipoUsuario.PROFESSOR, "romulo.professor@unisales.edu.br", true);
+        Agendamento a = reuniao(aluno, professor);
+
+        new Notificador(notificacaoRepository).canceladaPorMudancaDeAgenda(a, professor, professor, "Reunião do colegiado");
+
+        ArgumentCaptor<Notificacao> captor = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(n -> n.getUsuario().getId(), Notificacao::getCanalEnvio)
+                .containsExactlyInAnyOrder(tuple(1L, CanalEnvio.SISTEMA), tuple(1L, CanalEnvio.EMAIL));
+        assertThat(captor.getAllValues()).allSatisfy(n -> {
+            assertThat(n.getTipoEvento()).isEqualTo(Notificador.CANCELAMENTO_AGENDA);
+            assertThat(n.getMensagem()).isEqualTo("\"TCC\" de 20/11 às 14:00 foi cancelada porque a agenda de Rômulo mudou "
+                    + "(Reunião do colegiado). Use \"Agendar de novo\" para escolher outro horário.");
+        });
+    }
+
+    @Test
+    @DisplayName("RF 06: se a administracao mudou a agenda, o docente tambem e avisado; motivo longo e encurtado")
+    void mudancaPelaAdministracao() {
+        Usuario aluno = usuario(1L, "Kevin Lins", TipoUsuario.ALUNO, "kevin.aluno@unisales.edu.br", true);
+        Usuario professor = usuario(2L, "Rômulo Ferreira", TipoUsuario.PROFESSOR, "romulo.professor@unisales.edu.br", true);
+        Usuario admin = usuario(9L, "Admin", TipoUsuario.ADMIN, "admin@hotmail.com", true);
+        Agendamento a = reuniao(aluno, professor);
+
+        new Notificador(notificacaoRepository).canceladaPorMudancaDeAgenda(a, professor, admin, "x".repeat(500));
+
+        ArgumentCaptor<Notificacao> captor = ArgumentCaptor.forClass(Notificacao.class);
+        verify(notificacaoRepository, atLeastOnce()).save(captor.capture());
+        assertThat(captor.getAllValues()).extracting(n -> n.getUsuario().getId()).containsOnly(1L, 2L);
+        assertThat(captor.getAllValues()).allSatisfy(n -> assertThat(n.getMensagem())
+                .hasSize(200)
+                .contains("xxx…)")
+                .endsWith("Use \"Agendar de novo\" para escolher outro horário."));
+    }
+
     private static Agendamento reuniao(Usuario organizador, Usuario... convidados) {
         Agendamento a = Agendamento.builder()
                 .id(10L)

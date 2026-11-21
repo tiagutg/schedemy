@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.dto.request;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.Valid;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotNull;
@@ -27,6 +28,11 @@ public record DisponibilidadeRequestDTO(
         @NotNull(message = "horarioFim e obrigatorio")
         LocalTime horarioFim,
 
-        Boolean ativo
+        Boolean ativo,
+
+        @Schema(description = "RF 06 - confirmacao do cancelamento das reunioes afetadas (ids vistos na previa + motivo). "
+                + "Sem ela, a API recusa (422) a mudanca que cancelaria reunioes, devolvendo a lista.")
+        @Valid
+        CancelamentoDeAfetadasRequestDTO cancelarAfetadas
 ) {
 }

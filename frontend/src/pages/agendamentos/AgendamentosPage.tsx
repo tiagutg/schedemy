@@ -183,6 +183,27 @@ export default function AgendamentosPage() {
       .catch((e) => toast.erro((e as ApiError).message));
   }, [idParaAbrir, searchParams, setSearchParams, toast]);
 
+  // RF 06/RF 28: o aviso de reunião cancelada por mudança na agenda abre direto o "Agendar de novo"
+  // (?reagendar=<id>). Quem não pode agendar de novo a partir dela vê só o detalhe.
+  const idParaReagendar = searchParams.get("reagendar");
+  useEffect(() => {
+    if (!idParaReagendar) return;
+    searchParams.delete("reagendar");
+    setSearchParams(searchParams, { replace: true });
+    agendamentosApi
+      .buscarPorId(idParaReagendar)
+      .then((base) => {
+        // Mesma regra do botão "Agendar de novo" no detalhe.
+        const participo = base.participantes.some((p) => p.idUsuario === eu?.id);
+        const podeReplicar =
+          pode("agendamentos.criar") &&
+          (participo || base.idOrganizador === eu?.id || pode("agendamentos.organizarPorOutros"));
+        if (podeReplicar) setAlteracao({ modo: "replicar", base });
+        else setDetalhe(base);
+      })
+      .catch((e) => toast.erro((e as ApiError).message));
+  }, [idParaReagendar, searchParams, setSearchParams, toast, eu?.id, pode]);
+
   async function recarregarDetalhe() {
     if (!detalhe) return;
     try {
