@@ -1,6 +1,7 @@
 // Como cada reunião é apresentada para quem está vendo: com quem é, de quem é a vez
 // de responder e o arquivo de calendário (.ics).
 
+import { rotularEnum } from "./domain";
 import { paraDataLocal } from "./format";
 import type { Agendamento } from "@/types";
 
@@ -38,6 +39,8 @@ export function situacaoDaReuniao(a: Agendamento, euId: number | null | undefine
   switch (a.status) {
     case "CONFIRMADO":
       return { rotulo: "Confirmada", cor: "bg-sage-100 text-sage-700", suaVez: false };
+    case "EM_ANDAMENTO":
+      return { rotulo: "Em andamento", cor: "bg-sage-100 text-sage-700", suaVez: false };
     case "CONCLUIDO":
       return { rotulo: "Concluída", cor: "bg-marinho-700 text-white", suaVez: false };
     case "CANCELADO":
@@ -56,7 +59,7 @@ export function situacaoDaReuniao(a: Agendamento, euId: number | null | undefine
     }
     return { rotulo: "Aguardando convidados", cor: "bg-brand-100 text-brand-700", suaVez: false };
   }
-  return { rotulo: a.status, cor: "bg-ink-100 text-ink-800", suaVez: false };
+  return { rotulo: rotularEnum(a.status), cor: "bg-ink-100 text-ink-800", suaVez: false };
 }
 
 /** "Rômulo Ferreira Douro" → "Rômulo Douro". */

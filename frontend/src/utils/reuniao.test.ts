@@ -48,6 +48,7 @@ describe("situacaoDaReuniao", () => {
   it("status finais", () => {
     expect(situacaoDaReuniao(reuniao({ status: "CONFIRMADO" }), 6, ANTES).rotulo).toBe("Confirmada");
     expect(situacaoDaReuniao(reuniao({ status: "CONCLUIDO" }), 6, ANTES).rotulo).toBe("Concluída");
+    expect(situacaoDaReuniao(reuniao({ status: "EM_ANDAMENTO" }), 6, ANTES).rotulo).toBe("Em andamento");
     expect(situacaoDaReuniao(reuniao({ status: "CANCELADO" }), 6, ANTES).rotulo).toBe("Cancelada");
   });
 });
