@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
+import { arquivoPublico } from "@/utils/publico";
 
 /**
  * Moldura das telas de acesso (login e cadastro): formulário à esquerda e
@@ -15,7 +16,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         <div className="hidden justify-start gap-2 lg:flex">
           <Link to="/login" className="flex items-center gap-2 font-semibold text-brand-700">
             <img
-              src="/schedemy-logo.png"
+              src={arquivoPublico("schedemy-logo.png")}
               alt=""
               aria-hidden="true"
               className="size-8 rounded-md object-contain"
@@ -29,7 +30,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
             {/* Marca centralizada no celular/tablet, onde a foto lateral não aparece */}
             <Link to="/login" className="flex flex-col items-center gap-2 lg:hidden">
               <img
-                src="/schedemy-logo.png"
+                src={arquivoPublico("schedemy-logo.png")}
                 alt=""
                 aria-hidden="true"
                 className="size-28 object-contain drop-shadow-sm sm:size-32"
@@ -52,7 +53,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
       {/* Coluna da imagem */}
       <div className="relative hidden bg-muted lg:block">
         <img
-          src="/campus.jpg"
+          src={arquivoPublico("campus.jpg")}
           alt="Campus da instituição ao entardecer"
           className="absolute inset-0 h-full w-full object-cover"
         />
@@ -62,7 +63,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
 
         <div className="absolute inset-0 flex flex-col items-center justify-center p-12 text-center text-white">
           <img
-            src="/schedemy-logo.png"
+            src={arquivoPublico("schedemy-logo.png")}
             alt="Logo do Schedemy"
             className="w-36 drop-shadow-[0_12px_28px_rgba(13,30,49,0.55)] xl:w-40"
           />

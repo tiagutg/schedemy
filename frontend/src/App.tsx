@@ -28,7 +28,8 @@ export default function App() {
     <TooltipProvider>
       <ToastProvider>
         <AuthProvider>
-          <BrowserRouter>
+          {/* No GitHub Pages o site fica em /schedemy/ (BASE_URL); no desenvolvimento, na raiz. */}
+          <BrowserRouter basename={import.meta.env.BASE_URL}>
             <Suspense fallback={<CarregandoPagina telaCheia />}>
             <Routes>
               <Route path="/login" element={<LoginPage />} />

@@ -26,6 +26,7 @@ import { formatarData, formatarHora } from "@/utils/format";
 import { intervaloDoPainel, proximasReunioes, resumoDoMes } from "@/utils/painel";
 import { descreverEnvolvidos, situacaoDaReuniao } from "@/utils/reuniao";
 import type { Agendamento } from "@/types";
+import { arquivoPublico } from "@/utils/publico";
 
 // Teto da busca do painel: 3 meses para trás e 30 dias à frente cabem com folga.
 const LIMITE_REUNIOES = 2000;
@@ -98,7 +99,7 @@ export default function DashboardPage() {
       {/* Faixa de boas-vindas com o azul da marca */}
       <div className="relative overflow-hidden rounded-xl bg-gradient-to-br from-marinho-900 via-marinho-700 to-marinho-500 px-5 py-6 text-white shadow-sm sm:px-8 sm:py-8">
         <img
-          src="/schedemy-logo.png"
+          src={arquivoPublico("schedemy-logo.png")}
           alt=""
           aria-hidden="true"
           className="pointer-events-none absolute -right-4 -bottom-8 hidden w-40 rotate-6 opacity-25 sm:block"
