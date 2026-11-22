@@ -10,6 +10,10 @@ services:
     branch: main
     rootDir: backend
     dockerfilePath: ./Dockerfile
+    # Só reconstrói a API quando o back-end muda (mudanças só no site não derrubam nada).
+    buildFilter:
+      paths:
+        - backend/**
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: supabase

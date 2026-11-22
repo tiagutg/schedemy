@@ -105,12 +105,15 @@ export async function apiFetch<T = unknown>(
       body: body !== undefined ? JSON.stringify(body) : undefined,
       signal,
     });
-  } catch {
+  } catch (erroDeRede) {
+    // O detalhe técnico fica no console para quem desenvolve; a tela mostra só o que a pessoa pode fazer.
+    if (!signal?.aborted) {
+      console.error(`Falha de rede ao chamar ${url.toString()} (API em ${BASE_URL}; confira se ela está no ar e o CORS).`, erroDeRede);
+    }
     throw new ApiError(0, {
       mensagem:
-        "Não foi possível conectar à API. Verifique se o back-end está rodando em " +
-        BASE_URL +
-        " e se o CORS está liberado.",
+        "Não foi possível conectar ao Schedemy. Verifique sua internet e tente de novo. " +
+        "Se o sistema estava sem uso, ele pode levar até 1 minuto para voltar.",
     });
   }
 
