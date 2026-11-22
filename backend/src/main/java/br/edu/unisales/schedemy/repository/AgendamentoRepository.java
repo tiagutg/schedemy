@@ -78,20 +78,36 @@ public interface AgendamentoRepository extends JpaRepository<Agendamento, Long> 
                                                               @Param("data") LocalDate data,
                                                               @Param("agendamentoIgnoradoId") Long agendamentoIgnoradoId);
 
-    // RF 06 - reunioes ativas em que o usuario participa (como organizador ou convidado) no periodo.
-    // Recorrencia e horario do bloqueio sao aplicados depois, na CalculadoraDeAgenda.
+    /**
+     * RF 06 - ids das reunioes do participante (organizador ou convidado) a partir da data, nos status informados.
+     * So os ids, sem carregar as entidades: o ImpactoNaAgenda trava essas linhas (travarPorId) antes de le-las.
+     */
+    @Query("""
+            SELECT DISTINCT a.id FROM Agendamento a
+            JOIN a.participantes p
+            WHERE p.usuario.id = :usuarioId
+              AND a.dataReuniao >= :desde
+              AND a.status IN :status
+            ORDER BY a.id
+            """)
+    List<Long> buscarIdsDoParticipanteDesde(@Param("usuarioId") Long usuarioId,
+                                           @Param("desde") LocalDate desde,
+                                           @Param("status") Collection<StatusAgendamento> status);
+
+    // RF 06 - reunioes em que o usuario participa (organizador ou convidado) no periodo, nos status informados.
+    // Horario, dia da semana e recorrencia sao aplicados depois, na CalculadoraDeAgenda.
     @Query("""
             SELECT DISTINCT a FROM Agendamento a
             JOIN a.participantes p
             WHERE p.usuario.id = :usuarioId
               AND a.dataReuniao BETWEEN :dataInicio AND :dataFim
-              AND a.status NOT IN (br.edu.unisales.schedemy.domain.enums.StatusAgendamento.CANCELADO,
-                                   br.edu.unisales.schedemy.domain.enums.StatusAgendamento.CONCLUIDO)
+              AND a.status IN :status
             ORDER BY a.dataReuniao, a.horarioInicio
             """)
-    List<Agendamento> buscarImpactadosPorPeriodo(@Param("usuarioId") Long usuarioId,
-                                                 @Param("dataInicio") LocalDate dataInicio,
-                                                 @Param("dataFim") LocalDate dataFim);
+    List<Agendamento> buscarDoParticipanteNoPeriodo(@Param("usuarioId") Long usuarioId,
+                                                    @Param("dataInicio") LocalDate dataInicio,
+                                                    @Param("dataFim") LocalDate dataFim,
+                                                    @Param("status") Collection<StatusAgendamento> status);
 
     @Query("""
             SELECT COUNT(a) FROM Agendamento a

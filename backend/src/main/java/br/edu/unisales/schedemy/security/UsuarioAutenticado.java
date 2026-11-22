@@ -12,6 +12,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
+import java.util.Optional;
+
 /**
  * Acesso ao usuario autenticado na requisicao e verificacoes de "dono" do recurso.
  *
@@ -64,6 +66,18 @@ public class UsuarioAutenticado {
         if (requisicao != null) {
             requisicao.setAttribute(ATRIBUTO_USUARIO, usuario, RequestAttributes.SCOPE_REQUEST);
         }
+    }
+
+    /**
+     * RNF 19 - autor de uma acao para a trilha de auditoria: o usuario logado, ou vazio fora de uma requisicao
+     * autenticada (rotinas agendadas, que agem como "sistema").
+     */
+    public Optional<Usuario> obterSeAutenticado() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || auth instanceof AnonymousAuthenticationToken) {
+            return Optional.empty();
+        }
+        return Optional.of(obter());
     }
 
     public Long id() {

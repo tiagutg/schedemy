@@ -1,6 +1,8 @@
 package br.edu.unisales.schedemy.config;
 
 import br.edu.unisales.schedemy.controller.AgendamentoController;
+import br.edu.unisales.schedemy.controller.AuditoriaController;
+import br.edu.unisales.schedemy.controller.ConsentimentoController;
 import br.edu.unisales.schedemy.controller.AutenticacaoController;
 import br.edu.unisales.schedemy.controller.AvaliacaoController;
 import br.edu.unisales.schedemy.controller.NotificacaoController;
@@ -9,9 +11,14 @@ import br.edu.unisales.schedemy.controller.BloqueioPeriodoController;
 import br.edu.unisales.schedemy.controller.DisponibilidadeController;
 import br.edu.unisales.schedemy.controller.DuracaoReuniaoController;
 import br.edu.unisales.schedemy.controller.UsuarioController;
+import br.edu.unisales.schedemy.repository.ConsentimentoTermoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.security.ConversorDeToken;
+import br.edu.unisales.schedemy.security.ExigeAceiteDoTermoFilter;
 import br.edu.unisales.schedemy.service.AgendamentoService;
+import br.edu.unisales.schedemy.service.AuditoriaService;
+import br.edu.unisales.schedemy.service.ConsentimentoService;
+import br.edu.unisales.schedemy.service.impl.TermoDePrivacidade;
 import br.edu.unisales.schedemy.service.AutenticacaoService;
 import br.edu.unisales.schedemy.service.AvaliacaoService;
 import br.edu.unisales.schedemy.service.NotificacaoService;
@@ -62,7 +69,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
         AvaliacaoController.class,
         NotificacaoController.class,
         RegistroMotivoController.class,
-        AutenticacaoController.class
+        AutenticacaoController.class,
+        AuditoriaController.class,
+        ConsentimentoController.class
 })
 @Import({ SecurityConfig.class, AcessoNegadoJsonHandler.class, NaoAutenticadoJsonEntryPoint.class, JwtConfig.class, ConversorDeToken.class,
         br.edu.unisales.schedemy.exception.GlobalExceptionHandler.class })
@@ -81,6 +90,10 @@ class SecurityConfigTest {
     @MockitoBean private RegistroMotivoService registroMotivoService;
     @MockitoBean private AutenticacaoService autenticacaoService;
     @MockitoBean private UsuarioRepository usuarioRepository;
+    @MockitoBean private AuditoriaService auditoriaService;
+    @MockitoBean private ConsentimentoService consentimentoService;
+    @MockitoBean private ConsentimentoTermoRepository consentimentoTermoRepository;
+    @MockitoBean private TermoDePrivacidade termoDePrivacidade;
 
     /** A conta do CSV ("aluno", "recepcionista"...) e o proprio papel. */
     private int statusDe(String conta, String metodo, String caminho) throws Exception {
@@ -150,10 +163,17 @@ class SecurityConfigTest {
             "aluno,         GET,    /api/v1/disponibilidades",
             "professor,     POST,   /api/v1/disponibilidades",
             "coordenador,   POST,   /api/v1/disponibilidades",
+            // RF 06: previa e remocao com cancelamento das reunioes afetadas.
+            "professor,     POST,   /api/v1/disponibilidades/1/previa",
+            "coordenador,   POST,   /api/v1/disponibilidades/1/remocao/previa",
+            "professor,     POST,   /api/v1/disponibilidades/1/remocao",
+            "admin,         POST,   /api/v1/disponibilidades/1/remocao",
 
             // Bloqueios: gestao de agenda da docencia.
             "professor,     GET,    /api/v1/bloqueios-periodo",
             "coordenador,   POST,   /api/v1/bloqueios-periodo",
+            "professor,     POST,   /api/v1/bloqueios-periodo/previa",
+            "coordenador,   POST,   /api/v1/bloqueios-periodo/1/previa",
 
             // Admin tem acesso total.
             "admin,         POST,   /api/v1/usuarios",
@@ -162,12 +182,31 @@ class SecurityConfigTest {
             "admin,         POST,   /api/v1/duracoes-reuniao",
             "admin,         GET,    /api/v1/bloqueios-periodo",
 
+            // RF 21/22: o aluno (ou a recepcao) pede a alteracao; a docencia decide; todos consultam (escopo no service).
+            "aluno,         POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "recepcionista, POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "professor,     GET,    /api/v1/agendamentos/1/solicitacoes-edicao",
+            "professor,     PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "coordenador,   PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            "admin,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            // RF 22: a lista de pedidos e de todos os perfis (o escopo pelo logado fica no service).
+            "aluno,         GET,    /api/v1/solicitacoes-edicao",
+            "professor,     GET,    /api/v1/solicitacoes-edicao",
+            "coordenador,   GET,    /api/v1/solicitacoes-edicao",
+            "recepcionista, GET,    /api/v1/solicitacoes-edicao",
+            "admin,         GET,    /api/v1/solicitacoes-edicao",
+
             // RF 24: o aluno registra e consulta as proprias avaliacoes.
             "aluno,         POST,   /api/v1/avaliacoes",
             "aluno,         GET,    /api/v1/avaliacoes/alunos/1",
             // A docencia acompanha as avaliacoes (RNF 11).
             "professor,     GET,    /api/v1/avaliacoes/alunos/1",
             "coordenador,   GET,    /api/v1/avaliacoes/alunos/1",
+            "professor,     GET,    /api/v1/avaliacoes",
+            "coordenador,   GET,    /api/v1/avaliacoes",
+            "aluno,         GET,    /api/v1/avaliacoes",
 
             // RF 23: cada perfil le e marca como lidos os proprios avisos (escopo no service).
             "aluno,         GET,    /api/v1/notificacoes",
@@ -178,9 +217,14 @@ class SecurityConfigTest {
             "coordenador,   GET,    /api/v1/notificacoes",
             "admin,         GET,    /api/v1/notificacoes",
 
-            // RF 11: todos os perfis registram justificativa.
-            "aluno,         POST,   /api/v1/registros-motivo",
-            "recepcionista, POST,   /api/v1/registros-motivo",
+            // RNF 19: a trilha de auditoria e da administracao.
+            "admin,         GET,    /api/v1/auditoria",
+            // RNF 18: cada perfil ve e da o proprio aceite do termo.
+            "aluno,         GET,    /api/v1/consentimentos/meu",
+            "recepcionista, POST,   /api/v1/consentimentos",
+            "admin,         POST,   /api/v1/consentimentos",
+
+            // RF 11: todos os perfis consultam o historico de justificativas (escopo no service).
             "professor,     GET,    /api/v1/registros-motivo/agendamentos/1",
             "aluno,         GET,    /api/v1/registros-motivo/agendamentos/1"
     })
@@ -217,12 +261,18 @@ class SecurityConfigTest {
             "recepcionista, POST,   /api/v1/disponibilidades",
             "aluno,         DELETE, /api/v1/disponibilidades/1",
             "recepcionista, PUT,    /api/v1/disponibilidades/1",
+            // RF 06: a previa e o cancelamento das afetadas sao da docencia (o aluno so consulta a grade).
+            "aluno,         POST,   /api/v1/disponibilidades/1/previa",
+            "recepcionista, POST,   /api/v1/disponibilidades/1/remocao/previa",
+            "aluno,         POST,   /api/v1/disponibilidades/1/remocao",
 
             // Bloqueios de periodo: area da docencia.
             "aluno,         GET,    /api/v1/bloqueios-periodo",
             "recepcionista, GET,    /api/v1/bloqueios-periodo",
             "aluno,         POST,   /api/v1/bloqueios-periodo",
             "recepcionista, POST,   /api/v1/bloqueios-periodo",
+            "aluno,         POST,   /api/v1/bloqueios-periodo/previa",
+            "recepcionista, POST,   /api/v1/bloqueios-periodo/1/previa",
 
             // Duracoes: parametro academico, aluno e recepcao nao alteram.
             "aluno,         POST,   /api/v1/duracoes-reuniao",
@@ -231,6 +281,21 @@ class SecurityConfigTest {
 
             // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
             "recepcionista, PATCH,  /api/v1/agendamentos/1/resposta",
+
+            // RF 21/RN 12: docente nao pede alteracao (cancela e agenda de novo); so a docencia decide.
+            "professor,     POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "coordenador,   POST,   /api/v1/agendamentos/1/solicitacoes-edicao",
+            "aluno,         PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "recepcionista, PATCH,  /api/v1/solicitacoes-edicao/1/resposta",
+            "professor,     PATCH,  /api/v1/solicitacoes-edicao/1/cancelamento",
+            // So a lista e liberada: os demais caminhos sem regra propria ficam com a administracao.
+            "aluno,         GET,    /api/v1/solicitacoes-edicao/1",
+            "recepcionista, DELETE, /api/v1/solicitacoes-edicao/1",
+
+            // RF 11: nao ha registro de motivo avulso (o motivo vem da propria operacao).
+            "aluno,         POST,   /api/v1/registros-motivo",
+            "recepcionista, POST,   /api/v1/registros-motivo",
+            "professor,     POST,   /api/v1/registros-motivo",
 
             // Remocao definitiva de agendamento: so administracao.
             "aluno,         DELETE, /api/v1/agendamentos/1",
@@ -252,7 +317,16 @@ class SecurityConfigTest {
             "professor,     POST,   /api/v1/avaliacoes",
             "coordenador,   POST,   /api/v1/avaliacoes",
             "recepcionista, POST,   /api/v1/avaliacoes",
-            "recepcionista, GET,    /api/v1/avaliacoes"
+            "recepcionista, GET,    /api/v1/avaliacoes",
+
+            // RNF 19: auditoria so para a administracao (tem dados pessoais e IP).
+            "aluno,         GET,    /api/v1/auditoria",
+            "professor,     GET,    /api/v1/auditoria",
+            "coordenador,   GET,    /api/v1/auditoria",
+            "recepcionista, GET,    /api/v1/auditoria",
+            // RNF 18: o aceite nao e editado nem apagado pela API.
+            "aluno,         DELETE, /api/v1/consentimentos/1",
+            "recepcionista, PUT,    /api/v1/consentimentos/1"
     })
     void deveNegar(String conta, String metodo, String caminho) throws Exception {
         assertThat(statusDe(conta, metodo, caminho))
@@ -274,6 +348,65 @@ class SecurityConfigTest {
         int status = mockMvc.perform(request(HttpMethod.valueOf(metodo), caminho))
                 .andReturn().getResponse().getStatus();
         assertThat(status).isEqualTo(401);
+    }
+
+    /** RNF 18 - autenticacao como o ConversorDeToken monta para quem ainda nao aceitou o termo em vigor. */
+    private int statusComTermoPendente(String conta, String metodo, String caminho) throws Exception {
+        var papel = new SimpleGrantedAuthority("ROLE_" + conta.toUpperCase(Locale.ROOT));
+        var pendente = new SimpleGrantedAuthority(ExigeAceiteDoTermoFilter.TERMO_PENDENTE);
+        return mockMvc.perform(request(HttpMethod.valueOf(metodo), caminho)
+                        .with(jwt().authorities(papel, pendente)))
+                .andReturn().getResponse().getStatus();
+    }
+
+    @ParameterizedTest(name = "termo pendente: {0} {1} {2} -> 403")
+    @DisplayName("RNF 18 - sem aceitar o termo em vigor, nenhum perfil usa o resto da API")
+    @CsvSource({
+            "aluno,         GET,    /api/v1/agendamentos/usuarios/1",
+            "aluno,         POST,   /api/v1/agendamentos",
+            "professor,     GET,    /api/v1/disponibilidades",
+            "recepcionista, GET,    /api/v1/agendamentos",
+            "admin,         GET,    /api/v1/usuarios",
+            "admin,         GET,    /api/v1/auditoria",
+            "aluno,         GET,    /api/v1/usuarios/resumo",
+            "aluno,         GET,    /api/v1/notificacoes"
+    })
+    void termoPendenteBarra(String conta, String metodo, String caminho) throws Exception {
+        assertThat(statusComTermoPendente(conta, metodo, caminho))
+                .as("%s com termo pendente NAO deveria poder %s %s", conta, metodo, caminho)
+                .isEqualTo(403);
+    }
+
+    @ParameterizedTest(name = "termo pendente: {0} {1} {2} -> liberado")
+    @DisplayName("RNF 18 - com o termo pendente, da para ver o proprio cadastro, ler o termo e aceitar")
+    @CsvSource({
+            "aluno,         GET,    /api/v1/usuarios/me",
+            "aluno,         GET,    /api/v1/termos",
+            "professor,     GET,    /api/v1/consentimentos/meu",
+            "admin,         POST,   /api/v1/consentimentos"
+    })
+    void termoPendenteLibera(String conta, String metodo, String caminho) throws Exception {
+        assertThat(statusComTermoPendente(conta, metodo, caminho))
+                .as("%s com termo pendente deveria poder %s %s", conta, metodo, caminho)
+                .isNotEqualTo(403);
+    }
+
+    @Test
+    @DisplayName("RNF 18 - o 403 do termo pendente sai em JSON com erro TERMO_PENDENTE")
+    void termoPendenteEmJson() throws Exception {
+        var resposta = mockMvc.perform(request(HttpMethod.GET, "/api/v1/agendamentos/1")
+                        .with(jwt().authorities(new SimpleGrantedAuthority("ROLE_ALUNO"),
+                                new SimpleGrantedAuthority(ExigeAceiteDoTermoFilter.TERMO_PENDENTE))))
+                .andReturn().getResponse();
+        assertThat(resposta.getStatus()).isEqualTo(403);
+        assertThat(resposta.getContentAsString()).contains("\"erro\":\"TERMO_PENDENTE\"");
+    }
+
+    @Test
+    @DisplayName("RNF 18 - o termo e a politica sao publicos (pagina /privacidade)")
+    void termoEhPublico() throws Exception {
+        int status = mockMvc.perform(request(HttpMethod.GET, "/api/v1/termos")).andReturn().getResponse().getStatus();
+        assertThat(status).isEqualTo(200);
     }
 
     @Test

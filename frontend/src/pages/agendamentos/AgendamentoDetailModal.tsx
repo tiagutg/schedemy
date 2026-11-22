@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils";
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
@@ -6,7 +7,9 @@ import {
   IconCopy,
   IconCheck,
   IconExternalLink,
+  IconMessageQuestion,
   IconPencil,
+  IconShieldSearch,
   IconStar,
   IconVideo,
   IconX,
@@ -25,14 +28,15 @@ import { useAuth } from "@/context/AuthContext";
 import { rotularEnum } from "@/utils/domain";
 import { baixarIcs, situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, formatarDataHora, formatarHora } from "@/utils/format";
-import type { Agendamento, Participante, RegistroMotivo } from "@/types";
+import { CORES_STATUS_PEDIDO, desfechoDoPedido } from "@/utils/pedidos";
+import type { Agendamento, Participante, RegistroMotivo, SolicitacaoEdicao } from "@/types";
 
 interface AgendamentoDetailModalProps {
   agendamento: Agendamento | null;
   onFechar: () => void;
   onAlterado: () => void;
   /** Abre o formulário para editar, remarcar ou agendar de novo (RF 28) a partir deste agendamento. */
-  onAlterar?: (modo: "editar" | "remarcar" | "replicar", agendamento: Agendamento) => void;
+  onAlterar?: (modo: "editar" | "remarcar" | "replicar" | "solicitar", agendamento: Agendamento) => void;
 }
 
 export default function AgendamentoDetailModal({ agendamento, onFechar, onAlterado, onAlterar }: AgendamentoDetailModalProps) {
@@ -52,6 +56,11 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
 
   // Histórico de motivos (cancelamentos, recusas e edições) registrado pela API (RF 11).
   const [historico, setHistorico] = useState<RegistroMotivo[]>([]);
+  // RF 21/22: pedidos de alteração da reunião (só um pode estar pendente).
+  const [pedidos, setPedidos] = useState<SolicitacaoEdicao[]>([]);
+  const [recusandoPedido, setRecusandoPedido] = useState(false);
+  const [motivoRecusaPedido, setMotivoRecusaPedido] = useState("");
+  const [decidindo, setDecidindo] = useState(false);
   // Momento de referência para os prazos de edição/remarcação (a página recria o modal por agendamento).
   const [agora] = useState(() => Date.now());
   useEffect(() => {
@@ -61,6 +70,10 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
       .listarPorAgendamento(agendamento.id, { size: 50, sort: "criadoEm,desc" })
       .then((p) => !cancelado && setHistorico(p.conteudo))
       .catch(() => !cancelado && setHistorico([]));
+    agendamentosApi
+      .listarPedidosDeAlteracao(agendamento.id)
+      .then((lista) => !cancelado && setPedidos(lista))
+      .catch(() => !cancelado && setPedidos([]));
     return () => {
       cancelado = true;
     };
@@ -77,9 +90,29 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
   // RN 14: edição direta só de pendentes, com 24 h de antecedência. Fora disso, remarca-se
   // (nova reunião ligada à original, que é cancelada — exige 1 h de antecedência, RN 05).
   const podeEditar = podeGerir && a.status === "PENDENTE" && horasAteReuniao >= 24;
+  const participoAntes = a.participantes.some((p) => p.idUsuario === eu?.id);
+  const pedidoPendente = pedidos.find((p) => p.status === "PENDENTE") ?? null;
+  const pedidosEncerrados = pedidos.filter((p) => p.status !== "PENDENTE");
+  // RF 21: reunião confirmada, até 24 h antes (RN 14): o aluno participante (ou a recepção) pede a alteração.
+  const podePedirAlteracao =
+    pode("agendamentos.pedirAlteracao") &&
+    a.status === "CONFIRMADO" &&
+    horasAteReuniao >= 24 &&
+    ((eu?.tipoUsuario === "ALUNO" && participoAntes) || pode("agendamentos.organizarPorOutros"));
+  // RF 22 / RN 12: o primeiro docente da reunião que responder decide (a administração também pode).
+  const podeDecidirPedido =
+    !!pedidoPendente &&
+    pode("agendamentos.decidirAlteracao") &&
+    (participoAntes || eu?.tipoUsuario === "ADMIN") &&
+    horasAteReuniao >= 24;
+  const podeDesistirDoPedido =
+    !!pedidoPendente &&
+    pode("agendamentos.pedirAlteracao") &&
+    (pedidoPendente.idSolicitante === eu?.id || pode("agendamentos.organizarPorOutros"));
   const podeRemarcar =
     podeGerir &&
     !podeEditar &&
+    !podePedirAlteracao &&
     ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
     horasAteReuniao >= 1;
   // A remoção definitiva não consta nos casos de uso: fica restrita à administração.
@@ -94,7 +127,7 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
     ["PENDENTE", "AGUARDANDO_RESPOSTA", "CONFIRMADO"].includes(a.status) &&
     horasAteReuniao > 0;
   const situacao = situacaoDaReuniao(a, eu?.id);
-  const participo = a.participantes.some((p) => p.idUsuario === eu?.id);
+  const participo = participoAntes;
   // RF 28: quem participou (ou a recepção/administração) agenda de novo com os mesmos dados, em qualquer status.
   const podeReplicar = pode("agendamentos.criar") && (participo || podeGerir);
   // RF 24: o aluno participante avalia a reunião concluída.
@@ -137,6 +170,40 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
       toast.erro((e as ApiError).message);
     } finally {
       setCancelando(false);
+    }
+  }
+
+  async function decidirPedido(aceitar: boolean) {
+    if (!pedidoPendente) return;
+    if (!aceitar && !motivoRecusaPedido.trim()) return toast.erro("Informe o motivo da recusa.");
+    setDecidindo(true);
+    try {
+      await agendamentosApi.responderPedidoDeAlteracao(pedidoPendente.id, {
+        aceitar,
+        motivo: aceitar ? null : motivoRecusaPedido.trim(),
+      });
+      toast.sucesso(aceitar ? "Alteração aceita: a reunião foi atualizada." : "Pedido de alteração recusado.");
+      setRecusandoPedido(false);
+      setMotivoRecusaPedido("");
+      onAlterado();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    } finally {
+      setDecidindo(false);
+    }
+  }
+
+  async function desistirDoPedido() {
+    if (!pedidoPendente) return;
+    setDecidindo(true);
+    try {
+      await agendamentosApi.desistirDoPedidoDeAlteracao(pedidoPendente.id);
+      toast.sucesso("Pedido de alteração retirado.");
+      onAlterado();
+    } catch (e) {
+      toast.erro((e as ApiError).message);
+    } finally {
+      setDecidindo(false);
     }
   }
 
@@ -188,12 +255,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </p>
           )}
 
-          {a.resumo && (
-            <div className="flex flex-col gap-1.5">
-              <p className="text-sm font-medium">Resumo</p>
-              <p className="text-sm text-muted-foreground">{a.resumo}</p>
-            </div>
-          )}
+          {/* RF 16: o resumo aparece sempre, para ficar claro quando o organizador não preencheu. */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-sm font-medium">Resumo</p>
+            <p className={cn("text-sm text-muted-foreground", !a.resumo && "italic")}>
+              {a.resumo || "Nenhum resumo informado."}
+            </p>
+          </div>
 
           {linkSala && (
             <div className="flex flex-wrap items-center gap-3 rounded-lg border p-3.5">
@@ -328,6 +396,45 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
             </div>
           )}
 
+          {pedidoPendente && (
+            <PedidoDeAlteracao
+              pedido={pedidoPendente}
+              agendamento={a}
+              euId={eu?.id}
+              podeDecidir={podeDecidirPedido}
+              podeDesistir={podeDesistirDoPedido}
+              ocupado={decidindo}
+              recusando={recusandoPedido}
+              motivoRecusa={motivoRecusaPedido}
+              onMotivoRecusa={setMotivoRecusaPedido}
+              onAceitar={() => decidirPedido(true)}
+              onRecusar={() => (recusandoPedido ? decidirPedido(false) : setRecusandoPedido(true))}
+              onVoltar={() => setRecusandoPedido(false)}
+              onDesistir={desistirDoPedido}
+            />
+          )}
+
+          {pedidosEncerrados.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-medium">Pedidos de alteração anteriores</p>
+              <ul className="divide-y rounded-lg border">
+                {pedidosEncerrados.map((p) => (
+                  <li key={p.id} className="flex flex-col gap-0.5 px-3.5 py-2.5 text-sm">
+                    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+                      <Pill className={CORES_STATUS_PEDIDO[p.status]}>{desfechoDoPedido(p, eu?.id)}</Pill>
+                      <span className="text-xs text-muted-foreground">{formatarDataHora(p.respondidoEm ?? p.criadoEm)}</span>
+                    </div>
+                    <p className="text-muted-foreground">
+                      {p.idSolicitante === eu?.id ? "Você pediu" : `${p.nomeSolicitante} pediu`}{" "}
+                      {formatarData(p.novaData)}, {formatarHora(p.novoHorarioInicio)}–{formatarHora(p.novoHorarioFim)}: {p.motivo}
+                    </p>
+                    {p.motivoRecusa && <p className="text-muted-foreground">Motivo da recusa: {p.motivoRecusa}</p>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           {historico.length > 0 && (
             <div className="flex flex-col gap-2">
               <p className="text-sm font-medium">Histórico</p>
@@ -364,6 +471,12 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
                 Editar
               </Button>
             )}
+            {podePedirAlteracao && onAlterar && (
+              <Button variant="outline" onClick={() => onAlterar("solicitar", a)}>
+                <IconMessageQuestion />
+                Pedir alteração
+              </Button>
+            )}
             {podeRemarcar && onAlterar && (
               <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
                 <IconCalendarRepeat />
@@ -374,6 +487,13 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               <Button variant="outline" onClick={() => onAlterar("replicar", a)}>
                 <IconCopy />
                 Agendar de novo
+              </Button>
+            )}
+            {/* RNF 19: a administração vê a trilha desta reunião */}
+            {pode("auditoria.ver") && (
+              <Button variant="ghost" onClick={() => navigate(`/auditoria?tabela=agendamento&idRegistro=${a.id}`)}>
+                <IconShieldSearch />
+                Ver na auditoria
               </Button>
             )}
             <Button variant="outline" onClick={onFechar}>
@@ -423,5 +543,127 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
         onCancelar={() => setModalRemover(false)}
       />
     </>
+  );
+}
+
+interface PedidoDeAlteracaoProps {
+  pedido: SolicitacaoEdicao;
+  agendamento: Agendamento;
+  euId?: number;
+  podeDecidir: boolean;
+  podeDesistir: boolean;
+  ocupado: boolean;
+  recusando: boolean;
+  motivoRecusa: string;
+  onMotivoRecusa: (motivo: string) => void;
+  onAceitar: () => void;
+  onRecusar: () => void;
+  onVoltar: () => void;
+  onDesistir: () => void;
+}
+
+/** RF 21/22: o que o pedido muda na reunião, com as ações de quem decide e de quem pediu. */
+function PedidoDeAlteracao({
+  pedido: p,
+  agendamento: a,
+  euId,
+  podeDecidir,
+  podeDesistir,
+  ocupado,
+  recusando,
+  motivoRecusa,
+  onMotivoRecusa,
+  onAceitar,
+  onRecusar,
+  onVoltar,
+  onDesistir,
+}: PedidoDeAlteracaoProps) {
+  const mudancas: { rotulo: string; de: string; para: string }[] = [];
+  const quandoAtual = `${formatarData(a.dataReuniao)}, ${formatarHora(a.horarioInicio)}–${formatarHora(a.horarioFim)}`;
+  const quandoNovo = `${formatarData(p.novaData)}, ${formatarHora(p.novoHorarioInicio)}–${formatarHora(p.novoHorarioFim)}`;
+  if (quandoAtual !== quandoNovo) mudancas.push({ rotulo: "Quando", de: quandoAtual, para: quandoNovo });
+  if (a.formato !== p.novoFormato) mudancas.push({ rotulo: "Formato", de: rotularEnum(a.formato), para: rotularEnum(p.novoFormato) });
+  if (a.topico !== p.novoTopico) mudancas.push({ rotulo: "Tópico", de: a.topico, para: p.novoTopico });
+  if ((a.resumo ?? "") !== (p.novoResumo ?? "")) mudancas.push({ rotulo: "Resumo", de: a.resumo || "—", para: p.novoResumo || "—" });
+  const convidadosAtuais = a.participantes.filter((x) => x.papel === "CONVIDADO");
+  const entram = p.novosConvidados.filter((c) => !convidadosAtuais.some((x) => x.idUsuario === c.id)).map((c) => c.nome);
+  const saem = convidadosAtuais.filter((x) => !p.novosConvidados.some((c) => c.id === x.idUsuario)).map((x) => x.nomeUsuario);
+
+  return (
+    <section
+      aria-label="Pedido de alteração"
+      className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-4 text-sm"
+    >
+      <div>
+        <p className="font-medium text-brand-900">Pedido de alteração aguardando o docente</p>
+        <p className="text-xs text-muted-foreground">
+          {p.idSolicitante === euId ? "Você pediu" : `${p.nomeSolicitante} pediu`} em {formatarDataHora(p.criadoEm)}.
+          Até a resposta, a reunião continua como está acima.
+        </p>
+      </div>
+      <dl className="flex flex-col gap-1.5">
+        {mudancas.map((m) => (
+          <div key={m.rotulo} className="flex flex-wrap gap-x-2">
+            <dt className="font-medium">{m.rotulo}:</dt>
+            <dd>
+              <span className="text-muted-foreground line-through">{m.de}</span> → {m.para}
+            </dd>
+          </div>
+        ))}
+        {entram.length > 0 && (
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="font-medium">Entram:</dt>
+            <dd>{entram.join(", ")}</dd>
+          </div>
+        )}
+        {saem.length > 0 && (
+          <div className="flex flex-wrap gap-x-2">
+            <dt className="font-medium">Saem:</dt>
+            <dd>{saem.join(", ")}</dd>
+          </div>
+        )}
+        <div className="flex flex-wrap gap-x-2">
+          <dt className="font-medium">Motivo:</dt>
+          <dd className="text-muted-foreground">{p.motivo}</dd>
+        </div>
+      </dl>
+
+      {podeDecidir && recusando && (
+        <TextAreaField
+          label="Motivo da recusa"
+          required
+          maxLength={500}
+          placeholder="Ex.: Tenho banca nesse horário"
+          value={motivoRecusa}
+          onChange={(e) => onMotivoRecusa(e.target.value)}
+        />
+      )}
+      {(podeDecidir || podeDesistir) && (
+        <div className="flex flex-wrap justify-end gap-2">
+          {podeDesistir && !recusando && (
+            <Button variant="outline" size="sm" disabled={ocupado} onClick={onDesistir}>
+              Desistir do pedido
+            </Button>
+          )}
+          {podeDecidir && recusando && (
+            <Button variant="outline" size="sm" disabled={ocupado} onClick={onVoltar}>
+              Voltar
+            </Button>
+          )}
+          {podeDecidir && (
+            <Button variant="destructive" size="sm" disabled={ocupado || (recusando && !motivoRecusa.trim())} onClick={onRecusar}>
+              <IconX />
+              {recusando ? "Confirmar recusa" : "Recusar"}
+            </Button>
+          )}
+          {podeDecidir && !recusando && (
+            <Button size="sm" disabled={ocupado} onClick={onAceitar}>
+              <IconCheck />
+              Aceitar alteração
+            </Button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }

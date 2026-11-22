@@ -9,7 +9,7 @@ import {
   semHorariosDeAtendimento,
 } from "./apoio";
 
-// Ciclo completo de uma reunião: criar, editar, aceitar o convite, remarcar.
+// Ciclo completo de uma reunião: criar, editar, aceitar o convite, pedir alteração (RF 21/22), cancelar.
 test.describe.configure({ mode: "serial" });
 
 const PREFIXO = "E2E ";
@@ -107,24 +107,49 @@ test("professor aceita o convite pelo painel inicial", async ({ page }) => {
   await expect(convites.getByRole("listitem").filter({ hasText: topico })).toHaveCount(0);
 });
 
-test("aluno remarca a reunião confirmada e o histórico registra o motivo", async ({ page }) => {
+test("aluno pede a alteração da reunião confirmada e o professor aceita (RF 21/22)", async ({ page }) => {
   await entrar(page, CONTAS.aluno);
   const detalhe = await abrirDetalhe(page, topico);
   await expect(detalhe).toContainText("Confirmada");
-  await detalhe.getByRole("button", { name: "Remarcar" }).click();
+  // RF 21: confirmada com 24 h ou mais de antecedência, o aluno pede em vez de remarcar.
+  await expect(detalhe.getByRole("button", { name: "Remarcar" })).toHaveCount(0);
+  await detalhe.getByRole("button", { name: "Pedir alteração" }).click();
 
-  const modal = page.getByRole("dialog", { name: "Remarcar reunião" });
+  const modal = page.getByRole("dialog", { name: "Pedir alteração" });
+  const atual = await modal.locator("#novo-horario").inputValue();
   const mais = agendaDocentes(page).getByRole("button", { name: /horários$/ });
   if (await mais.count()) await mais.click();
-  await horariosSugeridos(page).last().click();
-  await modal.getByLabel("Motivo da remarcação").fill("Choque com prova");
-  await modal.getByRole("button", { name: "Remarcar" }).click();
-  await expect(page.getByText("Reunião remarcada.")).toBeVisible();
+  const outro = horariosSugeridos(page).filter({ hasNotText: atual }).last();
+  const novoHorario = (await outro.textContent())!.trim();
+  await outro.click();
+  await modal.getByLabel("Motivo do pedido").fill("Choque com prova");
+  await modal.getByRole("button", { name: "Enviar pedido" }).click();
+  await expect(page.getByText("Pedido de alteração enviado ao docente.")).toBeVisible();
 
-  const original = await abrirDetalhe(page, topico, "Cancelada");
-  await expect(original).toContainText("Histórico");
-  await expect(original).toContainText("Remarcada para");
-  await expect(original).toContainText("Choque com prova");
+  // Até a resposta, a reunião continua no horário original.
+  const pedido = page.getByRole("dialog").getByRole("region", { name: "Pedido de alteração" });
+  await expect(pedido).toContainText("Choque com prova");
+  await expect(pedido).toContainText(novoHorario);
+  await expect(page.getByRole("dialog")).toContainText("Alteração pedida");
+
+  // No painel, quem pediu acompanha o pedido até a resposta.
+  await page.goto("/");
+  await expect(
+    page.getByRole("region", { name: "Pedidos de alteração aguardando o docente" }).getByRole("link", { name: new RegExp(topico) })
+  ).toContainText("pedido por você");
+
+  // RF 22 / RN 12: o professor da reunião decide, a partir do bloco do painel.
+  await entrar(page, CONTAS.professor);
+  const paraDecidir = page.getByRole("region", { name: "Pedidos de alteração para você decidir" });
+  await paraDecidir.getByRole("link", { name: new RegExp(topico) }).click();
+  const doProfessor = page.getByRole("dialog");
+  await doProfessor.getByRole("button", { name: "Aceitar alteração" }).click();
+  await expect(page.getByText("Alteração aceita: a reunião foi atualizada.")).toBeVisible();
+  await expect(page.getByRole("dialog")).toContainText(novoHorario);
+  await expect(page.getByRole("dialog")).toContainText("Confirmada");
+  await expect(page.getByRole("dialog").getByRole("region", { name: "Pedido de alteração" })).toHaveCount(0);
+  // Quem decidiu fica gravado e aparece no histórico do pedido.
+  await expect(page.getByRole("dialog")).toContainText("Aceito por você");
 });
 
 test("a visão semanal mostra a reunião no dia certo", async ({ page }) => {
@@ -175,6 +200,20 @@ test("sugere os próximos dias livres e preenche data e horário ao escolher", a
   } finally {
     await restaurar();
   }
+});
+
+test("aluno cancela a reunião e o histórico registra o motivo", async ({ page }) => {
+  await entrar(page, CONTAS.aluno);
+  const detalhe = await abrirDetalhe(page, topico);
+  await detalhe.getByRole("button", { name: "Cancelar agendamento" }).click();
+  const modal = page.getByRole("dialog", { name: "Cancelar agendamento" });
+  await modal.getByLabel("Motivo do cancelamento").fill("Choque com prova");
+  await modal.getByRole("button", { name: "Confirmar cancelamento" }).click();
+  await expect(page.getByText("Agendamento cancelado.")).toBeVisible();
+
+  const original = await abrirDetalhe(page, topico, "Cancelada");
+  await expect(original).toContainText("Histórico");
+  await expect(original).toContainText("Choque com prova");
 });
 
 test("aluno agenda de novo a partir da reunião cancelada, sem alterar a original (RF 28)", async ({ page }) => {

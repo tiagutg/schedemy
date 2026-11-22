@@ -2,10 +2,13 @@ package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
 import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.NotificacaoRepository;
+import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -39,6 +42,8 @@ public class RotinaDeAgenda {
     private final AgendamentoRepository agendamentoRepository;
     private final NotificacaoRepository notificacaoRepository;
     private final Notificador notificador;
+    private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    private final Auditoria auditoria;
 
     @Scheduled(initialDelayString = "${schedemy.rotina-agenda.atraso-inicial:PT30S}",
             fixedDelayString = "${schedemy.rotina-agenda.intervalo:PT5M}")
@@ -49,11 +54,18 @@ public class RotinaDeAgenda {
         int iniciadas = 0;
         int concluidas = 0;
         int lembretes = 0;
+        int pedidosExpirados = 0;
         // Reunioes ativas ate amanha: as que ja comecaram/terminaram e as que comecam nas proximas 24 horas.
         for (Agendamento a : agendamentoRepository.findByStatusInAndDataReuniaoLessThanEqual(
                 ACOMPANHADOS, agora.toLocalDate().plusDays(1))) {
             LocalDateTime inicio = LocalDateTime.of(a.getDataReuniao(), a.getHorarioInicio());
             LocalDateTime fim = fimDaReuniao(a, inicio);
+
+            // RF 21/RN 14 - pedido de alteracao sem resposta ate 24 h antes: expira e a reuniao volta ao que era.
+            if (a.getStatus() == StatusAgendamento.AGUARDANDO_RESPOSTA
+                    && !inicio.isAfter(agora.plusHours(SolicitacaoEdicaoServiceImpl.HORAS_MINIMAS))) {
+                pedidosExpirados += expirarPedido(a, agora);
+            }
 
             switch (a.getStatus()) {
                 case PENDENTE, AGUARDANDO_RESPOSTA -> {
@@ -62,6 +74,8 @@ public class RotinaDeAgenda {
                         a.setStatus(StatusAgendamento.CANCELADO);
                         agendamentoRepository.save(a);
                         notificador.naoConfirmada(a);
+                        auditoria.registrarDoSistema(AcaoAuditoria.AGENDAMENTO_EXPIRADO, a.getId(), // RNF 19
+                                "Sem confirmacao ate o inicio (RN 18): " + Auditoria.descrever(a));
                         expiradas++;
                     }
                 }
@@ -87,10 +101,31 @@ public class RotinaDeAgenda {
                 }
             }
         }
-        if (expiradas + iniciadas + concluidas + lembretes > 0) {
-            log.info("Rotina de agenda: {} expirada(s) sem confirmacao, {} iniciada(s), {} concluida(s), {} lembrete(s).",
-                    expiradas, iniciadas, concluidas, lembretes);
+        if (expiradas + iniciadas + concluidas + lembretes + pedidosExpirados > 0) {
+            log.info("Rotina de agenda: {} expirada(s) sem confirmacao, {} iniciada(s), {} concluida(s), {} lembrete(s), "
+                            + "{} pedido(s) de alteracao expirado(s).",
+                    expiradas, iniciadas, concluidas, lembretes, pedidosExpirados);
         }
+    }
+
+    /**
+     * Encerra o pedido pendente como EXPIRADA e devolve a reuniao ao status pelas respostas (RN 18), normalmente
+     * CONFIRMADO; quem pediu e os docentes sao avisados. Sem pedido pendente, so corrige o status.
+     */
+    private int expirarPedido(Agendamento a, LocalDateTime agora) {
+        a.setStatus(AgendamentoServiceImpl.statusPelasRespostas(a.getParticipantes()));
+        agendamentoRepository.save(a);
+        return solicitacaoEdicaoRepository.findFirstByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE)
+                .map(s -> {
+                    s.setStatus(StatusSolicitacao.EXPIRADA);
+                    s.setRespondidoEm(agora);
+                    solicitacaoEdicaoRepository.save(s);
+                    notificador.pedidoEncerrado(a, s.getSolicitante(), null, true);
+                    auditoria.registrarDoSistema(AcaoAuditoria.PEDIDO_ALTERACAO_EXPIRADO, s.getId(), // RNF 19
+                            "Sem resposta ate 24 h antes - reuniao %d: %s".formatted(a.getId(), Auditoria.descrever(a)));
+                    return 1;
+                })
+                .orElse(0);
     }
 
     /** Fim da reuniao; se passar da meia-noite (fim "antes" do inicio), termina no dia seguinte. */

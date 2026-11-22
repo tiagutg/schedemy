@@ -1,6 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { definirAoSessaoInvalida, getStoredAuth, setStoredAuth, type ApiError, type StoredAuth } from "@/api/client";
+import {
+  definirAoSessaoInvalida,
+  definirAoTermoPendente,
+  getStoredAuth,
+  setStoredAuth,
+  type ApiError,
+  type StoredAuth,
+} from "@/api/client";
 import { authApi } from "@/api/auth";
+import { lgpdApi } from "@/api/lgpd";
 import { usuariosApi } from "@/api/usuarios";
 import { useToast } from "@/context/ToastContext";
 import { derivarPerfil, perfilPode } from "@/utils/permissoes";
@@ -25,6 +33,10 @@ interface AuthContextValor {
   erro: string | null;
   entrar: (credenciais: Credenciais) => Promise<boolean>;
   sair: () => void;
+  /** RNF 18: falta aceitar a versão em vigor do termo (null enquanto não se sabe). */
+  termoPendente: boolean | null;
+  /** RNF 18: aceita a versão lida; a API recusa se o termo mudou nesse meio-tempo. */
+  aceitarTermo: (versao: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValor | null>(null);
@@ -36,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [erro, setErro] = useState<string | null>(null);
   // Sessão para a qual a busca do cadastro já terminou (com ou sem sucesso).
   const [perfilResolvidoPara, setPerfilResolvidoPara] = useState<string | null>(null);
+  // RNF 18: situação do aceite do termo para a sessão atual.
+  const [termoPendente, setTermoPendente] = useState<boolean | null>(null);
   const toast = useToast();
 
   const chaveSessao = auth ? `${auth.token}|${auth.usuarioId ?? ""}` : null;
@@ -66,6 +80,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [auth, perfilVinculado?.id]);
 
+  // RNF 18: com a sessão aberta, confere se o termo em vigor já foi aceito.
+  useEffect(() => {
+    if (!auth) return;
+    let cancelado = false;
+    lgpdApi
+      .situacao()
+      .then((s) => !cancelado && setTermoPendente(s.pendente))
+      // Sem a resposta, deixa a API decidir: um 403 TERMO_PENDENTE reabre o termo.
+      .catch(() => !cancelado && setTermoPendente(false));
+    return () => {
+      cancelado = true;
+    };
+  }, [auth]);
+  useEffect(() => {
+    definirAoTermoPendente(() => setTermoPendente(true));
+    return () => definirAoTermoPendente(null);
+  }, []);
+  const aceitarTermo = useCallback(async (versao: string) => {
+    const s = await lgpdApi.aceitar(versao);
+    setTermoPendente(s.pendente);
+  }, []);
+
   // Token que deixou de valer (venceu, senha trocada, usuário inativado):
   // encerra a sessão em vez de deixar as telas falhando com 401.
   const authAtual = useRef(auth);
@@ -77,6 +113,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoredAuth(null);
     setAuth(null);
     setPerfilVinculado(null);
+    setTermoPendente(null);
     toast.info("Sua sessão expirou. Entre novamente.");
   }, [toast]);
   useEffect(() => {
@@ -103,6 +140,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const novaAuth = { email: username, token, expiraEm, usuarioId: usuario?.id ?? null };
       setStoredAuth(novaAuth);
       setPerfilVinculado(usuario);
+      setTermoPendente(null); // a situação do termo é conferida para a sessão nova
       setAuth(novaAuth);
       return true;
     } catch (e) {
@@ -124,6 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setStoredAuth(null);
     setAuth(null);
     setPerfilVinculado(null);
+    setTermoPendente(null);
   }, []);
 
   const perfil = useMemo(() => derivarPerfil(perfilVinculado), [perfilVinculado]);
@@ -141,8 +180,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       erro,
       entrar,
       sair,
+      termoPendente: auth ? termoPendente : null,
+      aceitarTermo,
     }),
-    [auth, perfilVinculado, buscandoPerfil, perfil, pode, carregando, erro, entrar, sair]
+    [auth, perfilVinculado, buscandoPerfil, perfil, pode, carregando, erro, entrar, sair, termoPendente, aceitarTermo]
   );
 
   return <AuthContext.Provider value={valor}>{children}</AuthContext.Provider>;

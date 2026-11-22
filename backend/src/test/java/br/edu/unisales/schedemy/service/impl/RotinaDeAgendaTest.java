@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
@@ -18,6 +19,10 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import br.edu.unisales.schedemy.domain.entity.SolicitacaoEdicao;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
+import br.edu.unisales.schedemy.repository.SolicitacaoEdicaoRepository;
+import java.util.Optional;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -27,6 +32,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
@@ -41,6 +47,8 @@ class RotinaDeAgendaTest {
 
     @Mock private AgendamentoRepository agendamentoRepository;
     @Mock private NotificacaoRepository notificacaoRepository;
+    @Mock private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    @Mock private Auditoria auditoria;
     private RotinaDeAgenda rotina;
 
     private final Usuario professor = usuario(1L, "Rômulo Ferreira", TipoUsuario.PROFESSOR);
@@ -48,7 +56,8 @@ class RotinaDeAgendaTest {
 
     @BeforeEach
     void preparar() {
-        rotina = new RotinaDeAgenda(agendamentoRepository, notificacaoRepository, new Notificador(notificacaoRepository));
+        rotina = new RotinaDeAgenda(agendamentoRepository, notificacaoRepository, new Notificador(notificacaoRepository),
+                solicitacaoEdicaoRepository, auditoria);
     }
 
     @Test
@@ -133,13 +142,15 @@ class RotinaDeAgendaTest {
     @DisplayName("Reuniao sem confirmacao cujo horario chegou e cancelada e todos sao avisados (RN 18)")
     void cancelaNaoConfirmadaVencida() {
         Agendamento vencida = confirmada(LocalDateTime.now().minusMinutes(5));
-        vencida.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        vencida.setStatus(StatusAgendamento.PENDENTE);
         confirmadasNoBanco(vencida);
 
         rotina.executar();
 
         assertThat(vencida.getStatus()).isEqualTo(StatusAgendamento.CANCELADO);
         assertThat(avisosSalvos(2)).allSatisfy(n -> assertThat(n.getTipoEvento()).isEqualTo(Notificador.CANCELAMENTO));
+        // RNF 19 - na trilha como acao do sistema (sem autor)
+        verify(auditoria).registrarDoSistema(eq(AcaoAuditoria.AGENDAMENTO_EXPIRADO), eq(vencida.getId()), anyString());
     }
 
     @Test
@@ -153,6 +164,43 @@ class RotinaDeAgendaTest {
 
         assertThat(futura.getStatus()).isEqualTo(StatusAgendamento.PENDENTE);
         verify(notificacaoRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("RF 21: pedido de alteracao sem resposta a menos de 24 h expira e a reuniao volta a CONFIRMADO")
+    void expiraPedidoDeAlteracao() {
+        Agendamento a = confirmada(LocalDateTime.now().plusHours(20));
+        a.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        confirmadasNoBanco(a);
+        SolicitacaoEdicao pedido = SolicitacaoEdicao.builder().id(3L).agendamento(a).solicitante(aluno)
+                .status(StatusSolicitacao.PENDENTE).build();
+        when(solicitacaoEdicaoRepository.findFirstByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE))
+                .thenReturn(Optional.of(pedido));
+
+        rotina.executar();
+
+        assertThat(pedido.getStatus()).isEqualTo(StatusSolicitacao.EXPIRADA);
+        assertThat(pedido.getRespondidoEm()).isNotNull();
+        assertThat(a.getStatus()).isEqualTo(StatusAgendamento.CONFIRMADO);
+        verify(solicitacaoEdicaoRepository).save(pedido);
+        verify(auditoria).registrarDoSistema(eq(AcaoAuditoria.PEDIDO_ALTERACAO_EXPIRADO), eq(3L), anyString()); // RNF 19
+        // aviso de expiracao para os dois (sistema; sem e-mail cadastrado) + lembrete das 24 h para os dois
+        assertThat(avisosSalvos(4)).extracting(Notificacao::getTipoEvento)
+                .containsExactlyInAnyOrder(Notificador.SOLICITACAO_ENCERRADA, Notificador.SOLICITACAO_ENCERRADA,
+                        Notificador.LEMBRETE, Notificador.LEMBRETE);
+    }
+
+    @Test
+    @DisplayName("RF 21: pedido de alteracao com mais de 24 h pela frente continua aguardando")
+    void pedidoAindaNoPrazo() {
+        Agendamento a = confirmada(LocalDateTime.now().plusHours(30));
+        a.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        confirmadasNoBanco(a);
+
+        rotina.executar();
+
+        assertThat(a.getStatus()).isEqualTo(StatusAgendamento.AGUARDANDO_RESPOSTA);
+        verify(solicitacaoEdicaoRepository, never()).findFirstByAgendamentoIdAndStatus(any(), any());
     }
 
     private void confirmadasNoBanco(Agendamento... agendamentos) {

@@ -12,6 +12,16 @@ const DIAS = [
   { valor: 7, curto: "Sáb" },
 ];
 const PX_POR_HORA = 28;
+// A partir de ~2 h o bloco tem altura para início, duração e fim em linhas separadas.
+const ALTURA_PARA_TRES_LINHAS = 56;
+
+/** 840 → "14 h"; 90 → "1 h 30"; 45 → "45 min". */
+function descreverDuracao(minutos: number): string {
+  const h = Math.floor(minutos / 60);
+  const m = minutos % 60;
+  if (!h) return `${m} min`;
+  return m ? `${h} h ${String(m).padStart(2, "0")}` : `${h} h`;
+}
 
 /** Os horários de atendimento da semana como blocos numa grade (seg–sáb). */
 export default function GradeSemanal({
@@ -67,6 +77,10 @@ export default function GradeSemanal({
                 const ini = paraMinutos(d.horarioInicio);
                 const fimBloco = paraMinutos(d.horarioFim);
                 const rotulo = `${paraHora(ini)}–${paraHora(fimBloco)}`;
+                const altura = Math.max(topo(fimBloco) - topo(ini), 18);
+                // Bloco alto: início no topo, duração no meio e fim embaixo, como uma linha do tempo.
+                // Bloco curto: o intervalo numa linha só.
+                const alto = altura >= ALTURA_PARA_TRES_LINHAS;
                 return (
                   <button
                     key={d.id}
@@ -76,15 +90,27 @@ export default function GradeSemanal({
                     title={`${rotulo}${d.ativo ? "" : " (inativa)"}`}
                     aria-label={`${dia.curto} ${rotulo}${d.ativo ? "" : ", inativa"}`}
                     className={cn(
-                      "absolute inset-x-0.5 overflow-hidden rounded-md px-1 py-0.5 text-left text-[10px] leading-tight font-medium sm:text-xs",
+                      "absolute inset-x-1 flex flex-col overflow-hidden rounded-md border-l-4 py-1 pr-1.5 pl-2 text-left text-[10px] leading-tight font-medium tabular-nums transition-colors sm:text-xs",
+                      alto ? "justify-between" : "justify-center",
                       d.ativo
-                        ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                        : "border border-dashed border-muted-foreground/50 bg-background text-muted-foreground",
+                        ? "border-primary bg-primary/10 text-primary hover:bg-primary/20"
+                        : "border border-l-4 border-dashed border-muted-foreground/50 bg-background text-muted-foreground",
                       "focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                     )}
-                    style={{ top: topo(ini), height: Math.max(topo(fimBloco) - topo(ini), 18) }}
+                    style={{ top: topo(ini), height: altura }}
                   >
-                    {rotulo}
+                    {alto ? (
+                      <>
+                        <span>{paraHora(ini)}</span>
+                        <span className="self-center text-center font-normal opacity-80">
+                          {descreverDuracao(fimBloco - ini)}
+                          {!d.ativo && <span className="block">Inativo</span>}
+                        </span>
+                        <span>{paraHora(fimBloco)}</span>
+                      </>
+                    ) : (
+                      <span className="max-w-full truncate">{rotulo}</span>
+                    )}
                   </button>
                 );
               })}

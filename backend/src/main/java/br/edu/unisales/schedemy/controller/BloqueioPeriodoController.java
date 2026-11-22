@@ -1,8 +1,8 @@
 package br.edu.unisales.schedemy.controller;
 
 import br.edu.unisales.schedemy.dto.request.BloqueioPeriodoRequestDTO;
-import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
 import br.edu.unisales.schedemy.dto.response.BloqueioPeriodoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.ReuniaoAfetadaResponseDTO;
 import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.service.BloqueioPeriodoService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -29,7 +29,8 @@ public class BloqueioPeriodoController {
     private final BloqueioPeriodoService bloqueioPeriodoService;
 
     @PostMapping
-    @Operation(summary = "Cadastrar bloqueio de periodo")
+    @Operation(summary = "Cadastrar bloqueio de periodo",
+            description = "Se o bloqueio cobrir reunioes marcadas, exige cancelarAfetadas (ids da previa + motivo); sem isso, 422 com a lista.")
     public ResponseEntity<BloqueioPeriodoResponseDTO> criar(@Valid @RequestBody BloqueioPeriodoRequestDTO dto) {
         BloqueioPeriodoResponseDTO criado = bloqueioPeriodoService.criar(dto);
         return ResponseEntity.created(URI.create("/api/v1/bloqueios-periodo/" + criado.id())).body(criado);
@@ -51,14 +52,23 @@ public class BloqueioPeriodoController {
         return ResponseEntity.ok(PageResponseDTO.de(bloqueioPeriodoService.listar(usuarioId, dataInicio, dataFim, pageable)));
     }
 
-    @GetMapping("/{id}/agendamentos-impactados")
-    @Operation(summary = "Listar agendamentos impactados", description = "Agendamentos que colidem com o bloqueio.")
-    public ResponseEntity<List<AgendamentoResponseDTO>> listarImpactados(@PathVariable Long id) {
-        return ResponseEntity.ok(bloqueioPeriodoService.listarAgendamentosImpactados(id));
+    @PostMapping("/previa")
+    @Operation(summary = "Previa do cadastro (RF 06/RF 07)", description = "Reunioes que o bloqueio cancelaria. Nao grava nada.")
+    public ResponseEntity<List<ReuniaoAfetadaResponseDTO>> previaDaCriacao(@Valid @RequestBody BloqueioPeriodoRequestDTO dto) {
+        return ResponseEntity.ok(bloqueioPeriodoService.previaDaCriacao(dto));
+    }
+
+    @PostMapping("/{id}/previa")
+    @Operation(summary = "Previa da edicao (RF 06/RF 07)",
+            description = "Reunioes que o bloqueio cancelaria se ficasse como no corpo. Nao grava nada.")
+    public ResponseEntity<List<ReuniaoAfetadaResponseDTO>> previaDaEdicao(@PathVariable Long id,
+                                                                          @Valid @RequestBody BloqueioPeriodoRequestDTO dto) {
+        return ResponseEntity.ok(bloqueioPeriodoService.previaDaEdicao(id, dto));
     }
 
     @PutMapping("/{id}")
-    @Operation(summary = "Atualizar bloqueio de periodo")
+    @Operation(summary = "Atualizar bloqueio de periodo",
+            description = "Se a mudanca cobrir reunioes marcadas, exige cancelarAfetadas (ids da previa + motivo); sem isso, 422 com a lista.")
     public ResponseEntity<BloqueioPeriodoResponseDTO> atualizar(@PathVariable Long id, @Valid @RequestBody BloqueioPeriodoRequestDTO dto) {
         return ResponseEntity.ok(bloqueioPeriodoService.atualizar(id, dto));
     }

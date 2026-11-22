@@ -5,6 +5,7 @@ import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.Notificacao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.dto.request.NotificacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.NotificacaoResponseDTO;
@@ -61,8 +62,9 @@ public class NotificacaoServiceImpl implements NotificacaoService {
 
     @Override
     @Transactional(readOnly = true)
-    public Page<NotificacaoResponseDTO> listar(Long usuarioId, StatusEnvio status, Pageable pageable) {
-        return notificacaoRepository.buscarComFiltros(usuarioAutenticado.escopoDoUsuario(usuarioId), status, pageable)
+    public Page<NotificacaoResponseDTO> listar(Long usuarioId, CanalEnvio canal, StatusEnvio status, Pageable pageable) {
+        return notificacaoRepository.buscarComFiltros(usuarioAutenticado.escopoDoUsuario(usuarioId),
+                        canal == null ? CanalEnvio.SISTEMA : canal, status, pageable)
                 .map(notificacaoMapper::paraResponseDTO);
     }
 
@@ -85,6 +87,10 @@ public class NotificacaoServiceImpl implements NotificacaoService {
         Notificacao entidade = buscarEntidadePorId(id);
         usuarioAutenticado.exigirProprioOuAdmin(entidade.getUsuario().getId(),
                 "Voce so pode marcar as suas proprias notificacoes.");
+        if (entidade.getCanalEnvio() != CanalEnvio.SISTEMA) {
+            // RF 23 - na fila de e-mail, ENVIADO quer dizer "saiu"; marcar como lida impediria o envio.
+            throw new RegraDeNegocioException("So avisos do sistema podem ser marcados como lidos.");
+        }
         if (entidade.getStatusEnvio() == StatusEnvio.PENDENTE) {
             entidade.setStatusEnvio(StatusEnvio.ENVIADO);
             entidade.setEnviadoEm(LocalDateTime.now());

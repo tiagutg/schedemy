@@ -4,14 +4,11 @@ import br.edu.unisales.schedemy.security.UsuarioAutenticado;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
-import br.edu.unisales.schedemy.domain.entity.Usuario;
-import br.edu.unisales.schedemy.dto.request.RegistroMotivoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.RegistroMotivoResponseDTO;
 import br.edu.unisales.schedemy.exception.RecursoNaoEncontradoException;
 import br.edu.unisales.schedemy.mapper.RegistroMotivoMapper;
 import br.edu.unisales.schedemy.repository.AgendamentoRepository;
 import br.edu.unisales.schedemy.repository.RegistroMotivoRepository;
-import br.edu.unisales.schedemy.repository.UsuarioRepository;
 import br.edu.unisales.schedemy.service.RegistroMotivoService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -26,24 +23,8 @@ public class RegistroMotivoServiceImpl implements RegistroMotivoService {
 
     private final RegistroMotivoRepository registroMotivoRepository;
     private final AgendamentoRepository agendamentoRepository;
-    private final UsuarioRepository usuarioRepository;
     private final RegistroMotivoMapper registroMotivoMapper;
     private final UsuarioAutenticado usuarioAutenticado;
-
-    @Override
-    public RegistroMotivoResponseDTO criar(RegistroMotivoRequestDTO dto) {
-        Agendamento agendamento = agendamentoRepository.findById(dto.idAgendamento())
-                .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Agendamento", dto.idAgendamento()));
-        Usuario usuario = usuarioRepository.findById(dto.idUsuario())
-                .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Usuario", dto.idUsuario()));
-
-        usuarioAutenticado.exigirProprioOuAdmin(usuario.getId(), "Voce so pode registrar motivos em seu proprio nome.");
-        usuarioAutenticado.exigirParticipanteOuGestor(agendamento);
-
-        RegistroMotivo entidade = registroMotivoMapper.paraEntidade(dto, agendamento, usuario);
-        entidade = registroMotivoRepository.save(entidade);
-        return registroMotivoMapper.paraResponseDTO(entidade);
-    }
 
     @Override
     @Transactional(readOnly = true)

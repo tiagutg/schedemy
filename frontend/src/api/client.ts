@@ -41,10 +41,19 @@ export function setStoredAuth(auth: StoredAuth | null) {
 }
 
 let aoSessaoInvalida: (() => void) | null = null;
+let aoTermoPendente: (() => void) | null = null;
+
+/** Erro da API para quem ainda não aceitou a versão em vigor do termo (RNF 18). */
+export const ERRO_TERMO_PENDENTE = "TERMO_PENDENTE";
 
 /** Registra quem trata um 401 numa requisição autenticada (token vencido ou que deixou de valer). */
 export function definirAoSessaoInvalida(tratador: (() => void) | null) {
   aoSessaoInvalida = tratador;
+}
+
+/** RNF 18: registra quem trata o 403 de termo pendente (ex.: versão nova publicada com a sessão aberta). */
+export function definirAoTermoPendente(tratador: (() => void) | null) {
+  aoTermoPendente = tratador;
 }
 
 function buildAuthHeader() {
@@ -114,6 +123,7 @@ export async function apiFetch<T = unknown>(
 
   if (!response.ok) {
     if (response.status === 401 && authHeader) aoSessaoInvalida?.();
+    if (response.status === 403 && (dados as ErrorResponse | null)?.erro === ERRO_TERMO_PENDENTE) aoTermoPendente?.();
     throw new ApiError(response.status, dados as ErrorResponse | null);
   }
   return dados as T;

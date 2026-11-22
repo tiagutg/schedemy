@@ -6,6 +6,8 @@ import { defineConfig } from "vite"
 
 // https://vite.dev/config/
 export default defineConfig({
+  // Caminho do site: "/" no desenvolvimento; "/schedemy/" no GitHub Pages (definido no workflow).
+  base: process.env.BASE_PATH || "/",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {

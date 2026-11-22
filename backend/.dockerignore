@@ -1,0 +1,5 @@
+target
+*.ps1
+*.sh
+.idea
+.vscode

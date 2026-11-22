@@ -2,6 +2,7 @@ package br.edu.unisales.schedemy.config;
 
 import static org.springframework.security.config.Customizer.withDefaults;
 import br.edu.unisales.schedemy.security.ConversorDeToken;
+import br.edu.unisales.schedemy.security.ExigeAceiteDoTermoFilter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
@@ -13,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.AuthenticationEntryPoint;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
+import org.springframework.security.web.access.ExceptionTranslationFilter;
 
 /**
  * Autenticacao (token de acesso JWT, emitido em POST /api/v1/auth/login) e autorizacao por
@@ -69,6 +71,14 @@ public class SecurityConfig {
                         // Login: troca e-mail e senha pelo token de acesso.
                         .requestMatchers(HttpMethod.POST, "/api/v1/auth/login").permitAll()
 
+                        // --- LGPD (RNF 18) ---
+                        // O termo e a politica sao publicos (/privacidade); cada um ve e da o proprio aceite.
+                        // Sem o aceite da versao em vigor, o ExigeAceiteDoTermoFilter barra as demais rotas.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/termos").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/v1/consentimentos/meu").authenticated()
+                        .requestMatchers(HttpMethod.POST, "/api/v1/consentimentos").authenticated()
+                        .requestMatchers("/api/v1/consentimentos", "/api/v1/consentimentos/**").hasRole(ADMIN)
+
                         // --- Usuarios ---
                         // Todos leem o proprio cadastro (login) e o resumo para escolher convidados
                         // (RF 14 e RF 33). O cadastro completo (e-mail, telefone) fica com a
@@ -96,6 +106,10 @@ public class SecurityConfig {
                         // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/agendamentos/*/resposta")
                         .hasAnyRole(ALUNO, PROFESSOR, COORDENADOR, ADMIN)
+                        // RF 21: o aluno (ou a recepcao por ele) pede a alteracao de reuniao confirmada.
+                        // A consulta dos pedidos (GET) cai na regra geral de agendamentos.
+                        .requestMatchers(HttpMethod.POST, "/api/v1/agendamentos/*/solicitacoes-edicao")
+                        .hasAnyRole(ALUNO, RECEPCIONISTA, ADMIN)
                         // Remocao definitiva nao consta nos casos de uso: so administracao.
                         .requestMatchers(HttpMethod.DELETE, "/api/v1/agendamentos/**").hasRole(ADMIN)
                         // Listagem global: a recepcao agenda, altera e cancela por terceiros (RF 13, 20, 21).
@@ -105,6 +119,16 @@ public class SecurityConfig {
                         // GET /agendamentos/horarios-livres (RF 14), que nao expoe a agenda de ninguem.
                         // A posse do recurso e verificada nos services (UsuarioAutenticado.java).
                         .requestMatchers("/api/v1/agendamentos", "/api/v1/agendamentos/**").authenticated()
+
+                        // --- Pedidos de alteracao (RF 21/22, RN 12) ---
+                        // So professores e coordenadores decidem; quem pediu (ou a recepcao) desiste.
+                        // A lista (GET) e de todos os perfis: o escopo pelo logado e aplicado no service.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/solicitacoes-edicao").authenticated()
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/resposta")
+                        .hasAnyRole(PROFESSOR, COORDENADOR, ADMIN)
+                        .requestMatchers(HttpMethod.PATCH, "/api/v1/solicitacoes-edicao/*/cancelamento")
+                        .hasAnyRole(ALUNO, RECEPCIONISTA, ADMIN)
+                        .requestMatchers("/api/v1/solicitacoes-edicao", "/api/v1/solicitacoes-edicao/**").hasRole(ADMIN)
 
                         // --- Avaliacoes (RF 24) ---
                         // Somente o aluno avalia; a docencia acompanha (RNF 11).
@@ -120,9 +144,15 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.PATCH, "/api/v1/notificacoes/lidas", "/api/v1/notificacoes/*/lida").authenticated()
                         .requestMatchers("/api/v1/notificacoes", "/api/v1/notificacoes/**").hasRole(ADMIN)
 
+                        // --- Auditoria (RNF 19) ---
+                        // A trilha tem dados pessoais e IP: so a administracao consulta.
+                        .requestMatchers("/api/v1/auditoria", "/api/v1/auditoria/**").hasRole(ADMIN)
+
                         // --- Registros de motivo (RF 11) ---
-                        // Acompanham cancelamento, edicao e remarcacao, feitos por todos os perfis.
-                        .requestMatchers("/api/v1/registros-motivo", "/api/v1/registros-motivo/**").authenticated()
+                        // Somente leitura (escopo no service): o motivo e gravado pela propria operacao. Nao ha
+                        // POST avulso, que deixaria qualquer participante forjar uma recusa no historico.
+                        .requestMatchers(HttpMethod.GET, "/api/v1/registros-motivo/**").authenticated()
+                        .requestMatchers("/api/v1/registros-motivo", "/api/v1/registros-motivo/**").hasRole(ADMIN)
 
                         // Qualquer outro endpoint da API exige ao menos autenticacao
                         .requestMatchers("/api/**").authenticated()
@@ -134,7 +164,9 @@ public class SecurityConfig {
                         .authenticationEntryPoint(naoAutenticado))
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(naoAutenticado)
-                        .accessDeniedHandler(accessDeniedHandler));
+                        .accessDeniedHandler(accessDeniedHandler))
+                // RNF 18 - depois do ExceptionTranslationFilter, para o 403 (TERMO_PENDENTE) sair em JSON.
+                .addFilterAfter(new ExigeAceiteDoTermoFilter(), ExceptionTranslationFilter.class);
 
         return http.build();
     }

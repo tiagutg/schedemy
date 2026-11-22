@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.service.impl;
 
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
 import br.edu.unisales.schedemy.dto.request.DuracaoReuniaoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.DuracaoReuniaoResponseDTO;
 import br.edu.unisales.schedemy.exception.RecursoDuplicadoException;
@@ -28,6 +29,7 @@ public class DuracaoReuniaoServiceImpl implements DuracaoReuniaoService {
     private final DuracaoReuniaoRepository duracaoReuniaoRepository;
     private final AgendamentoRepository agendamentoRepository;
     private final DuracaoReuniaoMapper duracaoReuniaoMapper;
+    private final Auditoria auditoria;
 
     @Override
     public DuracaoReuniaoResponseDTO criar(DuracaoReuniaoRequestDTO dto) {
@@ -37,6 +39,7 @@ public class DuracaoReuniaoServiceImpl implements DuracaoReuniaoService {
         }
         DuracaoReuniao entidade = duracaoReuniaoMapper.paraEntidade(dto);
         entidade = duracaoReuniaoRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.DURACAO_CRIADA, entidade.getId(), descrever(entidade)); // RNF 19
         return duracaoReuniaoMapper.paraResponseDTO(entidade);
     }
 
@@ -71,8 +74,10 @@ public class DuracaoReuniaoServiceImpl implements DuracaoReuniaoService {
                 throw new RecursoDuplicadoException("Ja existe outra duracao cadastrada com " + dto.minutos() + " minutos.");
             }
         });
+        String antes = descrever(entidade);
         duracaoReuniaoMapper.atualizarEntidade(entidade, dto);
         entidade = duracaoReuniaoRepository.save(entidade);
+        auditoria.registrar(AcaoAuditoria.DURACAO_EDITADA, entidade.getId(), antes + " -> " + descrever(entidade)); // RNF 19
         return duracaoReuniaoMapper.paraResponseDTO(entidade);
     }
 
@@ -83,7 +88,12 @@ public class DuracaoReuniaoServiceImpl implements DuracaoReuniaoService {
             throw new RegraDeNegocioException(
                     "Esta duracao ja foi usada em agendamentos e nao pode ser excluida. Desative-a (ativo = false).");
         }
+        auditoria.registrar(AcaoAuditoria.DURACAO_REMOVIDA, entidade.getId(), descrever(entidade)); // RNF 19
         duracaoReuniaoRepository.delete(entidade);
+    }
+
+    private static String descrever(DuracaoReuniao d) {
+        return "%d min, %s".formatted(d.getMinutos(), Boolean.TRUE.equals(d.getAtivo()) ? "ativa" : "inativa");
     }
 
     private void validarMinutos(Integer minutos) {

@@ -1,5 +1,7 @@
 package br.edu.unisales.schedemy.exception;
 
+import br.edu.unisales.schedemy.security.ExigeAceiteDoTermoFilter;
+import br.edu.unisales.schedemy.security.TermoPendenteException;
 import br.edu.unisales.schedemy.dto.response.ErrorResponseDTO;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -40,6 +42,14 @@ public class GlobalExceptionHandler {
         return construirResposta(HttpStatus.UNPROCESSABLE_CONTENT, "Regra de negocio violada", ex.getMessage(), request);
     }
 
+    /** RF 06 - 422 com a lista de reunioes que a mudanca na agenda cancelaria (o front pede a confirmacao). */
+    @ExceptionHandler(ReunioesAfetadasException.class)
+    public ResponseEntity<ErrorResponseDTO> tratarReunioesAfetadas(ReunioesAfetadasException ex, HttpServletRequest request) {
+        HttpStatus status = HttpStatus.UNPROCESSABLE_CONTENT;
+        return ResponseEntity.status(status).body(ErrorResponseDTO.comReunioesAfetadas(status.value(),
+                "Regra de negocio violada", ex.getMessage(), request.getRequestURI(), ex.getReunioes()));
+    }
+
     @ExceptionHandler(RecursoDuplicadoException.class)
     public ResponseEntity<ErrorResponseDTO> tratarDuplicado(RecursoDuplicadoException ex, HttpServletRequest request) {
         return construirResposta(HttpStatus.CONFLICT, "Recurso duplicado", ex.getMessage(), request);
@@ -48,6 +58,12 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AcessoNegadoNegocioException.class)
     public ResponseEntity<ErrorResponseDTO> tratarAcessoNegadoNegocio(AcessoNegadoNegocioException ex, HttpServletRequest request) {
         return construirResposta(HttpStatus.FORBIDDEN, "Acesso negado", ex.getMessage(), request);
+    }
+
+    /** RNF 18 - o front reconhece o erro "TERMO_PENDENTE" e mostra o termo para aceite. */
+    @ExceptionHandler(TermoPendenteException.class)
+    public ResponseEntity<ErrorResponseDTO> tratarTermoPendente(TermoPendenteException ex, HttpServletRequest request) {
+        return construirResposta(HttpStatus.FORBIDDEN, ExigeAceiteDoTermoFilter.TERMO_PENDENTE, ex.getMessage(), request);
     }
 
     @ExceptionHandler(AccessDeniedException.class)

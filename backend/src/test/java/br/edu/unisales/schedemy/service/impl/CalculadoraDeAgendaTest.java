@@ -179,6 +179,25 @@ class CalculadoraDeAgendaTest {
         assertThat(calculadora.bloqueioAfetaReuniao(todaTerca, reuniao(TERCA.plusWeeks(4), "14:00", 30))).isFalse();
     }
 
+    @Test
+    @DisplayName("RF 06: a reuniao cabe inteira numa janela ativa do mesmo dia da semana")
+    void cabeEmAlgumaJanela() {
+        List<Disponibilidade> janelas = List.of(
+                janela(DIA_TERCA, "08:00", "10:00", true),
+                janela(DIA_TERCA, "14:00", "18:00", false),
+                janela(DIA_TERCA + 1, "08:00", "18:00", true));
+
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA, "09:30", 30), janelas)).isTrue();
+        // passa do fim da janela
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA, "09:45", 30), janelas)).isFalse();
+        // so a janela inativa cobriria
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA, "15:00", 30), janelas)).isFalse();
+        // a janela de quarta nao vale para terca
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA, "12:00", 30), janelas)).isFalse();
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA.plusDays(1), "12:00", 30), janelas)).isTrue();
+        assertThat(calculadora.cabeEmAlgumaJanela(reuniao(TERCA, "09:00", 30), List.of())).isFalse();
+    }
+
     // ------------------------------------------------------------------
 
     private static Usuario usuario(Long id, TipoUsuario tipo) {
@@ -195,6 +214,11 @@ class CalculadoraDeAgendaTest {
         atuais.add(Disponibilidade.builder().usuario(docente).diaSemana(diaSemana)
                 .horarioInicio(hora(inicio)).horarioFim(hora(fim)).build());
         when(disponibilidadeRepository.findByUsuarioIdAndAtivoTrue(docente.getId())).thenReturn(atuais);
+    }
+
+    private static Disponibilidade janela(int diaSemana, String inicio, String fim, boolean ativa) {
+        return Disponibilidade.builder().diaSemana(diaSemana).horarioInicio(hora(inicio)).horarioFim(hora(fim))
+                .ativo(ativa).build();
     }
 
     private void bloqueado(Usuario docente, BloqueioPeriodo bloqueio) {

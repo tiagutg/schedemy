@@ -1,5 +1,6 @@
 package br.edu.unisales.schedemy.controller;
 
+import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.dto.request.NotificacaoRequestDTO;
 import br.edu.unisales.schedemy.dto.response.NotificacaoResponseDTO;
@@ -40,12 +41,14 @@ public class NotificacaoController {
     }
 
     @GetMapping
-    @Operation(summary = "Listar notificacoes", description = "Filtros por usuario e status de envio.")
+    @Operation(summary = "Listar notificacoes",
+            description = "Filtros por usuario, canal (padrao SISTEMA: avisos do sistema; EMAIL: fila de e-mail) e status de envio.")
     public ResponseEntity<PageResponseDTO<NotificacaoResponseDTO>> listar(
             @RequestParam(required = false) Long usuarioId,
+            @RequestParam(required = false) CanalEnvio canal,
             @RequestParam(required = false) StatusEnvio status,
             @ParameterObject @PageableDefault(size = 20, sort = "criadoEm") Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(notificacaoService.listar(usuarioId, status, pageable)));
+        return ResponseEntity.ok(PageResponseDTO.de(notificacaoService.listar(usuarioId, canal, status, pageable)));
     }
 
     @PatchMapping("/{id}/enviar")

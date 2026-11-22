@@ -3,7 +3,9 @@ package br.edu.unisales.schedemy.security;
 import br.edu.unisales.schedemy.config.JwtConfig;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
+import br.edu.unisales.schedemy.repository.ConsentimentoTermoRepository;
 import br.edu.unisales.schedemy.repository.UsuarioRepository;
+import br.edu.unisales.schedemy.service.impl.TermoDePrivacidade;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -32,7 +34,9 @@ class TokenDeAcessoTest {
     private final JwtConfig config = new JwtConfig(SEGREDO);
     private final JwtDecoder decoder = config.jwtDecoder();
     private final UsuarioRepository usuarioRepository = mock(UsuarioRepository.class);
-    private final ConversorDeToken conversor = new ConversorDeToken(usuarioRepository);
+    private final ConsentimentoTermoRepository consentimentoTermoRepository = mock(ConsentimentoTermoRepository.class);
+    private final TermoDePrivacidade termo = new TermoDePrivacidade();
+    private final ConversorDeToken conversor = new ConversorDeToken(usuarioRepository, consentimentoTermoRepository, termo);
     private final EmissorDeToken emissor = new EmissorDeToken(config.jwtEncoder(), 480);
 
     private Usuario usuario;
@@ -42,6 +46,17 @@ class TokenDeAcessoTest {
         usuario = Usuario.builder().id(7L).email("aluno@unisales.edu.br").senha("$2a$10$hashqualquer")
                 .tipoUsuario(TipoUsuario.ALUNO).ativo(true).build();
         when(usuarioRepository.findById(7L)).thenReturn(Optional.of(usuario));
+        when(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(7L, termo.versao())).thenReturn(true);
+    }
+
+    @Test
+    @DisplayName("RNF 18 - sem o aceite da versao em vigor do termo, a autenticacao leva TERMO_PENDENTE")
+    void termoPendente() {
+        Jwt jwt = decoder.decode(emissor.emitir(usuario).token());
+        when(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(7L, termo.versao())).thenReturn(false);
+
+        assertThat(conversor.convert(jwt).getAuthorities()).extracting(GrantedAuthority::getAuthority)
+                .containsExactlyInAnyOrder("ROLE_ALUNO", ExigeAceiteDoTermoFilter.TERMO_PENDENTE);
     }
 
     @Test

@@ -2,14 +2,25 @@ package br.edu.unisales.schedemy.repository;
 
 import br.edu.unisales.schedemy.domain.entity.Agendamento;
 import br.edu.unisales.schedemy.domain.entity.AgendamentoParticipante;
+import br.edu.unisales.schedemy.domain.entity.AvaliacaoReuniao;
 import br.edu.unisales.schedemy.domain.entity.BloqueioPeriodo;
 import br.edu.unisales.schedemy.domain.entity.Disponibilidade;
 import br.edu.unisales.schedemy.domain.entity.DuracaoReuniao;
+import br.edu.unisales.schedemy.domain.entity.Notificacao;
+import br.edu.unisales.schedemy.domain.entity.RegistroMotivo;
+import br.edu.unisales.schedemy.domain.entity.ConsentimentoTermo;
+import br.edu.unisales.schedemy.domain.entity.LogAuditoria;
+import br.edu.unisales.schedemy.domain.entity.SolicitacaoEdicao;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
+import br.edu.unisales.schedemy.domain.enums.CanalEnvio;
 import br.edu.unisales.schedemy.domain.enums.FormatoReuniao;
 import br.edu.unisales.schedemy.domain.enums.PapelParticipante;
 import br.edu.unisales.schedemy.domain.enums.StatusAgendamento;
+import br.edu.unisales.schedemy.domain.enums.StatusEnvio;
 import br.edu.unisales.schedemy.domain.enums.StatusResposta;
+import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
+import br.edu.unisales.schedemy.domain.enums.StatusSolicitacao;
+import br.edu.unisales.schedemy.domain.enums.TipoOperacaoMotivo;
 import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -26,10 +37,13 @@ import org.springframework.data.domain.Pageable;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Queries dos repositories rodando no banco de verdade (MySQL ou PostgreSQL, conforme o perfil ativo).
@@ -53,6 +67,11 @@ class RepositoriosNoBancoTest {
     @Autowired private AgendamentoRepository agendamentoRepository;
     @Autowired private DisponibilidadeRepository disponibilidadeRepository;
     @Autowired private BloqueioPeriodoRepository bloqueioPeriodoRepository;
+    @Autowired private NotificacaoRepository notificacaoRepository;
+    @Autowired private SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    @Autowired private LogAuditoriaRepository logAuditoriaRepository;
+    @Autowired private ConsentimentoTermoRepository consentimentoTermoRepository;
+    @Autowired private AvaliacaoReuniaoRepository avaliacaoReuniaoRepository;
 
     private Usuario professor;
     private Usuario aluno;
@@ -217,16 +236,186 @@ class RepositoriosNoBancoTest {
         }
 
         @Test
-        @DisplayName("buscarImpactadosPorPeriodo e contarAgendamentosDoAlunoDesde")
-        void impactadosEContagem() {
-            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Impactada");
-            reuniao(DIA, "11:00", StatusAgendamento.CANCELADO, "Cancelada");
+        @DisplayName("RF 06 - buscarDoParticipanteNoPeriodo, buscarIdsDoParticipanteDesde e contarAgendamentosDoAlunoDesde")
+        void afetadasEContagem() {
+            List<StatusAgendamento> afetaveis = List.of(StatusAgendamento.PENDENTE,
+                    StatusAgendamento.AGUARDANDO_RESPOSTA, StatusAgendamento.CONFIRMADO);
+            Agendamento depois = reuniao(DIA, "11:00", StatusAgendamento.CONFIRMADO, "Confirmada");
+            Agendamento antes = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Pendente");
+            reuniao(DIA, "12:00", StatusAgendamento.CANCELADO, "Cancelada");
+            reuniao(DIA, "13:00", StatusAgendamento.EM_ANDAMENTO, "Em andamento");
+            Agendamento seguinte = reuniao(DIA.plusDays(2), "09:00", StatusAgendamento.PENDENTE, "Outro dia");
             em.flush();
 
-            assertThat(agendamentoRepository.buscarImpactadosPorPeriodo(professor.getId(), DIA.minusDays(1), DIA.plusDays(1)))
-                    .containsExactly(a);
+            // ordenadas por data e horario; o professor (convidado) e o aluno (organizador) enxergam as mesmas
+            assertThat(agendamentoRepository.buscarDoParticipanteNoPeriodo(professor.getId(), DIA.minusDays(1), DIA.plusDays(1), afetaveis))
+                    .containsExactly(antes, depois);
+            assertThat(agendamentoRepository.buscarDoParticipanteNoPeriodo(aluno.getId(), DIA, DIA.plusDays(2), afetaveis))
+                    .containsExactly(antes, depois, seguinte);
+            assertThat(agendamentoRepository.buscarIdsDoParticipanteDesde(professor.getId(), DIA, afetaveis))
+                    .containsExactly(depois.getId(), antes.getId(), seguinte.getId());
+            assertThat(agendamentoRepository.buscarIdsDoParticipanteDesde(professor.getId(), DIA.plusDays(1), afetaveis))
+                    .containsExactly(seguinte.getId());
             assertThat(agendamentoRepository.contarAgendamentosDoAlunoDesde(aluno.getId(), LocalDateTime.now().minusHours(24)))
-                    .isEqualTo(1);
+                    .isEqualTo(4);
+        }
+    }
+
+    @Nested
+    @DisplayName("Pedido de alteracao (RF 21/22)")
+    class DeSolicitacao {
+
+        private SolicitacaoEdicao pedido(Agendamento a, StatusSolicitacao status) {
+            Set<Usuario> convidados = new LinkedHashSet<>(List.of(professor));
+            return em.persist(SolicitacaoEdicao.builder().agendamento(a).solicitante(aluno).novaDuracao(duracao)
+                    .novaData(DIA.plusDays(1)).novoHorarioInicio(LocalTime.of(14, 0)).novoFormato(FormatoReuniao.ONLINE)
+                    .novoTopico("Novo topico").motivo("Prova").status(status).novosConvidados(convidados).build());
+        }
+
+        @Test
+        @DisplayName("entidade x schema (convidados propostos), consultas do pedido e encerrarPendentes")
+        void pedidos() {
+            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Com pedido");
+            SolicitacaoEdicao antigo = pedido(a, StatusSolicitacao.RECUSADA);
+            SolicitacaoEdicao atual = pedido(a, StatusSolicitacao.PENDENTE);
+            em.flush();
+            em.clear();
+
+            assertThat(solicitacaoEdicaoRepository.buscarIdDoAgendamento(atual.getId())).contains(a.getId());
+            assertThat(solicitacaoEdicaoRepository.existsByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE)).isTrue();
+            SolicitacaoEdicao lido = solicitacaoEdicaoRepository
+                    .findFirstByAgendamentoIdAndStatus(a.getId(), StatusSolicitacao.PENDENTE).orElseThrow();
+            assertThat(lido.getId()).isEqualTo(atual.getId());
+            assertThat(lido.getNovosConvidados()).extracting(Usuario::getId).containsExactly(professor.getId());
+            assertThat(solicitacaoEdicaoRepository.findByAgendamentoIdOrderByCriadoEmDesc(a.getId()))
+                    .extracting(SolicitacaoEdicao::getId).containsExactlyInAnyOrder(antigo.getId(), atual.getId());
+
+            assertThat(solicitacaoEdicaoRepository.encerrarPendentes(a.getId(), StatusSolicitacao.CANCELADA,
+                    LocalDateTime.now())).isEqualTo(1);
+            em.clear();
+            assertThat(solicitacaoEdicaoRepository.findById(atual.getId()).orElseThrow().getStatus())
+                    .isEqualTo(StatusSolicitacao.CANCELADA);
+            assertThat(solicitacaoEdicaoRepository.findById(antigo.getId()).orElseThrow().getStatus())
+                    .isEqualTo(StatusSolicitacao.RECUSADA);
+        }
+
+        @Test
+        @DisplayName("o schema aceita os valores novos: EXPIRADA e RECUSA_SOLICITACAO_EDICAO")
+        void valoresNovosDoSchema() {
+            Agendamento a = reuniao(DIA, "11:00", StatusAgendamento.CONFIRMADO, "Expirado");
+            pedido(a, StatusSolicitacao.EXPIRADA);
+            em.persist(RegistroMotivo.builder().agendamento(a).usuario(professor)
+                    .tipoOperacao(TipoOperacaoMotivo.RECUSA_SOLICITACAO_EDICAO).justificativa("Banca").build());
+            em.flush();
+        }
+
+        @Test
+        @DisplayName("quem respondeu e motivo da recusa (colunas novas); listarNoEscopo por participante, gestor e status")
+        void listaNoEscopo() {
+            Usuario outroProfessor = usuario("Outro Professor Banco", TipoUsuario.PROFESSOR, null);
+            Agendamento a = reuniao(DIA, "13:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Lista A");
+            Agendamento depois = reuniao(DIA.plusDays(2), "09:00", StatusAgendamento.AGUARDANDO_RESPOSTA, "Lista B");
+            SolicitacaoEdicao recusado = pedido(a, StatusSolicitacao.RECUSADA);
+            recusado.setRespondidoPor(professor);
+            recusado.setMotivoRecusa("Tenho banca");
+            SolicitacaoEdicao pendenteA = pedido(a, StatusSolicitacao.PENDENTE);
+            SolicitacaoEdicao pendenteB = pedido(depois, StatusSolicitacao.PENDENTE);
+            em.flush();
+            em.clear();
+
+            SolicitacaoEdicao lido = solicitacaoEdicaoRepository.findById(recusado.getId()).orElseThrow();
+            assertThat(lido.getRespondidoPor().getId()).isEqualTo(professor.getId());
+            assertThat(lido.getMotivoRecusa()).isEqualTo("Tenho banca");
+
+            var pendentes = List.of(StatusSolicitacao.PENDENTE);
+            var pagina = PageRequest.of(0, 50);
+            // Participante (convidado): so os pendentes das proprias reunioes, a mais proxima primeiro.
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(pendentes, false, professor.getId(), pagina).getContent())
+                    .extracting(SolicitacaoEdicao::getId).containsExactly(pendenteA.getId(), pendenteB.getId());
+            // Organizador tambem ve; sem filtro de status, inclui o recusado.
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(List.of(StatusSolicitacao.values()), false,
+                    aluno.getId(), pagina).getContent())
+                    .extracting(SolicitacaoEdicao::getId)
+                    .containsExactlyInAnyOrder(recusado.getId(), pendenteA.getId(), pendenteB.getId());
+            // Quem nao participa nao ve nada; a recepcao/admin ve todos (o banco pode ter outros pedidos).
+            assertThat(solicitacaoEdicaoRepository.listarNoEscopo(pendentes, false, outroProfessor.getId(), pagina))
+                    .isEmpty();
+            var gestor = solicitacaoEdicaoRepository.listarNoEscopo(pendentes, true, outroProfessor.getId(), pagina);
+            assertThat(gestor.getContent()).extracting(SolicitacaoEdicao::getId)
+                    .contains(pendenteA.getId(), pendenteB.getId())
+                    .doesNotContain(recusado.getId());
+            assertThat(gestor.getTotalElements()).isGreaterThanOrEqualTo(2);
+            // Os ManyToOne vieram no JOIN FETCH: o mapper le sem consultas extras.
+            assertThat(gestor.getContent().getFirst().getAgendamento().getTopico()).isNotNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("Auditoria e LGPD (RNF 18/19)")
+    class DeAuditoria {
+
+        private LogAuditoria log(Usuario autor, AcaoAuditoria acao, Long idRegistro) {
+            return em.persist(LogAuditoria.builder().usuario(autor).acao(acao).tabelaAfetada(acao.getTabela())
+                    .idTabelaAfetada(idRegistro).detalhes("teste banco").ipOrigem("127.0.0.1").build());
+        }
+
+        @Test
+        @DisplayName("linha sem autor (sistema); buscarComFiltros com todos os filtros nulos e com cada filtro")
+        void trilha() {
+            long idReuniao = 990_000L + (long) (Math.random() * 1000);
+            LogAuditoria doAluno = log(aluno, AcaoAuditoria.AGENDAMENTO_CRIADO, idReuniao);
+            LogAuditoria doSistema = log(null, AcaoAuditoria.AGENDAMENTO_EXPIRADO, idReuniao);
+            LogAuditoria login = log(professor, AcaoAuditoria.LOGIN, professor.getId());
+            em.flush();
+            em.clear();
+
+            var todas = List.of(AcaoAuditoria.values());
+            var pagina = PageRequest.of(0, 500);
+            // Todos os opcionais nulos/vazios: o PostgreSQL precisa aceitar os parametros sem tipo.
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "", null, null, null, pagina)
+                    .getContent()).extracting(LogAuditoria::getId)
+                    .contains(doAluno.getId(), doSistema.getId(), login.getId());
+            // Por registro: a reuniao, da mais recente para a mais antiga, com o autor ja carregado.
+            var daReuniao = logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    null, null, pagina).getContent();
+            assertThat(daReuniao).extracting(LogAuditoria::getId).containsExactly(doSistema.getId(), doAluno.getId());
+            assertThat(daReuniao.get(1).getUsuario().getNome()).isEqualTo("Aluno Teste Banco");
+            assertThat(daReuniao.get(0).getUsuario()).isNull();
+            // Por autor e por acao.
+            assertThat(logAuditoriaRepository.buscarComFiltros(professor.getId(), false, List.of(AcaoAuditoria.LOGIN), "",
+                    null, null, null, pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(login.getId());
+            // So o sistema.
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, true, todas, "agendamento", idReuniao, null, null,
+                    pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(doSistema.getId());
+            // Periodo [desde, ate): hoje entra, amanha em diante nao.
+            LocalDateTime hoje = LocalDate.now().atStartOfDay();
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    hoje, hoje.plusDays(1), pagina).getTotalElements()).isEqualTo(2);
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+                    hoje.plusDays(1), null, pagina).getTotalElements()).isZero();
+
+            assertThat(logAuditoriaRepository.existsByUsuarioId(aluno.getId())).isTrue();
+            assertThat(logAuditoriaRepository.existsByUsuarioId(usuario("Sem Trilha", TipoUsuario.ALUNO, null).getId())).isFalse();
+        }
+
+        @Test
+        @DisplayName("consentimento por versao: existe, ultimo aceite e unico por usuario e versao")
+        void consentimento() {
+            em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-01-01").ipOrigem("10.0.0.1").build());
+            ConsentimentoTermo atual = em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-11-21").build());
+            em.flush();
+            em.clear();
+
+            assertThat(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(aluno.getId(), "2026-11-21")).isTrue();
+            assertThat(consentimentoTermoRepository.existsByUsuarioIdAndVersaoTermo(professor.getId(), "2026-11-21")).isFalse();
+            assertThat(consentimentoTermoRepository.findFirstByUsuarioIdOrderByAceitoEmDescIdDesc(aluno.getId()))
+                    .get().extracting(ConsentimentoTermo::getId).isEqualTo(atual.getId());
+
+            // Com id IDENTITY o insert sai no persist; o flush cobre o caso de o provedor adiar.
+            assertThatThrownBy(() -> {
+                em.persist(ConsentimentoTermo.builder().usuario(aluno).versaoTermo("2026-11-21").build());
+                em.flush();
+            }).isInstanceOf(jakarta.persistence.PersistenceException.class);
         }
     }
 
@@ -250,6 +439,70 @@ class RepositoriosNoBancoTest {
                     .containsExactly(unico);
             assertThat(bloqueioPeriodoRepository.buscarComFiltros(null, null, null, PAGINA)).isNotEmpty();
             assertThat(bloqueioPeriodoRepository.buscarComFiltros(professor.getId(), DIA, DIA, PAGINA)).hasSize(2);
+        }
+    }
+
+    @Nested
+    @DisplayName("Notificacao")
+    class DeNotificacao {
+
+        private Notificacao aviso(Usuario usuario, Agendamento agendamento, CanalEnvio canal) {
+            return em.persist(Notificacao.builder().usuario(usuario).agendamento(agendamento).canalEnvio(canal)
+                    .tipoEvento("CONVITE").mensagem("Teste banco").build());
+        }
+
+        @Test
+        @DisplayName("buscarComFiltros separa os canais; fila de e-mail traz destinatario e reuniao; expirar so pega EMAIL antigo")
+        void filaDeEmail() {
+            Agendamento a = reuniao(DIA, "10:00", StatusAgendamento.PENDENTE, "Notificacao banco");
+            Notificacao sistema = aviso(professor, a, CanalEnvio.SISTEMA);
+            Notificacao email = aviso(professor, a, CanalEnvio.EMAIL);
+            Notificacao semReuniao = aviso(aluno, null, CanalEnvio.EMAIL);
+            em.flush();
+
+            assertThat(notificacaoRepository.buscarComFiltros(professor.getId(), CanalEnvio.SISTEMA, null, PAGINA))
+                    .containsExactly(sistema);
+            assertThat(notificacaoRepository.buscarComFiltros(professor.getId(), CanalEnvio.EMAIL, StatusEnvio.PENDENTE, PAGINA))
+                    .containsExactly(email);
+            assertThat(notificacaoRepository.buscarComFiltros(null, CanalEnvio.EMAIL, null, PAGINA))
+                    .contains(email, semReuniao).doesNotContain(sistema);
+
+            assertThat(notificacaoRepository.buscarEmailsPendentes(PageRequest.of(0, 1000)))
+                    .contains(email, semReuniao).doesNotContain(sistema);
+
+            // criado_em nao e atualizavel pela entidade: envelhece direto no banco.
+            em.getEntityManager().createNativeQuery("UPDATE notificacao SET criado_em = :velho WHERE id_notificacao IN (:ids)")
+                    .setParameter("velho", LocalDateTime.now().minusDays(3))
+                    .setParameter("ids", List.of(sistema.getId(), email.getId()))
+                    .executeUpdate();
+            em.clear();
+            assertThat(notificacaoRepository.expirarEmailsPendentes(LocalDateTime.now().minusDays(1))).isPositive();
+            assertThat(notificacaoRepository.findById(email.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.FALHA);
+            assertThat(notificacaoRepository.findById(sistema.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
+            assertThat(notificacaoRepository.findById(semReuniao.getId())).get()
+                    .extracting(Notificacao::getStatusEnvio).isEqualTo(StatusEnvio.PENDENTE);
+        }
+    }
+
+    @Nested
+    @DisplayName("Avaliacao")
+    class DeAvaliacao {
+
+        @Test
+        @DisplayName("buscarEmReunioesDoParticipante traz so as avaliacoes das reunioes de que o docente participou")
+        void doParticipante() {
+            Agendamento comProfessor = reuniao(DIA, "10:00", StatusAgendamento.CONCLUIDO, "Avaliacao banco");
+            Usuario outroProfessor = usuario("Outro Professor Banco", TipoUsuario.PROFESSOR, null);
+            AvaliacaoReuniao avaliacao = em.persist(AvaliacaoReuniao.builder().agendamento(comProfessor).aluno(aluno)
+                    .nota(5).comentario("Teste banco").build());
+            em.flush();
+
+            assertThat(avaliacaoReuniaoRepository.buscarEmReunioesDoParticipante(professor.getId(), PAGINA))
+                    .containsExactly(avaliacao);
+            assertThat(avaliacaoReuniaoRepository.buscarEmReunioesDoParticipante(outroProfessor.getId(), PAGINA))
+                    .isEmpty();
         }
     }
 }

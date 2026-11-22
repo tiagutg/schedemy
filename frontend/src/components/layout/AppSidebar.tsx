@@ -14,6 +14,7 @@ import { ROTULOS_PERFIL } from "@/utils/permissoes";
 import { NavMain } from "./NavMain";
 import { NavUser } from "./NavUser";
 import { ITENS_AGENDA, ITENS_CONFIGURACAO, ITENS_NAV } from "./navegacao";
+import { arquivoPublico } from "@/utils/publico";
 
 type AppSidebarProps = ComponentProps<typeof Sidebar> & {
   onSair: () => void;
@@ -38,7 +39,7 @@ export function AppSidebar({ onSair, ...props }: AppSidebarProps) {
           <SidebarMenuItem>
             <SidebarMenuButton asChild className="data-[slot=sidebar-menu-button]:p-1.5!">
               <Link to="/">
-                <img src="/schedemy-logo.png" alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
+                <img src={arquivoPublico("schedemy-logo.png")} alt="" aria-hidden="true" className="size-7 shrink-0 object-contain" />
                 <span className="text-lg font-semibold tracking-tight">Schedemy</span>
               </Link>
             </SidebarMenuButton>

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useSearchParams } from "react-router-dom";
-import { IconAlertTriangle, IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
+import { IconPencil, IconPlus, IconTrash } from "@tabler/icons-react";
 import { bloqueiosApi } from "@/api/bloqueios";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
+import { useReunioesAfetadas } from "@/hooks/useReunioesAfetadas";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
@@ -12,8 +13,6 @@ import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
 import Modal from "@/components/common/Modal";
 import ConfirmDialog from "@/components/common/ConfirmDialog";
-import Pill from "@/components/common/Pill";
-import EmptyState from "@/components/common/EmptyState";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
 import { TextField, SelectField, FieldGrid, CheckboxField, FieldError } from "@/components/common/fields";
@@ -21,9 +20,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { DIAS_SEMANA, rotularEnum } from "@/utils/domain";
-import { situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarData, hojeISO } from "@/utils/format";
-import type { Agendamento, Bloqueio, Params } from "@/types";
+import type { Bloqueio, Params } from "@/types";
+import ReunioesAfetadasModal from "./ReunioesAfetadasModal";
 
 const FORM_VAZIO = {
   idUsuario: "",
@@ -59,9 +58,8 @@ export default function BloqueiosPage() {
   const [paraRemover, setParaRemover] = useState<Bloqueio | null>(null);
   const [removendo, setRemovendo] = useState(false);
 
-  const [modalImpactados, setModalImpactados] = useState<Bloqueio | null>(null);
-  const [impactados, setImpactados] = useState<Agendamento[]>([]);
-  const [carregandoImpactados, setCarregandoImpactados] = useState(false);
+  // RF 06: criar ou editar um bloqueio pode cancelar reuniões; a API mostra quais antes de gravar.
+  const afetadas = useReunioesAfetadas();
 
   function abrirCriacao() {
     setEditando(null);
@@ -118,15 +116,19 @@ export default function BloqueiosPage() {
         diaSemanaRecorrente: form.eRecorrente ? Number(form.diaSemanaRecorrente) : null,
         motivo: form.motivo || null,
       };
-      if (editando) {
-        await bloqueiosApi.atualizar(editando.id, payload);
-        toast.sucesso("Bloqueio atualizado.");
-      } else {
-        await bloqueiosApi.criar(payload);
-        toast.sucesso("Bloqueio cadastrado.");
-      }
-      setModalAberto(false);
-      recarregar();
+      const id = editando?.id;
+      await afetadas.executar(
+        () => (id ? bloqueiosApi.previaDaEdicao(id, payload) : bloqueiosApi.previaDaCriacao(payload)),
+        (cancelarAfetadas) =>
+          id
+            ? bloqueiosApi.atualizar(id, { ...payload, cancelarAfetadas })
+            : bloqueiosApi.criar({ ...payload, cancelarAfetadas }),
+        () => {
+          toast.sucesso(id ? "Bloqueio atualizado." : "Bloqueio cadastrado.");
+          setModalAberto(false);
+          recarregar();
+        }
+      );
     } catch (e2) {
       setErro((e2 as ApiError).message);
       toast.erro((e2 as ApiError).message);
@@ -147,18 +149,6 @@ export default function BloqueiosPage() {
       toast.erro((e as ApiError).message);
     } finally {
       setRemovendo(false);
-    }
-  }
-
-  async function abrirImpactados(bloqueio: Bloqueio) {
-    setModalImpactados(bloqueio);
-    setCarregandoImpactados(true);
-    try {
-      setImpactados(await bloqueiosApi.listarImpactados(bloqueio.id));
-    } catch (e) {
-      toast.erro((e as ApiError).message);
-    } finally {
-      setCarregandoImpactados(false);
     }
   }
 
@@ -210,10 +200,6 @@ export default function BloqueiosPage() {
         ]}
         acoes={(b) => (
           <div className="flex justify-end gap-1">
-            <Button variant="ghost" size="sm" onClick={() => abrirImpactados(b)}>
-              <IconAlertTriangle />
-              Impactados
-            </Button>
             <Button variant="ghost" size="sm" onClick={() => abrirEdicao(b)}>
               <IconPencil />
               Editar
@@ -228,7 +214,7 @@ export default function BloqueiosPage() {
       <Pagination pagina={pagina} onMudarPagina={setPaginaAtual} />
 
       <Modal
-        aberto={modalAberto}
+        aberto={modalAberto && !afetadas.pendente}
         onFechar={() => setModalAberto(false)}
         titulo={editando ? "Editar bloqueio" : "Novo bloqueio"}
       >
@@ -324,32 +310,15 @@ export default function BloqueiosPage() {
         </form>
       </Modal>
 
-      <Modal
-        aberto={!!modalImpactados}
-        onFechar={() => setModalImpactados(null)}
-        titulo="Agendamentos impactados"
-        subtitulo={modalImpactados ? `Bloqueio de ${modalImpactados.nomeUsuario}` : ""}
-      >
-        {carregandoImpactados ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">Carregando…</p>
-        ) : impactados.length === 0 ? (
-          <EmptyState titulo="Nenhum agendamento impactado" descricao="Este bloqueio não colide com reuniões já marcadas." />
-        ) : (
-          <ul className="divide-y rounded-lg border">
-            {impactados.map((a) => (
-              <li key={a.id} className="flex items-center justify-between gap-3 px-3 py-2.5">
-                <div>
-                  <p className="text-sm font-medium">{a.topico}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {formatarData(a.dataReuniao)} às {a.horarioInicio?.slice(0, 5)}
-                  </p>
-                </div>
-                <Pill className={situacaoDaReuniao(a, eu?.id).cor}>{situacaoDaReuniao(a, eu?.id).rotulo}</Pill>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Modal>
+      <ReunioesAfetadasModal
+        key={afetadas.pendente ? "afetadas" : "sem-afetadas"}
+        reunioes={afetadas.pendente?.reunioes ?? null}
+        aviso={afetadas.pendente?.aviso}
+        confirmando={afetadas.confirmando}
+        erro={afetadas.erro}
+        onConfirmar={afetadas.confirmar}
+        onVoltar={afetadas.desistir}
+      />
 
       <ConfirmDialog
         aberto={!!paraRemover}

@@ -219,11 +219,12 @@ export default function AgendaDocentes({
   const quemImpede = semComumNaSemana
     ? quemImpedeHorarioEmComum(gradesDosDocentes, duracaoMinutos).map((i) => docentes[i])
     : [];
-  const ocultarDia = semGrade.length > 0 || nenhumDiaLivre;
+  // Sem data escolhida ("Agendar de novo" de uma reunião cancelada): só os próximos dias e a semana.
+  const ocultarDia = semGrade.length > 0 || nenhumDiaLivre || !dataISO;
 
   if (docentes.length === 0) return null;
 
-  const carregandoAgendas = agendas.chave !== chaveAgendas;
+  const carregandoAgendas = !!dataISO && agendas.chave !== chaveAgendas;
   const sugestoes = livres.chave === chaveLivres ? livres.horarios : [];
   const erroLivres = livres.chave === chaveLivres ? livres.erro : "";
   // Com docente sem grade, o aviso de cima já explica: não repete "horário não está livre".
@@ -386,7 +387,7 @@ export default function AgendaDocentes({
           const info = carregandoAgendas ? undefined : agendas.dados[docente.id];
           const grade = gradesProntas ? (grades.dados[docente.id] ?? []) : null;
           const semana = grade && grade.length > 0 ? resumirSemana(grade) : "";
-          const agenda = info
+          const agenda = info && dataISO
             ? calcularAgendaDoDia({
                 dataISO,
                 duracaoMinutos,
@@ -402,7 +403,7 @@ export default function AgendaDocentes({
                 {docente.nome}
                 {docente.id === meuId && <span className="font-normal text-muted-foreground"> (você)</span>}
               </p>
-              {!agenda ? (
+              {!dataISO ? null : !agenda ? (
                 <p className="text-xs text-muted-foreground">Carregando…</p>
               ) : agenda.janelas.length === 0 ? (
                 <p className="text-xs text-amber-700 dark:text-amber-300">

@@ -12,6 +12,9 @@ public interface AvaliacaoService {
 
     Page<AvaliacaoResponseDTO> listarPorAluno(Long alunoId, Pageable pageable);
 
+    /** Avaliacoes no escopo do logado: o aluno, as proprias; a docencia, as das suas reunioes; o admin, todas. */
+    Page<AvaliacaoResponseDTO> listar(Pageable pageable);
+
     AvaliacaoResponseDTO atualizar(Long id, AvaliacaoRequestDTO dto);
 
     void deletar(Long id);

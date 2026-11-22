@@ -1,8 +1,8 @@
 package br.edu.unisales.schedemy.service;
 
 import br.edu.unisales.schedemy.dto.request.BloqueioPeriodoRequestDTO;
-import br.edu.unisales.schedemy.dto.response.AgendamentoResponseDTO;
 import br.edu.unisales.schedemy.dto.response.BloqueioPeriodoResponseDTO;
+import br.edu.unisales.schedemy.dto.response.ReuniaoAfetadaResponseDTO;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -20,6 +20,9 @@ public interface BloqueioPeriodoService {
 
     void deletar(Long id);
 
-    // Lista agendamentos do professor/coordenador impactados pelo bloqueio de periodo.
-    List<AgendamentoResponseDTO> listarAgendamentosImpactados(Long id);
+    /** RF 06/RF 07 - reunioes que o bloqueio novo cancelaria, sem gravar nada. */
+    List<ReuniaoAfetadaResponseDTO> previaDaCriacao(BloqueioPeriodoRequestDTO dto);
+
+    /** RF 06/RF 07 - reunioes que a edicao do bloqueio cancelaria, sem gravar nada. */
+    List<ReuniaoAfetadaResponseDTO> previaDaEdicao(Long id, BloqueioPeriodoRequestDTO dto);
 }

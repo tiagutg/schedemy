@@ -15,7 +15,12 @@ export const CONTAS = {
 
 type Conta = { email: string; senha: string };
 
+/**
+ * Entra pela tela de login. O termo LGPD (RNF 18) é aceito antes pela API, para os testes irem direto ao painel;
+ * a tela do termo tem teste próprio (lgpd.spec.ts).
+ */
 export async function entrar(page: Page, conta: Conta) {
+  await tokenDaConta(conta);
   await page.goto("/login");
   await page.evaluate(() => localStorage.clear());
   await page.goto("/login");
@@ -25,12 +30,21 @@ export async function entrar(page: Page, conta: Conta) {
   await expect(page).toHaveURL("/");
 }
 
-/** Token de acesso da conta (POST /api/v1/auth/login). */
-export async function tokenDaConta(conta: Conta): Promise<string> {
+/** Token de acesso da conta (POST /api/v1/auth/login), já com o termo LGPD em vigor aceito. */
+export async function tokenDaConta(conta: Conta, { aceitarTermo = true } = {}): Promise<string> {
   const anonimo = await request.newContext({ baseURL: API });
   const resposta = await anonimo.post("/api/v1/auth/login", { data: { email: conta.email, senha: conta.senha } });
   expect(resposta.ok(), await resposta.text()).toBeTruthy();
   const { token } = await resposta.json();
+  if (aceitarTermo) {
+    // RNF 18: sem o aceite, a API recusa quase tudo (403 TERMO_PENDENTE). Aceitar de novo não duplica.
+    const { versao } = await (await anonimo.get("/api/v1/termos")).json();
+    const aceite = await anonimo.post("/api/v1/consentimentos", {
+      data: { versao },
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(aceite.ok(), await aceite.text()).toBeTruthy();
+  }
   await anonimo.dispose();
   return token;
 }

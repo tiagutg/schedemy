@@ -43,11 +43,9 @@ import java.util.Set;
 @Transactional
 public class AgendamentoServiceImpl implements AgendamentoService {
 
-    private static final int LIMITE_MAX_DIAS_ANTECEDENCIA = 30;   // RN 16
     private static final int LIMITE_MIN_HORAS_CANCELAMENTO = 1;   // RN 05
     private static final int LIMITE_MIN_HORAS_EDICAO = 24;        // RN 14
     private static final int LIMITE_MAX_AGENDAMENTOS_ALUNO_24H = 2; // RN 13
-    private static final int LIMITE_MAX_DURACAO_MINUTOS = 60;     // RN 17
     private static final int PASSO_HORARIOS_LIVRES_MINUTOS = 15;  // RF 14
     /** Depois de confirmada, a reuniao ainda recebe respostas dos convidados que nao responderam (RN 18). */
     private static final Set<StatusAgendamento> STATUS_QUE_ACEITAM_RESPOSTA = EnumSet.of(
@@ -67,6 +65,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     private final CalculadoraDeAgenda calculadoraDeAgenda;
     private final Notificador notificador;
     private final NotificacaoRepository notificacaoRepository;
+    private final RegrasDeAgendamento regras;
+    private final SolicitacaoEdicaoRepository solicitacaoEdicaoRepository;
+    private final Auditoria auditoria;
 
     /**
      * RN 01 - READ COMMITTED (padrao do PostgreSQL; o MySQL usa REPEATABLE READ): depois de esperar a trava dos
@@ -76,7 +77,9 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     @Override
     @Transactional(isolation = Isolation.READ_COMMITTED)
     public AgendamentoResponseDTO criar(AgendamentoRequestDTO dto) {
-        return agendamentoMapper.paraResponseDTO(novoAgendamento(dto, null));
+        Agendamento criado = novoAgendamento(dto, null);
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CRIADO, criado.getId(), Auditoria.descrever(criado)); // RNF 19
+        return agendamentoMapper.paraResponseDTO(criado);
     }
 
     /**
@@ -172,7 +175,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         LocalDate hoje = LocalDate.now();
         // RN 16 - fora da janela de agendamento nao ha horario a oferecer.
         boolean foraDoPrazo = data.isBefore(hoje)
-                || ChronoUnit.DAYS.between(hoje, data) > LIMITE_MAX_DIAS_ANTECEDENCIA;
+                || ChronoUnit.DAYS.between(hoje, data) > RegrasDeAgendamento.LIMITE_MAX_DIAS_ANTECEDENCIA;
         // RN 15 - sem professor/coordenador nao ha disponibilidade cadastrada para basear a sugestao.
         if (foraDoPrazo || usuarios.stream().noneMatch(CalculadoraDeAgenda::ehDocente)) {
             return new HorariosLivresResponseDTO(data, duracao.getMinutos(), List.of());
@@ -233,7 +236,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         if (agendamento.getStatus() != StatusAgendamento.PENDENTE) {
             throw new RegraDeNegocioException(
                     "Somente agendamentos com status PENDENTE podem ser editados diretamente. " +
-                            "Para reunioes ja confirmadas, utilize a remarcacao.");
+                            "Para reunioes ja confirmadas, peca a alteracao (o docente aceita ou recusa).");
         }
         validarAntecedenciaMinima(agendamento.getDataReuniao(), agendamento.getHorarioInicio(),
                 LIMITE_MIN_HORAS_EDICAO, "editado"); // RN 14
@@ -270,6 +273,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
         agendamento = agendamentoRepository.save(agendamento);
         notificador.alteracao(agendamento, usuarioAutenticado.obter()); // RF 23
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_EDITADO, agendamento.getId(), Auditoria.descrever(agendamento)); // RNF 19
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -314,8 +318,19 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
         StatusAgendamento statusAnterior = agendamento.getStatus();
         recalcularStatus(agendamento);
+        // RF 21 - com pedido de alteracao pendente, a reuniao continua "Aguardando resposta" ate o docente decidir;
+        // se a resposta cancelar a reuniao (RN 18), o pedido deixa de valer.
+        if (statusAnterior == StatusAgendamento.AGUARDANDO_RESPOSTA) {
+            if (agendamento.getStatus() == StatusAgendamento.CANCELADO) {
+                encerrarPedidosDeAlteracao(agendamento);
+            } else {
+                agendamento.setStatus(StatusAgendamento.AGUARDANDO_RESPOSTA);
+            }
+        }
         agendamento = agendamentoRepository.save(agendamento);
         notificador.resposta(agendamento, usuario, Boolean.TRUE.equals(dto.aceitar()), statusAnterior); // RF 23
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_RESPONDIDO, agendamento.getId(), // RNF 19
+                (Boolean.TRUE.equals(dto.aceitar()) ? "Aceitou: " : "Recusou: ") + Auditoria.descrever(agendamento));
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -333,12 +348,15 @@ public class AgendamentoServiceImpl implements AgendamentoService {
 
         agendamento.setStatus(StatusAgendamento.CANCELADO);
         registrarMotivo(agendamento, usuario, TipoOperacaoMotivo.CANCELAMENTO, dto.motivo()); // RF 11
+        encerrarPedidosDeAlteracao(agendamento);
 
         agendamento = agendamentoRepository.save(agendamento);
         // Na remarcacao os envolvidos ja receberam o convite da nova reuniao: nao avisa o cancelamento da antiga.
         if (!agendamentoRepository.existsByAgendamentoOrigemIdAndStatusNot(agendamento.getId(), StatusAgendamento.CANCELADO)) {
             notificador.cancelamento(agendamento, usuario); // RF 23
         }
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CANCELADO, agendamento.getId(), // RNF 19
+                Auditoria.descrever(agendamento) + " - motivo: " + dto.motivo());
         return agendamentoMapper.paraResponseDTO(agendamento);
     }
 
@@ -362,6 +380,7 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         validarCancelamento(original, dto.confirmar(), "remarcado");
 
         original.setStatus(StatusAgendamento.CANCELADO);
+        encerrarPedidosDeAlteracao(original);
         registrarMotivo(original, usuarioAutenticado.obter(), TipoOperacaoMotivo.CANCELAMENTO,
                 "Remarcada para %s às %s: %s".formatted(dto.dataReuniao().format(DATA_BR),
                         dto.horarioInicio().format(HORA_BR), dto.motivo().trim()));
@@ -373,6 +392,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         // A original deixa de existir para a checagem de conflito: a nova pode ocupar o mesmo horario (ou parte dele).
         // Os envolvidos recebem o aviso de remarcacao da nova reuniao, nao o de cancelamento da original.
         Agendamento nova = novoAgendamento(dadosNovos, original.getId());
+        // RNF 19 - a original (cancelada) aponta para a nova, e a nova nasce como remarcacao da original.
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_REMARCADO, original.getId(),
+                "Remarcada para a reuniao %d (%s) - motivo: %s".formatted(nova.getId(), Auditoria.descrever(nova), dto.motivo()));
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_CRIADO, nova.getId(),
+                "Remarcacao da reuniao %d: %s".formatted(original.getId(), Auditoria.descrever(nova)));
         return agendamentoMapper.paraResponseDTO(nova);
     }
 
@@ -385,37 +409,14 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                             "Para os demais casos, utilize o cancelamento.");
         }
         notificacaoRepository.removerDoAgendamento(agendamento.getId());
+        // RNF 19 - o registro some, a trilha fica (id_tabela_afetada nao tem FK).
+        auditoria.registrar(AcaoAuditoria.AGENDAMENTO_REMOVIDO, agendamento.getId(), Auditoria.descrever(agendamento));
         agendamentoRepository.delete(agendamento);
     }
 
     // ------------------------------------------------------------------
     // Regras de negocio auxiliares
     // ------------------------------------------------------------------
-
-    /** RN 02/RN 03/RN 04 - a reuniao precisa de pelo menos um aluno e um professor/coordenador entre os envolvidos. */
-    private void validarComposicaoDeParticipantes(Usuario organizador, List<Usuario> convidados) {
-        if (convidados.isEmpty()) {
-            throw new RegraDeNegocioException("E necessario informar ao menos um convidado para o agendamento.");
-        }
-        // RN 03 - recepcao e administracao agendam para outros, mas nao participam da reuniao.
-        for (Usuario envolvido : envolvidos(organizador, convidados)) {
-            if (envolvido.getTipoUsuario() != TipoUsuario.ALUNO && !CalculadoraDeAgenda.ehDocente(envolvido)) {
-                throw new RegraDeNegocioException(
-                        "O usuario '%s' nao pode participar de reunioes: apenas alunos, professores e coordenadores."
-                                .formatted(envolvido.getNome()));
-            }
-        }
-        boolean temAluno = organizador.getTipoUsuario() == TipoUsuario.ALUNO
-                || convidados.stream().anyMatch(u -> u.getTipoUsuario() == TipoUsuario.ALUNO);
-        boolean temDocente = organizador.getTipoUsuario() == TipoUsuario.PROFESSOR
-                || organizador.getTipoUsuario() == TipoUsuario.COORDENADOR
-                || convidados.stream().anyMatch(u -> u.getTipoUsuario() == TipoUsuario.PROFESSOR
-                || u.getTipoUsuario() == TipoUsuario.COORDENADOR);
-        if (!temAluno || !temDocente) {
-            throw new RegraDeNegocioException(
-                    "O agendamento deve envolver pelo menos um ALUNO e um PROFESSOR/COORDENADOR.");
-        }
-    }
 
     /** Regras comuns ao cancelamento e a remarcacao (que cancela a reuniao original). */
     private void validarCancelamento(Agendamento agendamento, Boolean confirmar, String acao) {
@@ -430,40 +431,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
                 LIMITE_MIN_HORAS_CANCELAMENTO, acao); // RN 05
     }
 
-    /**
-     * RN 01/RN 15/RF 04/RF 14 - o horario precisa estar livre para TODOS os envolvidos (organizador e convidados):
-     * docentes dentro da disponibilidade e fora de bloqueios; ninguem com outra reuniao no intervalo.
-     * Usa a mesma CalculadoraDeAgenda da sugestao de horarios livres.
-     */
-    private void validarHorarioLivreParaTodos(Usuario organizador, List<Usuario> convidados, LocalDate data,
-                                              LocalTime inicio, LocalTime fim, Long agendamentoIgnoradoId) {
-        // RN 01 - sem a trava, duas requisicoes simultaneas passariam pela checagem antes de qualquer uma gravar.
-        usuarioRepository.travarParaAgendamento(envolvidos(organizador, convidados).stream().map(Usuario::getId).toList());
-        for (Usuario envolvido : envolvidos(organizador, convidados)) {
-            calculadoraDeAgenda.verificar(envolvido, data, inicio, fim, agendamentoIgnoradoId)
-                    .ifPresent(impedimento -> {
-                        if (impedimento.tipo() == CalculadoraDeAgenda.TipoImpedimento.REUNIAO_CONFLITANTE) {
-                            Agendamento existente = impedimento.conflitante();
-                            throw new RegraDeNegocioException(
-                                    "O usuario '%s' ja possui um agendamento conflitante em %s entre %s e %s."
-                                            .formatted(envolvido.getNome(), data, existente.getHorarioInicio(),
-                                                    existente.getHorarioFim()));
-                        }
-                        // Indisponibilidade ou bloqueio: o motivo do bloqueio nao e revelado.
-                        throw new RegraDeNegocioException("O %s %s nao esta disponivel neste horario."
-                                .formatted(envolvido.getTipoUsuario().name().toLowerCase(), envolvido.getNome()));
-                    });
-        }
-    }
-
-    /** Organizador seguido dos convidados, sem repetir usuarios. */
-    private List<Usuario> envolvidos(Usuario organizador, List<Usuario> convidados) {
-        Map<Long, Usuario> porId = new LinkedHashMap<>();
-        porId.put(organizador.getId(), organizador);
-        convidados.forEach(c -> porId.putIfAbsent(c.getId(), c));
-        return List.copyOf(porId.values());
-    }
-
     /** RN 13 - um aluno pode ter no maximo 2 agendamentos ativos criados nas ultimas 24 horas. */
     private void validarLimiteDeAgendamentosDoAluno(Long alunoId) {
         long total = agendamentoRepository.contarAgendamentosDoAlunoDesde(alunoId, LocalDateTime.now().minusHours(24));
@@ -471,39 +438,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
             throw new RegraDeNegocioException(
                     "Limite de %d agendamentos por periodo de 24 horas atingido para este aluno."
                             .formatted(LIMITE_MAX_AGENDAMENTOS_ALUNO_24H));
-        }
-    }
-
-    /** RN 16 - a reuniao nao pode ser marcada com mais de 30 dias de antecedencia. */
-    private void validarAntecedenciaMaxima(LocalDate dataReuniao) {
-        long dias = ChronoUnit.DAYS.between(LocalDate.now(), dataReuniao);
-        if (dias < 0) {
-            throw new RegraDeNegocioException("A data da reuniao nao pode estar no passado.");
-        }
-        if (dias > LIMITE_MAX_DIAS_ANTECEDENCIA) {
-            throw new RegraDeNegocioException(
-                    "Agendamentos so podem ser feitos com ate %d dias de antecedencia.".formatted(LIMITE_MAX_DIAS_ANTECEDENCIA));
-        }
-    }
-
-    /** RN 05/RN 14 - exige antecedencia minima para cancelar ou editar um agendamento. */
-    private void validarAntecedenciaMinima(LocalDate data, LocalTime horario, int horasMinimas, String acao) {
-        LocalDateTime momentoReuniao = LocalDateTime.of(data, horario);
-        long horasRestantes = ChronoUnit.HOURS.between(LocalDateTime.now(), momentoReuniao);
-        if (horasRestantes < horasMinimas) {
-            throw new RegraDeNegocioException(
-                    "O agendamento so pode ser %s com pelo menos %d hora(s) de antecedencia.".formatted(acao, horasMinimas));
-        }
-    }
-
-    /** RN 17 - duracao maxima permitida por reuniao. */
-    private void validarDuracao(DuracaoReuniao duracao) {
-        if (Boolean.FALSE.equals(duracao.getAtivo())) {
-            throw new RegraDeNegocioException("A duracao selecionada nao esta mais ativa no sistema.");
-        }
-        if (duracao.getMinutos() > LIMITE_MAX_DURACAO_MINUTOS) {
-            throw new RegraDeNegocioException(
-                    "A duracao maxima permitida por reuniao e de %d minutos.".formatted(LIMITE_MAX_DURACAO_MINUTOS));
         }
     }
 
@@ -539,13 +473,6 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         return !grupo.isEmpty() && grupo.stream().allMatch(p -> p.getStatusResposta() == StatusResposta.RECUSADO);
     }
 
-    /** O horario de inicio nao pode estar no passado (a validacao de data sozinha aceitava "hoje, 08:00" as 15:00). */
-    private void validarInicioNoFuturo(LocalDate data, LocalTime horario) {
-        if (!LocalDateTime.of(data, horario).isAfter(LocalDateTime.now())) {
-            throw new RegraDeNegocioException("O horario de inicio da reuniao ja passou.");
-        }
-    }
-
     /**
      * RF 27 - sala virtual para reunioes online/hibridas com o link informado pelo organizador (Teams, Meet...).
      * Ate existir a integracao com o Microsoft Teams, sem link informado nao ha sala: antes era gerado um
@@ -575,6 +502,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         }
     }
 
+    /** RF 21 - reuniao cancelada (ou remarcada): o pedido de alteracao pendente deixa de valer. */
+    private void encerrarPedidosDeAlteracao(Agendamento agendamento) {
+        solicitacaoEdicaoRepository.encerrarPendentes(agendamento.getId(), StatusSolicitacao.CANCELADA, LocalDateTime.now());
+    }
+
     /** RF 11 - toda operacao sensivel (cancelamento, recusa) precisa registrar uma justificativa. */
     private void registrarMotivo(Agendamento agendamento, Usuario usuario, TipoOperacaoMotivo tipo, String justificativa) {
         RegistroMotivo registro = RegistroMotivo.builder()
@@ -586,24 +518,49 @@ public class AgendamentoServiceImpl implements AgendamentoService {
         registroMotivoRepository.save(registro);
     }
 
-    private Usuario buscarUsuario(Long id) {
-        return usuarioRepository.findById(id)
-                .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Usuario", id));
+    // ------------------------------------------------------------------
+    // Regras comuns ao agendamento e ao pedido de alteracao (RF 21): RegrasDeAgendamento
+    // ------------------------------------------------------------------
+
+    private void validarComposicaoDeParticipantes(Usuario organizador, List<Usuario> convidados) {
+        regras.validarComposicaoDeParticipantes(organizador, convidados);
     }
 
-    /** Organizador e convidados precisam estar ativos: um usuario inativo nao consegue entrar para responder. */
+    private void validarHorarioLivreParaTodos(Usuario organizador, List<Usuario> convidados, LocalDate data,
+                                              LocalTime inicio, LocalTime fim, Long agendamentoIgnoradoId) {
+        regras.validarHorarioLivreParaTodos(organizador, convidados, data, inicio, fim, agendamentoIgnoradoId);
+    }
+
+    private List<Usuario> envolvidos(Usuario organizador, List<Usuario> convidados) {
+        return RegrasDeAgendamento.envolvidos(organizador, convidados);
+    }
+
+    private void validarAntecedenciaMaxima(LocalDate dataReuniao) {
+        regras.validarAntecedenciaMaxima(dataReuniao);
+    }
+
+    private void validarAntecedenciaMinima(LocalDate data, LocalTime horario, int horasMinimas, String acao) {
+        regras.validarAntecedenciaMinima(data, horario, horasMinimas, acao);
+    }
+
+    private void validarDuracao(DuracaoReuniao duracao) {
+        regras.validarDuracao(duracao);
+    }
+
+    private void validarInicioNoFuturo(LocalDate data, LocalTime horario) {
+        regras.validarInicioNoFuturo(data, horario);
+    }
+
+    private Usuario buscarUsuario(Long id) {
+        return regras.buscarUsuario(id);
+    }
+
     private Usuario buscarUsuarioAtivo(Long id) {
-        Usuario usuario = buscarUsuario(id);
-        if (!Boolean.TRUE.equals(usuario.getAtivo())) {
-            throw new RegraDeNegocioException(
-                    "O usuario '%s' esta inativo e nao pode participar de reunioes.".formatted(usuario.getNome()));
-        }
-        return usuario;
+        return regras.buscarUsuarioAtivo(id);
     }
 
     private DuracaoReuniao buscarDuracao(Long id) {
-        return duracaoReuniaoRepository.findById(id)
-                .orElseThrow(() -> RecursoNaoEncontradoException.paraEntidade("Duracao de reuniao", id));
+        return regras.buscarDuracao(id);
     }
 
     /**

@@ -60,6 +60,36 @@ export interface Agendamento {
   criadoEm?: string;
 }
 
+/** RF 21/22: pedido de alteração de reunião confirmada; o primeiro docente que responder decide. */
+export interface SolicitacaoEdicao {
+  id: number;
+  idAgendamento: number;
+  idSolicitante: number;
+  nomeSolicitante: string;
+  status: "PENDENTE" | "ACEITA" | "RECUSADA" | "CANCELADA" | "EXPIRADA";
+  novaData: string;
+  novoHorarioInicio: string;
+  novoHorarioFim: string;
+  idNovaDuracao: number;
+  novaDuracaoMinutos: number;
+  novoFormato: string;
+  novoTopico: string;
+  novoResumo?: string | null;
+  novosConvidados: { id: number; nome: string; tipoUsuario: string }[];
+  motivo: string;
+  criadoEm: string;
+  respondidoEm?: string | null;
+  /** RF 22: quem aceitou ou recusou; vazio se expirou, foi cancelado ou é anterior a 21/11/2026. */
+  idRespondidoPor?: number | null;
+  nomeRespondidoPor?: string | null;
+  /** RF 11: só na recusa. */
+  motivoRecusa?: string | null;
+  /** A reunião como está hoje (para a lista do painel). */
+  topicoAtual: string;
+  dataAtual: string;
+  horarioInicioAtual: string;
+}
+
 /** RF 14: horários de início em que todos os envolvidos estão livres ("HH:mm:ss"). */
 export interface HorariosLivres {
   data: string;
@@ -99,6 +129,9 @@ export interface Bloqueio {
 export interface Avaliacao {
   id: number;
   idAgendamento: number;
+  topicoAgendamento?: string;
+  idAluno: number;
+  nomeAluno: string;
   nota: number;
   comentario?: string | null;
   criadoEm: string;
@@ -129,8 +162,69 @@ export interface RegistroMotivo {
 }
 
 /** Corpo padronizado de erro da API (ErrorResponseDTO). */
+/** RF 06/RF 07: reunião que uma mudança na agenda do docente cancelaria. */
+export interface ReuniaoAfetada {
+  id: number;
+  topico: string;
+  dataReuniao: string;
+  horarioInicio: string;
+  horarioFim?: string | null;
+  status: string;
+  alunos: string[];
+  /** A reunião é cancelada para todos, inclusive estes docentes. */
+  outrosDocentes: string[];
+  /** RN 05: começa em menos de 1 hora (é cancelada mesmo assim). */
+  menosDeUmaHora: boolean;
+}
+
+/** Confirmação enviada ao salvar: os ids vistos na prévia e o motivo (RF 11). */
+export interface CancelamentoDeAfetadas {
+  idsAgendamentos: number[];
+  motivo: string;
+}
+
 export interface ErrorResponse {
   mensagem?: string;
   camposInvalidos?: { campo: string; mensagem: string }[] | null;
+  /** RF 06: 422 de mudança na agenda que cancelaria reuniões ainda não confirmadas. */
+  reunioesAfetadas?: ReuniaoAfetada[] | null;
   [campo: string]: unknown;
+}
+
+/** RNF 18: termo de uso/consentimento e política de privacidade em vigor (GET /api/v1/termos). */
+export interface DocumentoLgpd {
+  titulo: string;
+  secoes: { titulo: string; paragrafos: string[] }[];
+}
+
+export interface Termo {
+  versao: string;
+  publicadoEm: string;
+  /** Texto-base ainda em revisão: a tela mostra o aviso. */
+  rascunho: boolean;
+  avisoRascunho?: string | null;
+  termo: DocumentoLgpd;
+  politica: DocumentoLgpd;
+}
+
+/** RNF 18: situação do aceite do usuário logado. */
+export interface Consentimento {
+  versaoAtual: string;
+  versaoAceita?: string | null;
+  aceitoEm?: string | null;
+  pendente: boolean;
+}
+
+/** RNF 19: linha da trilha de auditoria (autor nulo = ação automática do sistema). */
+export interface LogAuditoria {
+  id: number;
+  idUsuario?: number | null;
+  nomeUsuario?: string | null;
+  tipoUsuario?: string | null;
+  acao: string;
+  tabelaAfetada: string;
+  idRegistro?: number | null;
+  detalhes?: string | null;
+  ipOrigem?: string | null;
+  criadoEm: string;
 }

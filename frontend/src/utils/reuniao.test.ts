@@ -11,7 +11,7 @@ function reuniao(parcial: Partial<Agendamento> = {}): Agendamento {
     dataReuniao: "2026-11-03",
     horarioInicio: "08:30:00",
     formato: "PRESENCIAL",
-    status: "AGUARDANDO_RESPOSTA",
+    status: "PENDENTE",
     idOrganizador: 1,
     nomeOrganizador: "Kevin Lins Carminati Andrade",
     duracaoMinutos: 30,
@@ -38,9 +38,17 @@ describe("situacaoDaReuniao", () => {
     expect(situacaoDaReuniao(reuniao(), 6, depois)).toMatchObject({ rotulo: "Não confirmada", suaVez: false });
   });
 
+  it("confirmada com pedido de alteração pendente (RF 21)", () => {
+    expect(situacaoDaReuniao(reuniao({ status: "AGUARDANDO_RESPOSTA" }), 1, ANTES)).toMatchObject({
+      rotulo: "Alteração pedida",
+      suaVez: false,
+    });
+  });
+
   it("status finais", () => {
     expect(situacaoDaReuniao(reuniao({ status: "CONFIRMADO" }), 6, ANTES).rotulo).toBe("Confirmada");
     expect(situacaoDaReuniao(reuniao({ status: "CONCLUIDO" }), 6, ANTES).rotulo).toBe("Concluída");
+    expect(situacaoDaReuniao(reuniao({ status: "EM_ANDAMENTO" }), 6, ANTES).rotulo).toBe("Em andamento");
     expect(situacaoDaReuniao(reuniao({ status: "CANCELADO" }), 6, ANTES).rotulo).toBe("Cancelada");
   });
 });

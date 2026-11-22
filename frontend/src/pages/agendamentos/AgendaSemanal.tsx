@@ -4,7 +4,8 @@ import Pill from "@/components/common/Pill";
 import Spinner from "@/components/common/Spinner";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { CORES_STATUS_AGENDAMENTO, rotularEnum } from "@/utils/domain";
+import { useAuth } from "@/context/AuthContext";
+import { situacaoDaReuniao } from "@/utils/reuniao";
 import { formatarHora, hojeISO } from "@/utils/format";
 import type { Agendamento } from "@/types";
 
@@ -37,6 +38,7 @@ interface AgendaSemanalProps {
 
 /** Os agendamentos de uma semana, de segunda a domingo, em colunas por dia. */
 export default function AgendaSemanal({ buscarSemana, onAbrir, versao }: AgendaSemanalProps) {
+  const { perfilVinculado: eu } = useAuth();
   const [segunda, setSegunda] = useState(() => segundaDaSemana(new Date()));
   const dias = Array.from({ length: 7 }, (_, i) => somarDias(segunda, i));
   const inicioISO = paraISO(dias[0]);
@@ -120,7 +122,11 @@ export default function AgendaSemanal({ buscarSemana, onAbrir, versao }: AgendaS
                     <span className={cn("line-clamp-2 font-medium", a.status === "CANCELADO" && "line-through")}>
                       {a.topico}
                     </span>
-                    <Pill className={cn("self-start", CORES_STATUS_AGENDAMENTO[a.status])}>{rotularEnum(a.status)}</Pill>
+                    {(() => {
+                      // Mesmo rótulo da lista ("Em andamento", "Aguardando você"...), não o nome do enum.
+                      const situacao = situacaoDaReuniao(a, eu?.id);
+                      return <Pill className={cn("self-start", situacao.cor)}>{situacao.rotulo}</Pill>;
+                    })()}
                   </button>
                 ))
               )}

@@ -1,0 +1,33 @@
+# Publicação da API no Render (plano gratuito): New > Blueprint > escolher este repositório.
+# Atualiza sozinha a cada push na main. Os dados do banco (sync: false) são pedidos
+# no painel na criação: os mesmos do supabase.env, que nunca vai para o GitHub.
+services:
+  - type: web
+    name: schedemy-api
+    runtime: docker
+    plan: free
+    region: virginia
+    branch: main
+    rootDir: backend
+    dockerfilePath: ./Dockerfile
+    envVars:
+      - key: SPRING_PROFILES_ACTIVE
+        value: supabase
+      - key: DB_HOST
+        sync: false
+      - key: DB_PORT
+        value: "5432"
+      - key: DB_NAME
+        value: postgres
+      - key: DB_USER
+        sync: false
+      - key: DB_PASSWORD
+        sync: false
+      # Segredo do token de login, gerado pelo Render (fixo entre reinícios).
+      - key: SCHEDEMY_JWT_SEGREDO
+        generateValue: true
+      # Site publicado no GitHub Pages: única origem liberada para chamar a API.
+      - key: CORS_ALLOWED_ORIGINS
+        value: https://tiagutg.github.io
+      - key: SCHEDEMY_URL_FRONT
+        value: https://tiagutg.github.io/schedemy

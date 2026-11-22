@@ -273,9 +273,11 @@ CREATE TABLE solicitacao_edicao (
     novo_topico VARCHAR(200) NOT NULL,
     novo_resumo VARCHAR(500),
     motivo VARCHAR(200) NOT NULL,
-    status_solicitacao ENUM('PENDENTE', 'ACEITA', 'RECUSADA') NOT NULL DEFAULT 'PENDENTE',
+    status_solicitacao ENUM('PENDENTE', 'ACEITA', 'RECUSADA', 'CANCELADA', 'EXPIRADA') NOT NULL DEFAULT 'PENDENTE',
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     respondido_em DATETIME NULL,
+    id_respondido_por BIGINT UNSIGNED NULL COMMENT 'Docente ou admin que aceitou ou recusou (RF 22); vazio se expirou ou foi cancelado',
+    motivo_recusa VARCHAR(500) NULL COMMENT 'Motivo de quem recusou (RF 11); tambem fica em registro_motivo',
 
     PRIMARY KEY (id_solicitacao),
 
@@ -294,6 +296,12 @@ CREATE TABLE solicitacao_edicao (
     CONSTRAINT fk_solicitacao_nova_duracao
         FOREIGN KEY (id_nova_duracao)
         REFERENCES duracao_reuniao (id_duracao)
+        ON DELETE RESTRICT
+        ON UPDATE CASCADE,
+
+    CONSTRAINT fk_solicitacao_respondido_por
+        FOREIGN KEY (id_respondido_por)
+        REFERENCES usuario (id_usuario)
         ON DELETE RESTRICT
         ON UPDATE CASCADE,
 
@@ -341,7 +349,7 @@ CREATE TABLE registro_motivo (
     id_registro_motivo BIGINT UNSIGNED AUTO_INCREMENT,
     id_agendamento BIGINT UNSIGNED NOT NULL,
     id_usuario BIGINT UNSIGNED NOT NULL,
-    tipo_operacao ENUM('CANCELAMENTO', 'SOLICITACAO_EDICAO', 'RECUSA_AGENDAMENTO', 'RECUSA_REMARCACAO') NOT NULL,
+    tipo_operacao ENUM('CANCELAMENTO', 'SOLICITACAO_EDICAO', 'RECUSA_AGENDAMENTO', 'RECUSA_REMARCACAO', 'RECUSA_SOLICITACAO_EDICAO') NOT NULL,
     justificativa TEXT NOT NULL,
     criado_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -421,7 +429,7 @@ CREATE TABLE notificacao (
 -- LOG AUDITORIA
 CREATE TABLE log_auditoria (
     id_log BIGINT UNSIGNED AUTO_INCREMENT,
-    id_usuario BIGINT UNSIGNED NOT NULL,
+    id_usuario BIGINT UNSIGNED NULL COMMENT 'Autor; vazio quando a acao e automatica (RotinaDeAgenda)',
     acao VARCHAR(100) NOT NULL,
     tabela_afetada VARCHAR(50) NOT NULL,
     id_tabela_afetada BIGINT UNSIGNED,
@@ -439,6 +447,25 @@ CREATE TABLE log_auditoria (
     INDEX idx_log_usuario_data (id_usuario, criado_em),
     INDEX idx_log_tabela_registro (tabela_afetada, id_tabela_afetada)
 ) COMMENT='Trilha auditável de operações no sistema para conformidade com LGPD e RNF 19';
+
+-- CONSENTIMENTO DO TERMO (RNF 18)
+CREATE TABLE consentimento_termo (
+    id_consentimento BIGINT UNSIGNED AUTO_INCREMENT,
+    id_usuario BIGINT UNSIGNED NOT NULL,
+    versao_termo VARCHAR(20) NOT NULL,
+    aceito_em DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    ip_origem VARCHAR(45) NULL,
+
+    PRIMARY KEY (id_consentimento),
+
+    CONSTRAINT fk_consentimento_usuario
+        FOREIGN KEY (id_usuario)
+        REFERENCES usuario (id_usuario)
+        ON DELETE CASCADE
+        ON UPDATE CASCADE,
+
+    UNIQUE KEY uk_consentimento_usuario_versao (id_usuario, versao_termo)
+) COMMENT='Aceite do termo de uso e da política de privacidade, por versão (RNF 18)';
 
 -- EVENTO EXTERNO
 CREATE TABLE evento_externo (

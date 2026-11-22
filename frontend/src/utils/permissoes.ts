@@ -23,11 +23,16 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * Permissões atribuídas a cada perfil.
  *
  * - agendamentos.*  → RF 13, 15, 16, 17, 18, 19, 20, 21, 28
+ * - agendamentos.pedirAlteracao → RF 21: aluno (ou a recepção por ele) pede alteração de reunião confirmada
+ * - agendamentos.decidirAlteracao → RF 22 / RN 12: só professor ou coordenador aceita ou recusa
+ *   (a lista de pedidos, GET /solicitacoes-edicao, é de todos os perfis: o escopo pelo logado fica na API)
  * - disponibilidades / bloqueios → RF 01-05, 12 e RN 06 (só professor/coordenador)
  * - duracoes → RF 01 / RN 17: durações são definidas pela instituição
  * - usuarios → gestão administrativa de cadastros
  * - avaliacoes → RF 24 (aluno avalia) e RNF 11 (coordenação acompanha)
  * - notificacoes → RF 23: o sistema gera os avisos; cada perfil lê os seus
+ * - auditoria.ver → RNF 19: trilha de auditoria, só administração (o admin tem "*")
+ * - o termo LGPD (RNF 18) vale para todos os perfis: sem aceitar, nada abre (RotaProtegida e a API)
  *
  * Por padrão cada pessoa age em nome próprio (organiza, cancela, responde e
  * avalia como o usuário logado). As permissões abaixo liberam agir por outros:
@@ -42,6 +47,7 @@ const PERMISSOES_DOCENTE = [
   "agendamentos.criar",
   "agendamentos.cancelar",
   "agendamentos.responder",
+  "agendamentos.decidirAlteracao",
   "disponibilidades.gerenciar",
   "bloqueios.gerenciar",
   "duracoes.gerenciar",
@@ -56,6 +62,7 @@ const PERMISSOES_POR_PERFIL: Record<string, string[]> = {
     "agendamentos.criar",
     "agendamentos.cancelar",
     "agendamentos.responder",
+    "agendamentos.pedirAlteracao",
     "avaliacoes.ver",
     "avaliacoes.criar",
     "notificacoes.ver",
@@ -69,6 +76,7 @@ const PERMISSOES_POR_PERFIL: Record<string, string[]> = {
     "agendamentos.criar",
     "agendamentos.organizarPorOutros",
     "agendamentos.cancelar",
+    "agendamentos.pedirAlteracao",
     "notificacoes.ver",
   ],
   [PERFIS.ADMIN]: ["*"],

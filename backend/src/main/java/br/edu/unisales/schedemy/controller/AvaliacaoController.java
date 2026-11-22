@@ -38,6 +38,14 @@ public class AvaliacaoController {
         return ResponseEntity.ok(avaliacaoService.buscarPorId(id));
     }
 
+    @GetMapping
+    @Operation(summary = "Listar avaliacoes",
+            description = "No escopo do logado: aluno, as proprias; docente, as das reunioes de que participou; admin, todas.")
+    public ResponseEntity<PageResponseDTO<AvaliacaoResponseDTO>> listar(
+            @ParameterObject @PageableDefault(size = 20, sort = "criadoEm") Pageable pageable) {
+        return ResponseEntity.ok(PageResponseDTO.de(avaliacaoService.listar(pageable)));
+    }
+
     @GetMapping("/alunos/{alunoId}")
     @Operation(summary = "Listar avaliacoes de um aluno")
     public ResponseEntity<PageResponseDTO<AvaliacaoResponseDTO>> listarPorAluno(

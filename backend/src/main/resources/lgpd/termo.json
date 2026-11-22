@@ -1,0 +1,92 @@
+{
+  "versao": "2026-11-21",
+  "publicadoEm": "2026-11-21",
+  "rascunho": true,
+  "avisoRascunho": "Texto-base em revisão pela equipe do projeto e pela instituição. Os itens entre colchetes ainda precisam ser preenchidos.",
+  "termo": {
+    "titulo": "Termo de uso e consentimento",
+    "secoes": [
+      {
+        "titulo": "1. Sobre o Schedemy",
+        "paragrafos": [
+          "O Schedemy é o sistema de agendamento de reuniões acadêmicas entre alunos, professores, coordenação e recepção da UniSales. Ao usar o sistema, você concorda com este termo e declara ter lido a Política de Privacidade, que explica como seus dados pessoais são tratados, conforme a Lei Geral de Proteção de Dados (Lei nº 13.709/2018 - LGPD)."
+        ]
+      },
+      {
+        "titulo": "2. Seu acesso",
+        "paragrafos": [
+          "O acesso é pessoal e intransferível. Você é responsável por manter sua senha em sigilo e por todas as ações feitas com a sua conta.",
+          "As ações no sistema (como criar, alterar e cancelar reuniões, responder convites, alterar a agenda e acessar o sistema) ficam registradas com autor, data, hora e endereço de rede, para segurança e auditoria."
+        ]
+      },
+      {
+        "titulo": "3. Uso adequado",
+        "paragrafos": [
+          "Use o sistema apenas para fins acadêmicos. Os dados de outras pessoas que você vir no Schedemy (nomes, horários, convites) só podem ser usados para organizar as reuniões.",
+          "Motivos de cancelamento, recusa e pedidos de alteração ficam visíveis para os participantes da reunião e para a equipe da instituição: escreva-os com respeito e sem incluir dados pessoais desnecessários."
+        ]
+      },
+      {
+        "titulo": "4. Consentimento",
+        "paragrafos": [
+          "Ao aceitar, você autoriza o tratamento dos seus dados pessoais para as finalidades descritas na Política de Privacidade. O aceite fica registrado com a versão do termo, a data, a hora e o endereço de rede.",
+          "Se este termo mudar, uma nova versão será apresentada e o uso do sistema dependerá de um novo aceite."
+        ]
+      }
+    ]
+  },
+  "politica": {
+    "titulo": "Política de privacidade",
+    "secoes": [
+      {
+        "titulo": "1. Quem trata os dados",
+        "paragrafos": [
+          "Controlador: [nome e CNPJ da instituição mantenedora da UniSales].",
+          "Encarregado pelo tratamento de dados (DPO): [nome e e-mail de contato]."
+        ]
+      },
+      {
+        "titulo": "2. Quais dados são tratados",
+        "paragrafos": [
+          "Cadastro: nome, e-mail institucional, telefone, perfil (aluno, professor, coordenador, recepção ou administração), matrícula/RA ou número de identificação e curso ou departamento.",
+          "Uso do sistema: reuniões (data, horário, formato, tópico, resumo, participantes e respostas), disponibilidade e bloqueios de agenda dos docentes, pedidos de alteração, motivos informados, avaliações das reuniões e avisos enviados.",
+          "Registros de acesso e auditoria: data e hora das ações, a ação realizada e o endereço de rede (IP) de onde foi feita."
+        ]
+      },
+      {
+        "titulo": "3. Para que os dados são usados",
+        "paragrafos": [
+          "Organizar as reuniões acadêmicas: encontrar horários livres, enviar convites, confirmações, lembretes e avisos (na tela e por e-mail) e registrar a avaliação das reuniões concluídas.",
+          "Garantir a segurança do sistema e manter a trilha de auditoria de criação, edição e cancelamento.",
+          "Base legal: execução das atividades acadêmicas da instituição e o seu consentimento (art. 7º, I, V e IX da LGPD), além do cumprimento de obrigações legais quando aplicável. [Confirmar com a instituição.]"
+        ]
+      },
+      {
+        "titulo": "4. Quem vê os seus dados",
+        "paragrafos": [
+          "Os participantes de uma reunião veem os nomes e as respostas uns dos outros. A recepção e a coordenação veem as reuniões que precisam acompanhar. Só a administração consulta o cadastro completo e a trilha de auditoria.",
+          "Prestadores que operam o sistema podem ter acesso técnico aos dados, apenas para essa finalidade: [hospedagem do banco de dados e da aplicação; serviço de envio de e-mail]."
+        ]
+      },
+      {
+        "titulo": "5. Por quanto tempo",
+        "paragrafos": [
+          "Os dados ficam guardados enquanto você tiver vínculo com a instituição e pelo prazo necessário para cumprir obrigações legais e manter a trilha de auditoria: [prazo a definir pela instituição]. Contas com histórico não são apagadas, e sim desativadas, para preservar o registro das reuniões."
+        ]
+      },
+      {
+        "titulo": "6. Seus direitos",
+        "paragrafos": [
+          "Você pode pedir a confirmação do tratamento, o acesso, a correção, a anonimização ou a eliminação de dados desnecessários, a portabilidade e informações sobre o compartilhamento, e pode revogar o consentimento (art. 18 da LGPD). A revogação impede o uso do sistema a partir de então.",
+          "Para exercer esses direitos, fale com o encarregado: [e-mail de contato]."
+        ]
+      },
+      {
+        "titulo": "7. Segurança",
+        "paragrafos": [
+          "As senhas são guardadas de forma criptografada (hash), o acesso exige login e cada perfil vê apenas o que precisa. Mudanças nesta política serão comunicadas no próprio sistema."
+        ]
+      }
+    ]
+  }
+}

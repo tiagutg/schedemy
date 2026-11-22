@@ -76,6 +76,22 @@ public class AvaliacaoServiceImpl implements AvaliacaoService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public Page<AvaliacaoResponseDTO> listar(Pageable pageable) {
+        // RNF 11 - a docencia acompanha as avaliacoes sem escolher aluno por aluno; RNF 15 - so as das suas reunioes.
+        Usuario logado = usuarioAutenticado.obter();
+        Page<AvaliacaoReuniao> avaliacoes;
+        if (usuarioAutenticado.ehAdmin()) {
+            avaliacoes = avaliacaoRepository.findAll(pageable);
+        } else if (logado.getTipoUsuario() == TipoUsuario.ALUNO) {
+            avaliacoes = avaliacaoRepository.findByAlunoId(logado.getId(), pageable);
+        } else {
+            avaliacoes = avaliacaoRepository.buscarEmReunioesDoParticipante(logado.getId(), pageable);
+        }
+        return avaliacoes.map(avaliacaoMapper::paraResponseDTO);
+    }
+
+    @Override
     public AvaliacaoResponseDTO atualizar(Long id, AvaliacaoRequestDTO dto) {
         AvaliacaoReuniao entidade = buscarEntidadePorId(id);
 

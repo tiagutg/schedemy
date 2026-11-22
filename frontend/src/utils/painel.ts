@@ -11,9 +11,11 @@ export const PERIODOS: { valor: Periodo; rotulo: string; descricao: string }[] =
   { valor: "90d", rotulo: "Últimos 3 meses", descricao: "Reuniões dos últimos 3 meses" },
 ];
 
-const AGUARDANDO = ["PENDENTE", "AGUARDANDO_RESPOSTA"];
+// Sem confirmação. AGUARDANDO_RESPOSTA é reunião confirmada com pedido de alteração pendente (RF 21):
+// continua valendo no horário original, então conta como confirmada.
+const AGUARDANDO = ["PENDENTE"];
 // Para os números do mês, confirmada e concluída contam como reunião que vai/foi acontecer.
-const VALIDAS = ["CONFIRMADO", "CONCLUIDO"];
+const VALIDAS = ["CONFIRMADO", "AGUARDANDO_RESPOSTA", "CONCLUIDO"];
 
 export function paraISO(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -116,7 +118,7 @@ export function variacaoPercentual(atual: number, anterior: number): number | nu
 export function proximasReunioes(agendamentos: Agendamento[], quantidade: number, hoje = new Date()): Agendamento[] {
   const hojeISO = paraISO(hoje);
   return agendamentos
-    .filter((a) => a.dataReuniao >= hojeISO && [...AGUARDANDO, "CONFIRMADO"].includes(a.status))
+    .filter((a) => a.dataReuniao >= hojeISO && [...AGUARDANDO, "CONFIRMADO", "AGUARDANDO_RESPOSTA"].includes(a.status))
     .sort((x, y) => (x.dataReuniao + x.horarioInicio).localeCompare(y.dataReuniao + y.horarioInicio))
     .slice(0, quantidade);
 }
