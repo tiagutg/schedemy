@@ -27,7 +27,8 @@ public class BloqueioPeriodo {
     @Column(name = "data_inicio", nullable = false)
     private LocalDate dataInicio;
 
-    @Column(name = "data_fim", nullable = false)
+    /** RF 05 - vazio so no bloqueio recorrente: vale ate o docente remove-lo. */
+    @Column(name = "data_fim")
     private LocalDate dataFim;
 
     @Column(name = "horario_inicio")

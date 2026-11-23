@@ -121,7 +121,7 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
                 b.getHorarioFim() == null ? "fim" : b.getHorarioFim());
         String recorrencia = Boolean.TRUE.equals(b.getERecorrente()) ? ", toda semana (dia " + b.getDiaSemanaRecorrente() + ")" : "";
         return "%s: %s a %s, %s%s - %s".formatted(b.getUsuario() == null ? "?" : b.getUsuario().getNome(),
-                b.getDataInicio(), b.getDataFim(), horario, recorrencia, b.getMotivo() == null ? "" : b.getMotivo());
+                b.getDataInicio(), b.getDataFim() == null ? "sem data de fim" : b.getDataFim(), horario, recorrencia, b.getMotivo() == null ? "" : b.getMotivo());
     }
 
     /** Regras comuns ao salvar e a previa; devolve o docente do bloqueio. */
@@ -140,10 +140,14 @@ public class BloqueioPeriodoServiceImpl implements BloqueioPeriodoService {
     }
 
     private void validarPeriodo(BloqueioPeriodoRequestDTO dto) {
-        if (dto.dataFim().isBefore(dto.dataInicio())) {
+        boolean recorrente = Boolean.TRUE.equals(dto.eRecorrente());
+        // RF 05 - so o recorrente pode ficar sem data de fim (vale ate ser removido).
+        if (dto.dataFim() == null && !recorrente) {
+            throw new RegraDeNegocioException("Informe a data de fim. Somente o bloqueio recorrente pode ficar sem data de fim.");
+        }
+        if (dto.dataFim() != null && dto.dataFim().isBefore(dto.dataInicio())) {
             throw new RegraDeNegocioException("A data de fim do bloqueio deve ser igual ou posterior a data de inicio.");
         }
-        boolean recorrente = Boolean.TRUE.equals(dto.eRecorrente());
         if (recorrente && dto.diaSemanaRecorrente() == null) {
             throw new RegraDeNegocioException("diaSemanaRecorrente e obrigatorio quando o bloqueio e recorrente.");
         }

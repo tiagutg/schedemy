@@ -99,7 +99,8 @@ public class ImpactoNaAgenda {
     public List<Agendamento> afetadasPeloBloqueio(BloqueioPeriodo bloqueio) {
         LocalDate hoje = LocalDate.now();
         LocalDate inicio = bloqueio.getDataInicio().isBefore(hoje) ? hoje : bloqueio.getDataInicio();
-        return futurasDoDocente(bloqueio.getUsuario(), inicio, bloqueio.getDataFim()).stream()
+        LocalDate fim = bloqueio.getDataFim() == null ? SEM_LIMITE : bloqueio.getDataFim(); // RF 05 - sem data de fim
+        return futurasDoDocente(bloqueio.getUsuario(), inicio, fim).stream()
                 .filter(a -> calculadoraDeAgenda.bloqueioAfetaReuniao(bloqueio, a))
                 .toList();
     }

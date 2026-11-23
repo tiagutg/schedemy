@@ -19,21 +19,39 @@ import { TextField, SelectField, FieldGrid, CheckboxField, FieldError } from "@/
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DIAS_SEMANA, rotularEnum } from "@/utils/domain";
+import { DIAS_SEMANA, rotularDiaSemana, rotularEnum } from "@/utils/domain";
 import { formatarData, hojeISO } from "@/utils/format";
 import type { Bloqueio, Params } from "@/types";
 import ReunioesAfetadasModal from "./ReunioesAfetadasModal";
+
+// Mesma faixa sugerida na criação de disponibilidade.
+const HORARIO_PADRAO = { inicio: "08:00", fim: "12:00" };
 
 const FORM_VAZIO = {
   idUsuario: "",
   dataInicio: hojeISO(),
   dataFim: hojeISO(),
-  horarioInicio: "",
-  horarioFim: "",
+  diaInteiro: false,
+  horarioInicio: HORARIO_PADRAO.inicio,
+  horarioFim: HORARIO_PADRAO.fim,
   eRecorrente: false,
   diaSemanaRecorrente: "2",
+  // RF 05: só o recorrente pode ficar sem data de fim (vale até ser removido).
+  semFim: false,
   motivo: "",
 };
+
+// "Toda segunda-feira", "Todo sábado".
+function descreverRecorrencia(dia: number): string {
+  return `${dia === 1 || dia === 7 ? "Todo" : "Toda"} ${rotularDiaSemana(dia).toLowerCase()}`;
+}
+
+function descreverPeriodo(b: Bloqueio): string {
+  if (!b.dataFim) return `A partir de ${formatarData(b.dataInicio)} (sem data de fim)`;
+  return b.dataInicio === b.dataFim
+    ? formatarData(b.dataInicio)
+    : `${formatarData(b.dataInicio)} – ${formatarData(b.dataFim)}`;
+}
 
 export default function BloqueiosPage() {
   const toast = useToast();
@@ -79,14 +97,17 @@ export default function BloqueiosPage() {
 
   function abrirEdicao(b: Bloqueio) {
     setEditando(b);
+    const diaInteiro = !b.horarioInicio && !b.horarioFim;
     setForm({
       idUsuario: String(b.idUsuario),
       dataInicio: b.dataInicio,
-      dataFim: b.dataFim,
-      horarioInicio: b.horarioInicio ? b.horarioInicio.slice(0, 5) : "",
-      horarioFim: b.horarioFim ? b.horarioFim.slice(0, 5) : "",
+      dataFim: b.dataFim ?? "",
+      diaInteiro,
+      horarioInicio: b.horarioInicio ? b.horarioInicio.slice(0, 5) : diaInteiro ? HORARIO_PADRAO.inicio : "",
+      horarioFim: b.horarioFim ? b.horarioFim.slice(0, 5) : diaInteiro ? HORARIO_PADRAO.fim : "",
       eRecorrente: b.eRecorrente,
       diaSemanaRecorrente: String(b.diaSemanaRecorrente || 2),
+      semFim: b.eRecorrente && !b.dataFim,
       motivo: b.motivo || "",
     });
     setErro("");
@@ -99,9 +120,18 @@ export default function BloqueiosPage() {
       setErro("Selecione um professor ou coordenador.");
       return;
     }
-    // Mesma regra do back: com os dois horários preenchidos, o fim precisa vir depois do início.
-    if (form.horarioInicio && form.horarioFim && form.horarioFim <= form.horarioInicio) {
-      setErro("O horário de fim deve ser posterior ao de início. Para bloquear até o fim do dia, deixe o fim em branco.");
+    const semFim = form.eRecorrente && form.semFim;
+    if (!semFim && !form.dataFim) {
+      setErro("Informe a data de fim. Somente o bloqueio recorrente pode ficar sem data de fim.");
+      return;
+    }
+    if (!semFim && form.dataFim < form.dataInicio) {
+      setErro("A data de fim deve ser igual ou posterior à data de início.");
+      return;
+    }
+    // Mesma regra do back: o fim precisa vir depois do início.
+    if (!form.diaInteiro && form.horarioFim <= form.horarioInicio) {
+      setErro("O horário de fim deve ser posterior ao de início.");
       return;
     }
     setSalvando(true);
@@ -109,9 +139,9 @@ export default function BloqueiosPage() {
       const payload = {
         idUsuario: Number(form.idUsuario),
         dataInicio: form.dataInicio,
-        dataFim: form.dataFim,
-        horarioInicio: form.horarioInicio ? `${form.horarioInicio}:00` : null,
-        horarioFim: form.horarioFim ? `${form.horarioFim}:00` : null,
+        dataFim: semFim ? null : form.dataFim,
+        horarioInicio: form.diaInteiro ? null : `${form.horarioInicio}:00`,
+        horarioFim: form.diaInteiro ? null : `${form.horarioFim}:00`,
         eRecorrente: form.eRecorrente,
         diaSemanaRecorrente: form.eRecorrente ? Number(form.diaSemanaRecorrente) : null,
         motivo: form.motivo || null,
@@ -191,11 +221,13 @@ export default function BloqueiosPage() {
           ...(gerenciaTodos
             ? [{ chave: "usuario", titulo: "Professor / coordenador", render: (b: Bloqueio) => b.nomeUsuario }]
             : []),
-          { chave: "periodo", titulo: "Período", render: (b) =>
-              b.dataInicio === b.dataFim ? formatarData(b.dataInicio) : `${formatarData(b.dataInicio)} – ${formatarData(b.dataFim)}` },
+          { chave: "periodo", titulo: "Período", render: (b) => descreverPeriodo(b) },
           { chave: "horario", titulo: "Horário", render: (b) =>
-              b.horarioInicio ? `${b.horarioInicio.slice(0, 5)} – ${b.horarioFim?.slice(0, 5)}` : "Dia inteiro" },
-          { chave: "recorrente", titulo: "Recorrente", render: (b) => (b.eRecorrente ? "Sim" : "Não") },
+              b.horarioInicio || b.horarioFim
+                ? `${b.horarioInicio?.slice(0, 5) ?? "00:00"} – ${b.horarioFim?.slice(0, 5) ?? "fim do dia"}`
+                : "Dia inteiro" },
+          { chave: "recorrente", titulo: "Recorrente", render: (b) =>
+              b.eRecorrente ? descreverRecorrencia(b.diaSemanaRecorrente ?? 0) : "Não" },
           { chave: "motivo", titulo: "Motivo", render: (b) => b.motivo || "—" },
         ]}
         acoes={(b) => (
@@ -231,9 +263,36 @@ export default function BloqueiosPage() {
           ) : (
             <TextField label="Professor / coordenador" value={eu?.nome ?? ""} disabled />
           )}
+          <CheckboxField
+            label="Bloqueio recorrente (repete semanalmente)"
+            checked={form.eRecorrente}
+            onCheckedChange={(eRecorrente) =>
+              setForm({ ...form, eRecorrente, dataFim: form.dataFim || form.dataInicio })
+            }
+          />
+          {form.eRecorrente && (
+            <FieldGrid>
+              <SelectField
+                label="Dia da semana recorrente"
+                required
+                options={DIAS_SEMANA.map((d) => ({ valor: d.valor, rotulo: d.rotulo }))}
+                value={form.diaSemanaRecorrente}
+                onChange={(e) => setForm({ ...form, diaSemanaRecorrente: e.target.value })}
+              />
+              <CheckboxField
+                className="sm:mt-6"
+                label="Sem data de fim"
+                checked={form.semFim}
+                onCheckedChange={(semFim) =>
+                  setForm({ ...form, semFim, dataFim: form.dataFim || form.dataInicio })
+                }
+              />
+            </FieldGrid>
+          )}
+
           <FieldGrid>
             <div className="flex flex-col gap-2">
-              <Label htmlFor="bloq-data-inicio">Data de início</Label>
+              <Label htmlFor="bloq-data-inicio">{form.eRecorrente ? "Repete a partir de" : "Data de início"}</Label>
               <Input
                 id="bloq-data-inicio"
                 type="date"
@@ -242,52 +301,59 @@ export default function BloqueiosPage() {
                 required
               />
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="bloq-data-fim">Data de fim</Label>
-              <Input
-                id="bloq-data-fim"
-                type="date"
-                value={form.dataFim}
-                onChange={(e) => setForm({ ...form, dataFim: e.target.value })}
-                required
-              />
-            </div>
+            {!(form.eRecorrente && form.semFim) && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="bloq-data-fim">{form.eRecorrente ? "Repete até" : "Data de fim"}</Label>
+                <Input
+                  id="bloq-data-fim"
+                  type="date"
+                  min={form.dataInicio}
+                  value={form.dataFim}
+                  onChange={(e) => setForm({ ...form, dataFim: e.target.value })}
+                  required
+                />
+              </div>
+            )}
           </FieldGrid>
-          <FieldGrid>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="bloq-hora-inicio">Horário de início (opcional)</Label>
-              <Input
-                id="bloq-hora-inicio"
-                type="time"
-                value={form.horarioInicio}
-                onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="bloq-hora-fim">Horário de fim (opcional)</Label>
-              <Input
-                id="bloq-hora-fim"
-                type="time"
-                value={form.horarioFim}
-                onChange={(e) => setForm({ ...form, horarioFim: e.target.value })}
-              />
-            </div>
-          </FieldGrid>
-          <p className="text-sm text-muted-foreground">Deixe os horários em branco para bloquear o dia inteiro.</p>
+          {form.eRecorrente && form.semFim && (
+            <p className="text-sm text-muted-foreground">O bloqueio vale toda semana até ser removido.</p>
+          )}
 
           <CheckboxField
-            label="Bloqueio recorrente (repete semanalmente)"
-            checked={form.eRecorrente}
-            onCheckedChange={(eRecorrente) => setForm({ ...form, eRecorrente })}
+            label="Dia inteiro"
+            checked={form.diaInteiro}
+            onCheckedChange={(diaInteiro) =>
+              setForm({
+                ...form,
+                diaInteiro,
+                horarioInicio: form.horarioInicio || HORARIO_PADRAO.inicio,
+                horarioFim: form.horarioFim || HORARIO_PADRAO.fim,
+              })
+            }
           />
-          {form.eRecorrente && (
-            <SelectField
-              label="Dia da semana recorrente"
-              required
-              options={DIAS_SEMANA.map((d) => ({ valor: d.valor, rotulo: d.rotulo }))}
-              value={form.diaSemanaRecorrente}
-              onChange={(e) => setForm({ ...form, diaSemanaRecorrente: e.target.value })}
-            />
+          {!form.diaInteiro && (
+            <FieldGrid>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="bloq-hora-inicio">Horário de início</Label>
+                <Input
+                  id="bloq-hora-inicio"
+                  type="time"
+                  value={form.horarioInicio}
+                  onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="bloq-hora-fim">Horário de fim</Label>
+                <Input
+                  id="bloq-hora-fim"
+                  type="time"
+                  value={form.horarioFim}
+                  onChange={(e) => setForm({ ...form, horarioFim: e.target.value })}
+                  required
+                />
+              </div>
+            </FieldGrid>
           )}
 
           <TextField

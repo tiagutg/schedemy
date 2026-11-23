@@ -166,7 +166,9 @@ public class CalculadoraDeAgenda {
     /** RF 06 - o bloqueio cobre a reuniao (data, recorrencia e horario)? */
     public boolean bloqueioAfetaReuniao(BloqueioPeriodo bloqueio, Agendamento reuniao) {
         LocalDate data = reuniao.getDataReuniao();
-        if (data.isBefore(bloqueio.getDataInicio()) || data.isAfter(bloqueio.getDataFim())) {
+        // RF 05 - recorrente sem data de fim vale ate ser removido.
+        if (data.isBefore(bloqueio.getDataInicio())
+                || (bloqueio.getDataFim() != null && data.isAfter(bloqueio.getDataFim()))) {
             return false;
         }
         if (Boolean.TRUE.equals(bloqueio.getERecorrente())

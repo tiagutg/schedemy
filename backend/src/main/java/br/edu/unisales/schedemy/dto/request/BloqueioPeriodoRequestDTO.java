@@ -19,8 +19,8 @@ public record BloqueioPeriodoRequestDTO(
         @NotNull(message = "dataInicio e obrigatorio")
         LocalDate dataInicio,
 
-        @Schema(example = "2026-10-10")
-        @NotNull(message = "dataFim e obrigatorio")
+        @Schema(example = "2026-10-10",
+                description = "Obrigatoria, exceto no bloqueio recorrente: vazia, ele vale ate ser removido (RF 05)")
         LocalDate dataFim,
 
         @Schema(example = "13:00:00")

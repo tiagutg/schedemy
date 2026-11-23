@@ -16,6 +16,7 @@ import {
 import { notificacoesApi } from "@/api/notificacoes";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { useAoAtualizarDados } from "@/hooks/useAoAtualizarDados";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -72,10 +73,13 @@ export default function NotificacoesPage() {
     (params: Params) => notificacoesApi.listar({ ...params, usuarioId: params.usuarioId || (verDeTodos ? "" : eu?.id) }),
     [eu, verDeTodos]
   );
-  const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar, {
-    ordenarPor: "criadoEm,desc",
-    filtrosIniciais: verDeTodos ? {} : { usuarioId: String(eu?.id ?? "") },
-  });
+  const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar, atualizarEmSilencio } =
+    usePaginatedList(buscar, {
+      ordenarPor: "criadoEm,desc",
+      filtrosIniciais: verDeTodos ? {} : { usuarioId: String(eu?.id ?? "") },
+    });
+  // Aviso novo aparece na lista sem recarregar a página.
+  useAoAtualizarDados(atualizarEmSilencio);
   const minhas = !verDeTodos || filtros.usuarioId === String(eu?.id);
 
   const podeMarcar = (n: Notificacao) => n.statusEnvio === "PENDENTE" && n.idUsuario === eu?.id;

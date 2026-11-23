@@ -12,6 +12,7 @@ import {
   calcularAgendaDoDia,
   diaSemanaDe,
   diasDeAtendimentoEmComum,
+  horarioDeTermino,
   paraHora,
   quemImpedeHorarioEmComum,
   resumirSemana,
@@ -42,6 +43,8 @@ interface AgendaDocentesProps {
   onEscolherHorario: (horario: string) => void;
   /** Escolhe outro dia (e já o primeiro horário livre nele). */
   onEscolherData?: (dataISO: string, horario: string) => void;
+  /** Avisado com o primeiro dia livre para todos (e o primeiro horário nele) sempre que a lista muda. */
+  onPrimeiroDiaLivre?: (dataISO: string, horario: string) => void;
   /** Tira um convidado da reunião (oferecido para docente sem horário de atendimento). */
   onRemoverConvidado?: (id: number) => void;
   /** O organizador não pode ser tirado da própria reunião. */
@@ -69,6 +72,7 @@ export default function AgendaDocentes({
   ignorarAgendamentoId,
   onEscolherHorario,
   onEscolherData,
+  onPrimeiroDiaLivre,
   onRemoverConvidado,
   idOrganizador,
 }: AgendaDocentesProps) {
@@ -209,6 +213,15 @@ export default function AgendaDocentes({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveDias, gradesProntas]);
   const carregandoDias = !!idDuracao && (!gradesProntas || diasLivres.chave !== chaveDias);
+
+  // Quem abriu o modal decide se segue a sugestão (só enquanto a pessoa não escolheu data/horário).
+  const primeiroDia = !carregandoDias ? diasLivres.dias[0] : undefined;
+  const chavePrimeiro = primeiroDia ? `${chaveDias}|${primeiroDia.data}|${primeiroDia.horarios[0]}` : "";
+  useEffect(() => {
+    if (primeiroDia && onPrimeiroDiaLivre) onPrimeiroDiaLivre(primeiroDia.data, primeiroDia.horarios[0]);
+    // chavePrimeiro resume o primeiro dia e o contexto em que foi calculado.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chavePrimeiro]);
   const semGrade = gradesProntas ? docentes.filter((d) => (grades.dados[d.id] ?? []).length === 0) : [];
   // Nenhum dia serve para todos: explica o motivo e quem trava, em vez de mandar trocar a data.
   const nenhumDiaLivre =
@@ -230,6 +243,8 @@ export default function AgendaDocentes({
   // Com docente sem grade, o aviso de cima já explica: não repete "horário não está livre".
   const podeAvaliar = !carregandoLivres && !erroLivres && !!horario && duracaoMinutos > 0 && !ocultarDia;
   const horarioLivre = sugestoes.includes(horario);
+  const termino = horarioDeTermino(horario, duracaoMinutos);
+  const faixa = termino ? `${horario}–${termino}` : `${horario} (${duracaoMinutos} min)`;
 
   return (
     <section aria-label="Agenda dos docentes" className="flex flex-col gap-3 rounded-lg border border-brand-200 bg-brand-50 p-3.5">
@@ -336,8 +351,8 @@ export default function AgendaDocentes({
             <IconAlertTriangle className="mt-0.5 size-4 shrink-0" />
           )}
           {horarioLivre
-            ? `O horário ${horario} está livre para todos os envolvidos.`
-            : `O horário ${horario} (${duracaoMinutos} min) não está livre para todos os envolvidos. Escolha um horário sugerido abaixo.`}
+            ? `O horário ${faixa} está livre para todos os envolvidos.`
+            : `O horário ${faixa} não está livre para todos os envolvidos. Escolha um horário sugerido abaixo.`}
         </p>
       )}
 

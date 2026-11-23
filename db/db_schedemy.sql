@@ -104,7 +104,7 @@ CREATE TABLE bloqueio_periodo (
     id_bloqueio BIGINT UNSIGNED AUTO_INCREMENT,
     id_usuario BIGINT UNSIGNED NOT NULL,
     data_inicio DATE NOT NULL,
-    data_fim DATE NOT NULL,
+    data_fim DATE NULL COMMENT 'Vazio = recorrente sem data de fim (RF 05)',
     horario_inicio TIME,
     horario_fim TIME,
     e_recorrente TINYINT(1) NOT NULL DEFAULT 0,
@@ -130,6 +130,10 @@ CREATE TABLE bloqueio_periodo (
             OR
             (e_recorrente = 1 AND dia_semana_recorrente BETWEEN 1 AND 7)
 		),
+
+    -- RF 05: so o bloqueio recorrente pode ficar sem data de fim (vale ate ser removido)
+    CONSTRAINT chk_bloqueio_fim
+        CHECK (data_fim IS NOT NULL OR e_recorrente = 1),
     
     INDEX idx_bloqueio_consulta (id_usuario, data_inicio, data_fim)
 ) COMMENT='Períodos de indisponibilidade e impedimentos na agenda do docente';

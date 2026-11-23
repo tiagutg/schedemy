@@ -177,6 +177,13 @@ class CalculadoraDeAgendaTest {
         assertThat(calculadora.bloqueioAfetaReuniao(todaTerca, reuniao(TERCA.plusDays(1), "14:00", 30))).isFalse();
         assertThat(calculadora.bloqueioAfetaReuniao(todaTerca, reuniao(TERCA, "10:00", 30))).isFalse();
         assertThat(calculadora.bloqueioAfetaReuniao(todaTerca, reuniao(TERCA.plusWeeks(4), "14:00", 30))).isFalse();
+
+        // RF 05 - sem data de fim: vale em qualquer terca a partir do inicio.
+        BloqueioPeriodo semFim = bloqueio(TERCA, null, "13:00", "18:00");
+        semFim.setERecorrente(true);
+        semFim.setDiaSemanaRecorrente(todaTerca.getDiaSemanaRecorrente());
+        assertThat(calculadora.bloqueioAfetaReuniao(semFim, reuniao(TERCA.plusWeeks(52), "14:00", 30))).isTrue();
+        assertThat(calculadora.bloqueioAfetaReuniao(semFim, reuniao(TERCA.minusWeeks(1), "14:00", 30))).isFalse();
     }
 
     @Test

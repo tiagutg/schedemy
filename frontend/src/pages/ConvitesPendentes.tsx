@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useAvisos } from "@/context/AvisosContext";
 import { IconCheck, IconMailQuestion, IconX } from "@tabler/icons-react";
 import { agendamentosApi } from "@/api/agendamentos";
 import type { ApiError } from "@/api/client";
@@ -41,6 +42,8 @@ export default function ConvitesPendentes({ onRespondido }: { onRespondido?: () 
     );
   }, [eu]);
 
+  // Convite novo (ou cancelado por outra pessoa) aparece sem recarregar a página.
+  const { versaoDados } = useAvisos();
   useEffect(() => {
     if (!podeResponder) return;
     let cancelado = false;
@@ -50,7 +53,7 @@ export default function ConvitesPendentes({ onRespondido }: { onRespondido?: () 
     return () => {
       cancelado = true;
     };
-  }, [carregar, podeResponder]);
+  }, [carregar, podeResponder, versaoDados]);
 
   async function responder(a: Agendamento, aceitar: boolean) {
     if (!eu) return;

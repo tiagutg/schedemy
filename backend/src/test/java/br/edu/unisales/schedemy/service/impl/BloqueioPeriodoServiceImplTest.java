@@ -118,6 +118,21 @@ class BloqueioPeriodoServiceImplTest {
     }
 
     @Test
+    @DisplayName("RF 05: so o bloqueio recorrente pode ficar sem data de fim")
+    void semDataDeFim() {
+        BloqueioPeriodoRequestDTO unicoSemFim = new BloqueioPeriodoRequestDTO(ID_USUARIO, DIA, null,
+                null, null, false, null, "Congresso", null);
+        assertThatThrownBy(() -> service.criar(unicoSemFim))
+                .isInstanceOf(RegraDeNegocioException.class)
+                .hasMessageContaining("data de fim");
+        verify(bloqueioPeriodoRepository, never()).save(any());
+
+        service.criar(new BloqueioPeriodoRequestDTO(ID_USUARIO, DIA, null,
+                LocalTime.of(14, 0), LocalTime.of(16, 0), true, 3, "Colegiado", null));
+        verify(bloqueioPeriodoRepository).save(any());
+    }
+
+    @Test
     @DisplayName("edicao tambem valida horario e papel")
     void edicaoValida() {
         BloqueioPeriodo existente = BloqueioPeriodo.builder().id(5L)
