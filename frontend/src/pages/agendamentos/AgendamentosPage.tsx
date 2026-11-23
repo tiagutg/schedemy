@@ -15,10 +15,11 @@ import Pill from "@/components/common/Pill";
 import EmptyState from "@/components/common/EmptyState";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import { SelectField, TextField } from "@/components/common/fields";
+import ComboboxField from "@/components/common/ComboboxField";
 import { Button } from "@/components/ui/button";
-import { rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora, hojeISO } from "@/utils/format";
-import { FILTROS_STATUS, descreverEnvolvidos, situacaoDaReuniao } from "@/utils/reuniao";
+import { CORES_TIPO_USUARIO, TIPOS_PARTICIPANTES, rotularEnum } from "@/utils/domain";
+import { formatarHora, hojeISO } from "@/utils/format";
+import { FILTROS_STATUS, STATUS_ATIVOS, descreverEnvolvidos, rotuloGrupoDoDia, situacaoDaReuniao } from "@/utils/reuniao";
 import type { Agendamento, Params } from "@/types";
 import NovoAgendamentoModal, { type ModoAgendamento } from "./NovoAgendamentoModal";
 import AgendamentoDetailModal from "./AgendamentoDetailModal";
@@ -26,7 +27,8 @@ import AgendaSemanal from "./AgendaSemanal";
 
 type Visao = "lista" | "semana";
 
-// Período da lista: as próximas primeiro (a agenda do dia a dia), as anteriores da mais recente para trás.
+// Período da lista: as próximas (só as que ainda vão acontecer) da mais perto para a mais longe;
+// as anteriores e "todas", da mais recente para trás.
 const PERIODOS = [
   { valor: "proximas", rotulo: "Próximas" },
   { valor: "anteriores", rotulo: "Anteriores" },
@@ -55,6 +57,8 @@ export default function AgendamentosPage() {
   const { pode, perfilVinculado: eu } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const { usuarios } = useUsuariosOptions();
+  // Recepção e administração não participam de reuniões (RN 03): não há o que filtrar por elas.
+  const participantes = usuarios.filter((u) => TIPOS_PARTICIPANTES.includes(u.tipoUsuario));
 
   // Quem não acompanha a agenda geral vê só os agendamentos de que participa.
   const verTodos = pode("agendamentos.verTodos");
@@ -67,6 +71,8 @@ export default function AgendamentosPage() {
       // O período só completa as datas que o usuário não escolheu.
       if (periodo === "proximas") {
         resto.dataInicio ||= hojeISO();
+        // Concluídas e canceladas não são "próximas"; um status escolhido no filtro tem prioridade.
+        resto.status ||= STATUS_ATIVOS;
         resto.sort = ORDEM_CRESCENTE;
       } else if (periodo === "anteriores") {
         resto.dataFim ||= ontemISO();
@@ -253,13 +259,19 @@ export default function AgendamentosPage() {
 
       <FiltrosCard>
         {verTodos && (
-          <SelectField
-            label="Usuário envolvido"
+          <ComboboxField
+            label="Participante"
             className="w-full sm:w-64"
-            placeholder="Todos os agendamentos"
-            options={usuarios.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            placeholder="Todas as pessoas"
+            limpavel
+            options={participantes.map((u) => ({
+              valor: u.id,
+              rotulo: u.nome,
+              busca: u.matriculaRa ?? "",
+              detalhe: <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>,
+            }))}
             value={filtros.usuarioId || ""}
-            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+            onChange={(valor) => aplicarFiltros({ ...filtros, usuarioId: valor })}
           />
         )}
         <SelectField
@@ -343,6 +355,7 @@ export default function AgendamentosPage() {
             carregando={carregando}
             chaveLinha={(a) => a.id}
             linhas={linhas}
+            grupo={(a) => rotuloGrupoDoDia(a.dataReuniao)}
             linhaVazia={
               <EmptyState
                 titulo={filtros.periodo === "proximas" ? "Nenhuma reunião pela frente" : "Nenhuma reunião encontrada"}
@@ -362,7 +375,11 @@ export default function AgendamentosPage() {
                 ) },
               { chave: "data", titulo: "Quando", render: (a) => (
                   <div>
-                    <p className="tabular-nums">{`${formatarData(a.dataReuniao)} · ${formatarHora(a.horarioInicio)}`}</p>
+                    {/* A data está no cabeçalho do grupo do dia. */}
+                    <p className="tabular-nums">
+                      {formatarHora(a.horarioInicio)}
+                      {a.horarioFim ? `–${formatarHora(a.horarioFim)}` : ""}
+                    </p>
                     <p className="text-xs text-muted-foreground">{rotularEnum(a.formato)}</p>
                   </div>
                 ) },

@@ -2,6 +2,9 @@
 
 export const TIPOS_USUARIO = ["ALUNO", "PROFESSOR", "COORDENADOR", "RECEPCIONISTA", "ADMIN"];
 
+// RN 03: recepção e administração não participam das reuniões, só agendam para outros.
+export const TIPOS_PARTICIPANTES = ["ALUNO", "PROFESSOR", "COORDENADOR"];
+
 export const FORMATOS_REUNIAO = ["PRESENCIAL", "ONLINE", "HIBRIDO"];
 
 export const STATUS_AGENDAMENTO = [

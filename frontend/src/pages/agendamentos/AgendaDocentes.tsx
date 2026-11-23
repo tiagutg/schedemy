@@ -13,13 +13,15 @@ import {
   diaSemanaDe,
   diasDeAtendimentoEmComum,
   horarioDeTermino,
+  faixasPorDia,
+  NOMES_DIAS_CURTOS,
   paraHora,
   quemImpedeHorarioEmComum,
-  resumirSemana,
   rotuloDia,
   temHorarioEmComumNaSemana,
 } from "@/utils/agenda";
 import { formatarData } from "@/utils/format";
+import { nomeCurto } from "@/utils/reuniao";
 import type { Agendamento, Bloqueio, Disponibilidade } from "@/types";
 
 interface DadosDocente {
@@ -107,48 +109,43 @@ export default function AgendaDocentes({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chaveLivres]);
 
-  // Horário de atendimento de cada docente e, para o próprio docente, a agenda do dia.
   const chaveDocentes = docentes.map((d) => d.id).join(",");
-  const chaveAgendas = `${chaveDocentes}|${dataISO}`;
-  const [agendas, setAgendas] = useState<{ chave: string; dados: Record<number, DadosDocente> }>({
+
+  // Só o docente logado vê a própria agenda do dia (reuniões e bloqueios); a dos outros não é exposta (RNF 15).
+  const souDocente = meuId != null && docentes.some((d) => d.id === meuId);
+  const chaveAgenda = souDocente && dataISO ? `${meuId}|${dataISO}` : "";
+  const [minhaAgenda, setMinhaAgenda] = useState<{ chave: string; dados: DadosDocente | null }>({
     chave: "",
-    dados: {},
+    dados: null,
   });
 
   useEffect(() => {
-    if (!dataISO || !chaveDocentes) return;
+    if (!chaveAgenda || meuId == null) return;
     let cancelado = false;
-    const ids = chaveDocentes.split(",").map(Number);
-    const chave = `${chaveDocentes}|${dataISO}`;
-    Promise.all(
-      ids.map(async (id) => {
-        const ehEu = id === meuId;
-        const [disponibilidades, bloqueios, agendamentos] = await Promise.all([
-          disponibilidadesApi
-            .listar({ usuarioId: id, diaSemana: diaSemanaDe(dataISO), ativo: true, size: 50 })
-            .then((p) => p.conteudo),
-          ehEu
-            ? bloqueiosApi
-                .listar({ usuarioId: id, size: 200 })
-                .then((p) => p.conteudo)
-                .catch(() => [])
-            : [],
-          ehEu
-            ? agendamentosApi
-                .listarPorUsuario(id, { dataInicio: dataISO, dataFim: dataISO, size: 50 })
-                .then((p) => p.conteudo)
-                .catch(() => [])
-            : [],
-        ]);
-        return [id, { disponibilidades, bloqueios, agendamentos }] as const;
+    const chave = chaveAgenda;
+    Promise.all([
+      disponibilidadesApi
+        .listar({ usuarioId: meuId, diaSemana: diaSemanaDe(dataISO), ativo: true, size: 50 })
+        .then((p) => p.conteudo),
+      bloqueiosApi
+        .listar({ usuarioId: meuId, size: 200 })
+        .then((p) => p.conteudo)
+        .catch(() => []),
+      agendamentosApi
+        .listarPorUsuario(meuId, { dataInicio: dataISO, dataFim: dataISO, size: 50 })
+        .then((p) => p.conteudo)
+        .catch(() => []),
+    ])
+      .then(([disponibilidades, bloqueios, agendamentos]) => {
+        if (!cancelado) setMinhaAgenda({ chave, dados: { disponibilidades, bloqueios, agendamentos } });
       })
-    )
-      .then((porDocente) => !cancelado && setAgendas({ chave, dados: Object.fromEntries(porDocente) }))
-      .catch(() => !cancelado && setAgendas({ chave, dados: {} }));
+      .catch(() => !cancelado && setMinhaAgenda({ chave, dados: null }));
     return () => {
       cancelado = true;
     };
-  }, [chaveDocentes, dataISO, meuId]);
+    // chaveAgenda resume meuId e dataISO.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chaveAgenda]);
 
   // Grade semanal de cada docente (pública): mostra em que dias atende e indica os dias candidatos.
   const [grades, setGrades] = useState<{ chave: string; dados: Record<number, Disponibilidade[]> }>({
@@ -237,7 +234,21 @@ export default function AgendaDocentes({
 
   if (docentes.length === 0) return null;
 
-  const carregandoAgendas = !!dataISO && agendas.chave !== chaveAgendas;
+  const carregandoAgendas = !!chaveAgenda && minhaAgenda.chave !== chaveAgenda;
+  // Minhas reuniões e bloqueios no dia escolhido, para eu entender por que um horário não aparece.
+  const meusOcupados =
+    !carregandoAgendas && minhaAgenda.dados && dataISO
+      ? calcularAgendaDoDia({
+          dataISO,
+          duracaoMinutos,
+          ...minhaAgenda.dados,
+          ignorarAgendamentoId,
+        }).ocupados
+      : [];
+  // Colunas da tabela: segunda a sábado, e domingo só se alguém atender nele.
+  const faixas = Object.fromEntries(docentes.map((d) => [d.id, faixasPorDia(grades.dados[d.id] ?? [])]));
+  const diasDaTabela = [2, 3, 4, 5, 6, 7, ...(docentes.some((d) => faixas[d.id][1]) ? [1] : [])];
+  const diaEscolhido = dataISO ? diaSemanaDe(dataISO) : null;
   const sugestoes = livres.chave === chaveLivres ? livres.horarios : [];
   const erroLivres = livres.chave === chaveLivres ? livres.erro : "";
   // Com docente sem grade, o aviso de cima já explica: não repete "horário não está livre".
@@ -397,47 +408,80 @@ export default function AgendaDocentes({
         ))
       )}
 
-      <ul className="flex flex-col gap-2">
-        {docentes.map((docente) => {
-          const info = carregandoAgendas ? undefined : agendas.dados[docente.id];
-          const grade = gradesProntas ? (grades.dados[docente.id] ?? []) : null;
-          const semana = grade && grade.length > 0 ? resumirSemana(grade) : "";
-          const agenda = info && dataISO
-            ? calcularAgendaDoDia({
-                dataISO,
-                duracaoMinutos,
-                disponibilidades: info.disponibilidades,
-                bloqueios: info.bloqueios,
-                agendamentos: info.agendamentos,
-                ignorarAgendamentoId,
-              })
-            : null;
-          return (
-            <li key={docente.id} className="flex flex-col gap-1 rounded-md bg-card p-2.5 text-sm shadow-xs">
-              <p className="font-medium">
-                {docente.nome}
-                {docente.id === meuId && <span className="font-normal text-muted-foreground"> (você)</span>}
-              </p>
-              {!dataISO ? null : !agenda ? (
-                <p className="text-xs text-muted-foreground">Carregando…</p>
-              ) : agenda.janelas.length === 0 ? (
-                <p className="text-xs text-amber-700 dark:text-amber-300">
-                  {grade && grade.length === 0
-                    ? "Ainda não cadastrou horários de atendimento."
-                    : "Não atende neste dia da semana."}
-                </p>
-              ) : (
-                <p className="text-xs text-muted-foreground">
-                  Neste dia: {agenda.janelas.map((j) => `${paraHora(j.inicio)}–${paraHora(j.fim)}`).join(", ")}
-                  {agenda.ocupados.length > 0 &&
-                    ` · Ocupado: ${agenda.ocupados.map((o) => `${paraHora(o.inicio)}–${paraHora(o.fim)}${o.rotulo?.startsWith("Bloqueio") ? " (bloqueio)" : ""}`).join(", ")}`}
-                </p>
-              )}
-              {semana && <p className="text-xs text-muted-foreground">Na semana: {semana}</p>}
-            </li>
-          );
-        })}
-      </ul>
+      <div className="flex flex-col gap-1.5 border-t border-brand-200 pt-3">
+        <p className="text-sm font-medium text-brand-900">Horário de atendimento</p>
+        {!gradesProntas ? (
+          <p className="text-xs text-muted-foreground">Carregando…</p>
+        ) : (
+          <div className="overflow-x-auto rounded-md border border-brand-200 bg-card">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b border-brand-200 text-muted-foreground">
+                  <th scope="col" className="px-2 py-1.5 text-left font-medium">
+                    <span className="sr-only">Docente</span>
+                  </th>
+                  {diasDaTabela.map((dia) => (
+                    <th
+                      key={dia}
+                      scope="col"
+                      className={cn(
+                        "px-1.5 py-1.5 text-center font-medium",
+                        dia === diaEscolhido && "bg-brand-100 text-brand-900"
+                      )}
+                    >
+                      {NOMES_DIAS_CURTOS[dia - 1]}
+                      {dia === diaEscolhido && <span className="sr-only"> (dia escolhido)</span>}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {docentes.map((docente) => {
+                  const semGradeDocente = Object.keys(faixas[docente.id]).length === 0;
+                  return (
+                    <tr key={docente.id} className="border-b border-brand-100 last:border-0">
+                      <th scope="row" className="max-w-36 px-2 py-1.5 text-left align-top font-medium">
+                        {nomeCurto(docente.nome)}
+                        {docente.id === meuId && <span className="font-normal text-muted-foreground"> (você)</span>}
+                      </th>
+                      {semGradeDocente ? (
+                        <td colSpan={diasDaTabela.length} className="px-2 py-1.5 text-amber-700 dark:text-amber-300">
+                          Ainda não cadastrou horários de atendimento.
+                        </td>
+                      ) : (
+                        diasDaTabela.map((dia) => (
+                          <td
+                            key={dia}
+                            className={cn(
+                              "px-1.5 py-1.5 text-center align-top whitespace-nowrap tabular-nums",
+                              dia === diaEscolhido && "bg-brand-100/60"
+                            )}
+                          >
+                            {faixas[docente.id][dia]?.map((f) => <div key={f}>{f}</div>) ?? (
+                              <span className="text-muted-foreground/60" aria-label="Não atende">
+                                –
+                              </span>
+                            )}
+                          </td>
+                        ))
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {meusOcupados.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Sua agenda em {formatarData(dataISO)}: ocupado{" "}
+            {meusOcupados
+              .map((o) => `${paraHora(o.inicio)}–${paraHora(o.fim)}${o.rotulo?.startsWith("Bloqueio") ? " (bloqueio)" : ""}`)
+              .join(", ")}
+            .
+          </p>
+        )}
+      </div>
 
       <p className="text-xs text-muted-foreground">
         Os horários sugeridos já descontam reuniões marcadas e períodos bloqueados de todos os envolvidos, sem

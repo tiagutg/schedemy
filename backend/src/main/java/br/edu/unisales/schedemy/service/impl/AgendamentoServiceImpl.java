@@ -193,8 +193,11 @@ public class AgendamentoServiceImpl implements AgendamentoService {
     public Page<AgendamentoResponseDTO> listarPorUsuario(Long usuarioId, List<StatusAgendamento> status,
                                                          LocalDate dataInicio, LocalDate dataFim, String busca,
                                                          Pageable pageable) {
-        usuarioAutenticado.exigirProprioOuAdmin(usuarioId,
-                "Voce so pode listar os seus proprios agendamentos.");
+        // RF 20/RF 21 - a recepcao acompanha todos os agendamentos, inclusive filtrando por participante.
+        if (!usuarioAutenticado.podeGerirAgendamentosDeTerceiros()) {
+            usuarioAutenticado.exigirProprioOuAdmin(usuarioId,
+                    "Voce so pode listar os seus proprios agendamentos.");
+        }
         buscarUsuario(usuarioId);
         return agendamentoRepository.buscarPorUsuarioComFiltros(usuarioId, statusOuTodos(status), dataInicio, dataFim,
                         termoDeBusca(busca), pageable)

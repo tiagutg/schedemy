@@ -180,13 +180,27 @@ export function rotuloDia(dataISO: string): string {
   return `${DIAS_CURTOS[diaSemanaDe(dataISO) - 1]}, ${dia}/${mes}`;
 }
 
-/** Horário de atendimento da semana em uma linha: "Seg 08:00–12:00 · Qua 08:00–12:00". */
-export function resumirSemana(disponibilidades: Disponibilidade[]): string {
-  return disponibilidades
+export const NOMES_DIAS_CURTOS = DIAS_CURTOS;
+
+/** "08:00" -> "08"; "13:30" -> "13:30": hora cheia sem os minutos, para caber na tabela da semana. */
+function horaCompacta(hora: string): string {
+  const hhmm = hora.slice(0, 5);
+  return hhmm.endsWith(":00") ? hhmm.slice(0, 2) : hhmm;
+}
+
+/**
+ * Horário de atendimento agrupado por dia da semana (1 = domingo ... 7 = sábado),
+ * em ordem: { 2: ["08–12", "14–18"], 4: ["13:30–18"] }. Só as faixas ativas.
+ */
+export function faixasPorDia(disponibilidades: Disponibilidade[]): Record<number, string[]> {
+  const porDia: Record<number, string[]> = {};
+  [...disponibilidades]
     .filter((d) => d.ativo)
     .sort((a, b) => a.diaSemana - b.diaSemana || paraMinutos(a.horarioInicio) - paraMinutos(b.horarioInicio))
-    .map((d) => `${DIAS_CURTOS[d.diaSemana - 1]} ${d.horarioInicio.slice(0, 5)}–${d.horarioFim.slice(0, 5)}`)
-    .join(" · ");
+    .forEach((d) => {
+      (porDia[d.diaSemana] ??= []).push(`${horaCompacta(d.horarioInicio)}–${horaCompacta(d.horarioFim)}`);
+    });
+  return porDia;
 }
 
 /**

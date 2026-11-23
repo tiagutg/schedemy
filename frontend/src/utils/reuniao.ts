@@ -140,3 +140,23 @@ export function baixarIcs(a: Agendamento) {
   link.click();
   URL.revokeObjectURL(url);
 }
+
+/** Reuniões que ainda vão acontecer (ou estão acontecendo): o período "Próximas" da lista. */
+export const STATUS_ATIVOS = "PENDENTE,CONFIRMADO,AGUARDANDO_RESPOSTA,EM_ANDAMENTO";
+
+const DIAS_DA_SEMANA_CURTOS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+
+/**
+ * Cabeçalho do grupo de reuniões de um dia na lista: "Hoje · Seg, 23/11", "Amanhã · Ter, 24/11",
+ * "Seg, 30/11" (com o ano quando não é o ano corrente).
+ */
+export function rotuloGrupoDoDia(dataISO: string, agora = new Date()): string {
+  const [ano, mes, dia] = dataISO.split("-").map(Number);
+  const data = new Date(ano, mes - 1, dia);
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  const diferenca = Math.round((data.getTime() - hoje.getTime()) / 86_400_000);
+  const base = `${DIAS_DA_SEMANA_CURTOS[data.getDay()]}, ${String(dia).padStart(2, "0")}/${String(mes).padStart(2, "0")}`;
+  const comAno = ano === hoje.getFullYear() ? base : `${base}/${ano}`;
+  const relativo = { [-1]: "Ontem", 0: "Hoje", 1: "Amanhã" }[diferenca];
+  return relativo ? `${relativo} · ${comAno}` : comAno;
+}

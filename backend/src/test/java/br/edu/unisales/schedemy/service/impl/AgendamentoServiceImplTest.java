@@ -536,6 +536,38 @@ class AgendamentoServiceImplTest {
     // ------------------------------------------------------------------
 
     @Nested
+    @DisplayName("Listar por usuario")
+    class ListarPorUsuario {
+
+        @Test
+        @DisplayName("RF 20 - a recepcao lista os agendamentos de qualquer participante")
+        void recepcaoFiltraPorParticipante() {
+            logadoComo(recepcionista);
+            when(usuarioAutenticado.podeGerirAgendamentosDeTerceiros()).thenReturn(true);
+            when(agendamentoRepository.buscarPorUsuarioComFiltros(eq(aluno.getId()), any(), any(), any(), any(), any()))
+                    .thenReturn(org.springframework.data.domain.Page.empty());
+
+            service.listarPorUsuario(aluno.getId(), null, null, null, null,
+                    org.springframework.data.domain.Pageable.unpaged());
+
+            verify(usuarioAutenticado, never()).exigirProprioOuAdmin(anyLong(), any());
+            verify(agendamentoRepository).buscarPorUsuarioComFiltros(eq(aluno.getId()), any(), any(), any(), any(), any());
+        }
+
+        @Test
+        @DisplayName("RNF 15 - aluno so lista os proprios agendamentos")
+        void alunoSoListaOsProprios() {
+            org.mockito.Mockito.doThrow(new AcessoNegadoNegocioException("x"))
+                    .when(usuarioAutenticado).exigirProprioOuAdmin(eq(outroAluno.getId()), any());
+
+            assertThatThrownBy(() -> service.listarPorUsuario(outroAluno.getId(), null, null, null, null,
+                    org.springframework.data.domain.Pageable.unpaged()))
+                    .isInstanceOf(AcessoNegadoNegocioException.class);
+            verify(agendamentoRepository, never()).buscarPorUsuarioComFiltros(any(), any(), any(), any(), any(), any());
+        }
+    }
+
+    @Nested
     @DisplayName("Responder (RF 19)")
     class Responder {
 

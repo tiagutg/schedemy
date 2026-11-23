@@ -42,6 +42,8 @@ export function usePaginatedList<T>(
         // Na atualização em segundo plano, uma falha não interrompe quem está usando a tela.
         if (silencioso) return;
         const mensagem = (e as ApiError).message;
+        // Não deixa na tela linhas de outro filtro, que não batem com o que está selecionado.
+        setPagina(null);
         setErro(mensagem);
         toast.erro(mensagem);
       } finally {
