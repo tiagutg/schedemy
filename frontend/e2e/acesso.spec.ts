@@ -32,7 +32,7 @@ test("aluno vê só o próprio menu e os próprios agendamentos", async ({ page 
 
   await page.goto("/agendamentos");
   await expect(page.getByRole("heading", { name: "Meus agendamentos" })).toBeVisible();
-  await expect(page.getByLabel("Usuário envolvido")).toHaveCount(0);
+  await expect(page.getByLabel("Participante")).toHaveCount(0);
 
   // O organizador é sempre o próprio aluno.
   await page.getByRole("button", { name: "Novo agendamento" }).first().click();
@@ -44,13 +44,21 @@ test("recepção vê a agenda geral e escolhe o organizador", async ({ page }) =
   await entrar(page, CONTAS.recepcao);
   await page.goto("/agendamentos");
   await expect(page.getByRole("heading", { name: "Agendamentos", exact: true, level: 2 })).toBeVisible();
-  await expect(page.getByLabel("Usuário envolvido")).toBeVisible();
+  // Filtro por participante (busca e seleção): só alunos e docentes (RN 03), e a API aceita o filtro.
+  const participante = page.getByLabel("Participante");
+  await participante.fill("lucas");
+  await expect(page.getByRole("option", { name: /Recepcionista/ })).toHaveCount(0);
+  await page.getByRole("option", { name: new RegExp(CONTAS.professor.nome) }).click();
+  await expect(participante).toHaveValue(CONTAS.professor.nome);
+  await expect(page.getByText("só pode listar")).toHaveCount(0);
 
   await page.getByRole("button", { name: "Novo agendamento" }).first().click();
   const organizador = page.getByLabel("Organizador");
   await expect(organizador).toBeEnabled();
   // Recepção e administração não aparecem como organizador (RN 03).
-  await expect(organizador.locator("option", { hasText: "Recepcionista" })).toHaveCount(0);
+  await organizador.click();
+  await expect(page.getByRole("option").first()).toBeVisible();
+  await expect(page.getByRole("option", { name: /Recepcionista|Administrador/ })).toHaveCount(0);
 });
 
 test("professor gerencia só a própria disponibilidade", async ({ page }) => {
@@ -60,6 +68,11 @@ test("professor gerencia só a própria disponibilidade", async ({ page }) => {
   await page.getByRole("button", { name: "Novo horário" }).click();
   await expect(page.getByLabel("Professor / coordenador")).toHaveValue(CONTAS.professor.nome);
   await expect(page.getByLabel("Professor / coordenador")).toBeDisabled();
+
+  // RN 17: as durações são definidas pela instituição; o professor não vê a tela.
+  await expect(page.getByRole("link", { name: "Durações de reunião" })).toHaveCount(0);
+  await page.goto("/duracoes");
+  await expect(page.getByRole("heading", { name: "Durações de reunião" })).toHaveCount(0);
 });
 
 test("o navegador guarda só o token, nunca a senha", async ({ page }) => {

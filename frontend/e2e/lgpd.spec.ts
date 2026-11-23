@@ -70,7 +70,8 @@ test("no primeiro acesso, nada abre até aceitar o termo; a API também recusa",
 test("o admin vê na auditoria o login e o aceite da conta nova; os demais perfis não", async ({ page }) => {
   await entrar(page, CONTAS.admin);
   await page.locator("[data-sidebar=content]").getByRole("link", { name: "Auditoria" }).click();
-  await page.getByLabel("Autor").selectOption({ label: `E2E Termo ${sufixo}` });
+  await page.getByLabel("Autor").fill(`E2E Termo ${sufixo}`);
+  await page.getByRole("option", { name: new RegExp(`E2E Termo ${sufixo}`) }).click();
   const linhas = page.getByRole("row");
   await expect(linhas.filter({ hasText: "Termo LGPD aceito" })).toHaveCount(1);
   await expect(linhas.filter({ hasText: "Login" }).first()).toBeVisible();

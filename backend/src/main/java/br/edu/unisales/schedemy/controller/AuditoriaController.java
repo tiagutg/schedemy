@@ -1,6 +1,7 @@
 package br.edu.unisales.schedemy.controller;
 
 import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
+import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.response.LogAuditoriaResponseDTO;
 import br.edu.unisales.schedemy.dto.response.PageResponseDTO;
 import br.edu.unisales.schedemy.service.AuditoriaService;
@@ -29,18 +30,19 @@ public class AuditoriaController {
 
     @GetMapping
     @Operation(summary = "Consultar a trilha de auditoria",
-            description = "Mais recente primeiro. Filtros opcionais: idUsuario (autor), somenteSistema (acoes automaticas), "
+            description = "Mais recente primeiro. Filtros opcionais: idUsuario (autor), somenteSistema (acoes automaticas), tipoUsuario (perfil do autor), "
                     + "acao (uma ou mais), tabela + idRegistro (ex.: agendamento 42) e periodo por dia.")
     public ResponseEntity<PageResponseDTO<LogAuditoriaResponseDTO>> listar(
             @RequestParam(required = false) Long idUsuario,
             @RequestParam(required = false) Boolean somenteSistema,
+            @RequestParam(required = false) TipoUsuario tipoUsuario,
             @RequestParam(required = false) List<AcaoAuditoria> acao,
             @RequestParam(required = false) String tabela,
             @RequestParam(required = false) Long idRegistro,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataInicio,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataFim,
             @ParameterObject @PageableDefault(size = 50) Pageable pageable) {
-        return ResponseEntity.ok(PageResponseDTO.de(auditoriaService.listar(idUsuario, somenteSistema, acao, tabela,
+        return ResponseEntity.ok(PageResponseDTO.de(auditoriaService.listar(idUsuario, somenteSistema, tipoUsuario, acao, tabela,
                 idRegistro, dataInicio, dataFim, pageable)));
     }
 }

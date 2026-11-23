@@ -27,7 +27,7 @@ export type Perfil = (typeof PERFIS)[keyof typeof PERFIS];
  * - agendamentos.decidirAlteracao → RF 22 / RN 12: só professor ou coordenador aceita ou recusa
  *   (a lista de pedidos, GET /solicitacoes-edicao, é de todos os perfis: o escopo pelo logado fica na API)
  * - disponibilidades / bloqueios → RF 01-05, 12 e RN 06 (só professor/coordenador)
- * - duracoes → RF 01 / RN 17: durações são definidas pela instituição
+ * - duracoes → RF 01 / RN 17: durações são definidas pela instituição, só a administração gerencia (admin tem "*")
  * - usuarios → gestão administrativa de cadastros
  * - avaliacoes → RF 24 (aluno avalia) e RNF 11 (coordenação acompanha)
  * - notificacoes → RF 23: o sistema gera os avisos; cada perfil lê os seus
@@ -50,7 +50,6 @@ const PERMISSOES_DOCENTE = [
   "agendamentos.decidirAlteracao",
   "disponibilidades.gerenciar",
   "bloqueios.gerenciar",
-  "duracoes.gerenciar",
   "avaliacoes.ver",
   "avaliacoes.verTodas",
   "notificacoes.ver",

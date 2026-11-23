@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { descreverEnvolvidos, gerarIcs, nomeCurto, proximoDiaUtilISO, situacaoDaReuniao } from "./reuniao";
+import { descreverEnvolvidos, gerarIcs, nomeCurto, proximoDiaUtilISO, rotuloGrupoDoDia, situacaoDaReuniao } from "./reuniao";
 import type { Agendamento } from "@/types";
 
 const ANTES = new Date(2026, 10, 1, 9, 0); // 01/11/2026 09:00, antes da reunião
@@ -90,5 +90,20 @@ describe("gerarIcs", () => {
     expect(ics).toContain("Capítulo 2\\, revisão");
     expect(ics).toContain("URL:https://meet.google.com/abc");
     expect(ics.split("\r\n")[0]).toBe("BEGIN:VCALENDAR");
+  });
+});
+
+describe("rotuloGrupoDoDia", () => {
+  const agora = new Date(2026, 10, 23, 15, 0); // segunda, 23/11/2026
+
+  it("usa Hoje, Amanhã e Ontem perto da data atual", () => {
+    expect(rotuloGrupoDoDia("2026-11-23", agora)).toBe("Hoje · Seg, 23/11");
+    expect(rotuloGrupoDoDia("2026-11-24", agora)).toBe("Amanhã · Ter, 24/11");
+    expect(rotuloGrupoDoDia("2026-11-22", agora)).toBe("Ontem · Dom, 22/11");
+  });
+
+  it("mostra só o dia da semana e a data nos demais, com o ano quando é outro", () => {
+    expect(rotuloGrupoDoDia("2026-11-30", agora)).toBe("Seg, 30/11");
+    expect(rotuloGrupoDoDia("2027-01-04", agora)).toBe("Seg, 04/01/2027");
   });
 });

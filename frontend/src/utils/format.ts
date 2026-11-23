@@ -36,3 +36,8 @@ export function hojeISO(): string {
   const dia = String(hoje.getDate()).padStart(2, "0");
   return `${hoje.getFullYear()}-${mes}-${dia}`;
 }
+
+/** Compara nomes sem diferenciar maiúsculas e acentos ("romulo" acha "Rômulo"). */
+export function normalizar(texto: string): string {
+  return texto.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}

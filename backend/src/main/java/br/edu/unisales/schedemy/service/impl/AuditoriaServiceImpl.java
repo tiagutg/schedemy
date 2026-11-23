@@ -3,6 +3,7 @@ package br.edu.unisales.schedemy.service.impl;
 import br.edu.unisales.schedemy.domain.entity.LogAuditoria;
 import br.edu.unisales.schedemy.domain.entity.Usuario;
 import br.edu.unisales.schedemy.domain.enums.AcaoAuditoria;
+import br.edu.unisales.schedemy.domain.enums.TipoUsuario;
 import br.edu.unisales.schedemy.dto.response.LogAuditoriaResponseDTO;
 import br.edu.unisales.schedemy.exception.RegraDeNegocioException;
 import br.edu.unisales.schedemy.repository.LogAuditoriaRepository;
@@ -31,7 +32,7 @@ public class AuditoriaServiceImpl implements AuditoriaService {
      * texto nulo sem tipo, por isso "" em vez de null). A ordem e fixa (mais recente primeiro).
      */
     @Override
-    public Page<LogAuditoriaResponseDTO> listar(Long idUsuario, Boolean somenteSistema, List<AcaoAuditoria> acoes,
+    public Page<LogAuditoriaResponseDTO> listar(Long idUsuario, Boolean somenteSistema, TipoUsuario tipoUsuario, List<AcaoAuditoria> acoes,
                                                 String tabela, Long idRegistro, LocalDate dataInicio, LocalDate dataFim,
                                                 Pageable pageable) {
         if (dataInicio != null && dataFim != null && dataFim.isBefore(dataInicio)) {
@@ -40,7 +41,7 @@ public class AuditoriaServiceImpl implements AuditoriaService {
         List<AcaoAuditoria> filtroAcoes = acoes == null || acoes.isEmpty() ? Arrays.asList(AcaoAuditoria.values()) : acoes;
         LocalDateTime desde = dataInicio == null ? null : dataInicio.atStartOfDay();
         LocalDateTime ate = dataFim == null ? null : dataFim.plusDays(1).atStartOfDay();
-        return logAuditoriaRepository.buscarComFiltros(idUsuario, Boolean.TRUE.equals(somenteSistema), filtroAcoes,
+        return logAuditoriaRepository.buscarComFiltros(idUsuario, Boolean.TRUE.equals(somenteSistema), tipoUsuario, filtroAcoes,
                         tabela == null ? "" : tabela.trim(), idRegistro, desde, ate,
                         PageRequest.of(pageable.getPageNumber(), pageable.getPageSize()))
                 .map(AuditoriaServiceImpl::paraResponseDTO);

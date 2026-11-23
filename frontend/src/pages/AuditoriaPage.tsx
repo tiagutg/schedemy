@@ -10,15 +10,16 @@ import Pagination from "@/components/common/Pagination";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import Pill from "@/components/common/Pill";
 import { SelectField, TextField } from "@/components/common/fields";
+import ComboboxField from "@/components/common/ComboboxField";
 import { Button } from "@/components/ui/button";
-import { ACOES_AUDITORIA, TABELAS_AUDITORIA } from "@/utils/domain";
+import { ACOES_AUDITORIA, CORES_TIPO_USUARIO, TABELAS_AUDITORIA, TIPOS_USUARIO, rotularEnum } from "@/utils/domain";
 import { formatarDataHora } from "@/utils/format";
 import type { Filtros, LogAuditoria, Params, UsuarioResumo } from "@/types";
 
 const SISTEMA = "sistema";
 
 /** Filtros que a tela aceita no endereço (ex.: o detalhe da reunião abre ?tabela=agendamento&idRegistro=42). */
-const CHAVES_FILTRO = ["autor", "acao", "tabela", "idRegistro", "dataInicio", "dataFim"] as const;
+const CHAVES_FILTRO = ["perfil", "autor", "acao", "tabela", "idRegistro", "dataInicio", "dataFim"] as const;
 
 function rotuloTabela(tabela: string) {
   return TABELAS_AUDITORIA.find((t) => t.valor === tabela)?.rotulo ?? tabela;
@@ -47,9 +48,10 @@ export default function AuditoriaPage() {
   }, []);
 
   const buscar = useCallback((params: Params) => {
-    const { autor, ...resto } = params as Params & { autor?: string };
+    const { autor, perfil, ...resto } = params as Params & { autor?: string; perfil?: string };
     return auditoriaApi.listar({
       ...resto,
+      tipoUsuario: perfil || undefined,
       idUsuario: autor && autor !== SISTEMA ? autor : undefined,
       somenteSistema: autor === SISTEMA ? true : undefined,
     });
@@ -69,15 +71,37 @@ export default function AuditoriaPage() {
 
       <FiltrosCard>
         <SelectField
-          label="Autor"
-          className="w-full sm:w-56"
+          label="Perfil"
+          className="w-full sm:w-44"
           placeholder="Todos"
+          options={TIPOS_USUARIO.map((t) => ({ valor: t, rotulo: rotularEnum(t) }))}
+          value={filtros.perfil || ""}
+          onChange={(e) => {
+            const perfil = e.target.value || undefined;
+            // O autor escolhido sai se não for do perfil novo (o "Sistema" não tem perfil).
+            const autorServe =
+              !perfil || usuarios.some((u) => String(u.id) === filtros.autor && u.tipoUsuario === perfil);
+            aplicarFiltros({ ...filtros, perfil, autor: autorServe ? filtros.autor : undefined });
+          }}
+        />
+        <ComboboxField
+          label="Autor"
+          className="w-full sm:w-60"
+          placeholder="Todos"
+          limpavel
           options={[
-            { valor: SISTEMA, rotulo: "Sistema (automático)" },
-            ...usuarios.map((u) => ({ valor: String(u.id), rotulo: u.nome })),
+            ...(filtros.perfil ? [] : [{ valor: SISTEMA, rotulo: "Sistema (automático)" }]),
+            ...usuarios
+              .filter((u) => !filtros.perfil || u.tipoUsuario === filtros.perfil)
+              .map((u) => ({
+                valor: String(u.id),
+                rotulo: u.nome,
+                busca: u.matriculaRa ?? "",
+                detalhe: <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>,
+              })),
           ]}
           value={filtros.autor || ""}
-          onChange={(e) => mudar("autor", e.target.value)}
+          onChange={(valor) => mudar("autor", valor)}
         />
         <SelectField
           label="Ação"

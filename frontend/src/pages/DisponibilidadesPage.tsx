@@ -16,10 +16,11 @@ import Pill from "@/components/common/Pill";
 import FiltrosCard from "@/components/common/FiltrosCard";
 import FormActions from "@/components/common/FormActions";
 import { SelectField, TextField, FieldGrid, CheckboxField, FieldError } from "@/components/common/fields";
+import ComboboxField from "@/components/common/ComboboxField";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { DIAS_SEMANA, rotularDiaSemana, rotularEnum } from "@/utils/domain";
+import { CORES_TIPO_USUARIO, DIAS_SEMANA, rotularDiaSemana, rotularEnum } from "@/utils/domain";
 import type { Disponibilidade, Params } from "@/types";
 import GradeSemanal from "./GradeSemanal";
 import ReunioesAfetadasModal from "./ReunioesAfetadasModal";
@@ -40,6 +41,11 @@ export default function DisponibilidadesPage() {
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar);
 
   const docentes = professores.filter((u) => u.tipoUsuario === "PROFESSOR" || u.tipoUsuario === "COORDENADOR");
+  const opcoesDocentes = docentes.map((u) => ({
+    valor: u.id,
+    rotulo: u.nome,
+    detalhe: <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>,
+  }));
 
   // Grade visual da semana de um docente: o próprio, ou o escolhido no filtro pela administração.
   const docenteDaGrade = meuId ?? (filtros.usuarioId ? Number(filtros.usuarioId) : null);
@@ -182,13 +188,14 @@ export default function DisponibilidadesPage() {
 
       <FiltrosCard>
         {gerenciaTodos && (
-          <SelectField
+          <ComboboxField
             label="Professor / coordenador"
             className="w-full sm:w-64"
             placeholder="Todos"
-            options={docentes.map((u) => ({ valor: u.id, rotulo: u.nome }))}
+            limpavel
+            options={opcoesDocentes}
             value={filtros.usuarioId || ""}
-            onChange={(e) => aplicarFiltros({ ...filtros, usuarioId: e.target.value })}
+            onChange={(valor) => aplicarFiltros({ ...filtros, usuarioId: valor })}
           />
         )}
         <SelectField
@@ -242,13 +249,13 @@ export default function DisponibilidadesPage() {
       >
         <form onSubmit={salvar} className="flex flex-col gap-4">
           {gerenciaTodos ? (
-            <SelectField
+            <ComboboxField
               label="Professor / coordenador"
               required
-              placeholder="Selecione…"
-              options={docentes.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              placeholder="Buscar pelo nome…"
+              options={opcoesDocentes}
               value={form.idUsuario}
-              onChange={(e) => setForm({ ...form, idUsuario: e.target.value })}
+              onChange={(valor) => setForm({ ...form, idUsuario: valor })}
             />
           ) : (
             <TextField label="Professor / coordenador" value={eu?.nome ?? ""} disabled />

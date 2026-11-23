@@ -9,7 +9,7 @@ import {
   paraMinutos,
   situacaoLimiteAluno,
   diasDeAtendimentoEmComum,
-  resumirSemana,
+  faixasPorDia,
   rotuloDia,
   temHorarioEmComumNaSemana,
   quemImpedeHorarioEmComum,
@@ -279,10 +279,15 @@ describe("diasDeAtendimentoEmComum", () => {
   });
 });
 
-describe("resumirSemana e rotuloDia", () => {
-  it("resume a grade em ordem de dia e horário", () => {
-    const grade = [disponibilidade("14:00", "17:00", 4), disponibilidade("08:00", "12:00", 2), disponibilidade("08:00", "09:00", 4)];
-    expect(resumirSemana(grade)).toBe("Seg 08:00–12:00 · Qua 08:00–09:00 · Qua 14:00–17:00");
+describe("faixasPorDia e rotuloDia", () => {
+  it("agrupa a grade por dia, em ordem de horário, sem os minutos da hora cheia", () => {
+    const grade = [
+      disponibilidade("14:00", "17:00", 4),
+      disponibilidade("08:00", "12:00", 2),
+      disponibilidade("08:00", "09:30", 4),
+      disponibilidade("19:00", "21:00", 6, false),
+    ];
+    expect(faixasPorDia(grade)).toEqual({ 2: ["08–12"], 4: ["08–09:30", "14–17"] });
   });
 
   it("mostra o dia da semana com a data", () => {

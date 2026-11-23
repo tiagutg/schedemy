@@ -111,32 +111,32 @@ class AuditoriaTest {
         @Test
         @DisplayName("sem filtros: todas as acoes, tabela \"\" e sem periodo; o sort da requisicao e ignorado")
         void semFiltros() {
-            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), anyString(), any(), any(), any(), any()))
+            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(Page.empty());
 
-            service.listar(null, null, null, null, null, null, null, PageRequest.of(2, 10, Sort.by("acao")));
+            service.listar(null, null, null, null, null, null, null, null, PageRequest.of(2, 10, Sort.by("acao")));
 
-            verify(repositorio).buscarComFiltros(null, false, List.of(AcaoAuditoria.values()), "", null, null, null,
+            verify(repositorio).buscarComFiltros(null, false, null, List.of(AcaoAuditoria.values()), "", null, null, null,
                     PageRequest.of(2, 10));
         }
 
         @Test
         @DisplayName("periodo por dia, com o fim inclusivo")
         void periodo() {
-            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), anyString(), any(), any(), any(), any()))
+            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(Page.empty());
 
-            service.listar(6L, true, List.of(AcaoAuditoria.LOGIN), " usuario ", 6L,
+            service.listar(6L, true, TipoUsuario.PROFESSOR, List.of(AcaoAuditoria.LOGIN), " usuario ", 6L,
                     LocalDate.of(2026, 11, 1), LocalDate.of(2026, 11, 30), PageRequest.of(0, 50));
 
-            verify(repositorio).buscarComFiltros(6L, true, List.of(AcaoAuditoria.LOGIN), "usuario", 6L,
+            verify(repositorio).buscarComFiltros(6L, true, TipoUsuario.PROFESSOR, List.of(AcaoAuditoria.LOGIN), "usuario", 6L,
                     LocalDateTime.of(2026, 11, 1, 0, 0), LocalDateTime.of(2026, 12, 1, 0, 0), PageRequest.of(0, 50));
         }
 
         @Test
         @DisplayName("data final antes da inicial: 422")
         void periodoInvertido() {
-            assertThatThrownBy(() -> service.listar(null, null, null, null, null,
+            assertThatThrownBy(() -> service.listar(null, null, null, null, null, null,
                     LocalDate.of(2026, 11, 30), LocalDate.of(2026, 11, 1), PageRequest.of(0, 50)))
                     .isInstanceOf(RegraDeNegocioException.class);
         }
@@ -146,10 +146,10 @@ class AuditoriaTest {
         void linhaDoSistema() {
             LogAuditoria l = LogAuditoria.builder().id(1L).acao(AcaoAuditoria.AGENDAMENTO_EXPIRADO)
                     .tabelaAfetada("agendamento").idTabelaAfetada(3L).criadoEm(LocalDateTime.now()).build();
-            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), anyString(), any(), any(), any(), any()))
+            when(repositorio.buscarComFiltros(any(), anyBoolean(), any(), any(), anyString(), any(), any(), any(), any()))
                     .thenReturn(new PageImpl<>(List.of(l)));
 
-            var item = service.listar(null, null, null, null, null, null, null, PageRequest.of(0, 50)).getContent().getFirst();
+            var item = service.listar(null, null, null, null, null, null, null, null, PageRequest.of(0, 50)).getContent().getFirst();
 
             assertThat(item.idUsuario()).isNull();
             assertThat(item.nomeUsuario()).isNull();

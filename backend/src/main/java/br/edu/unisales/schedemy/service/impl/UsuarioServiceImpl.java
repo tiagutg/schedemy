@@ -125,6 +125,15 @@ public class UsuarioServiceImpl implements UsuarioService {
 
         Usuario antes = copiaParaComparar(usuario);
         usuarioMapper.atualizarEntidade(usuario, dto);
+        // Ninguem se tranca para fora: o proprio cadastro nao e desativado nem muda de perfil por aqui.
+        if (ehOProprio(id)) {
+            if (Boolean.FALSE.equals(usuario.getAtivo())) {
+                throw new RegraDeNegocioException("Voce nao pode desativar o proprio cadastro.");
+            }
+            if (usuario.getTipoUsuario() != antes.getTipoUsuario()) {
+                throw new RegraDeNegocioException("Voce nao pode mudar o proprio perfil.");
+            }
+        }
 
         // Se uma nova senha foi enviada como atualização, criptografa e atualiza.
         boolean trocouSenha = dto.senha() != null && !dto.senha().isBlank();
@@ -140,6 +149,9 @@ public class UsuarioServiceImpl implements UsuarioService {
     @Override
     public void deletar(Long id) {
         Usuario usuario = buscarEntidadePorId(id);
+        if (ehOProprio(id)) {
+            throw new RegraDeNegocioException("Voce nao pode remover o proprio cadastro.");
+        }
         // As FKs de agendamento, participante, motivo e avaliacao sao RESTRICT: com historico, so desativando.
         if (agendamentoParticipanteRepository.existsByUsuarioId(id)) {
             throw new RegraDeNegocioException(
@@ -152,6 +164,10 @@ public class UsuarioServiceImpl implements UsuarioService {
         }
         auditoria.registrar(AcaoAuditoria.USUARIO_REMOVIDO, usuario.getId(), descrever(usuario));
         usuarioRepository.delete(usuario);
+    }
+
+    private boolean ehOProprio(Long id) {
+        return id != null && id.equals(usuarioAutenticado.id());
     }
 
     /**

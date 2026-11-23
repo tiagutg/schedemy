@@ -1,4 +1,4 @@
-import type { Key, KeyboardEvent, ReactNode } from "react";
+import { Fragment, type Key, type KeyboardEvent, type ReactNode } from "react";
 import {
   Table,
   TableBody,
@@ -28,6 +28,8 @@ interface DataTableProps<T> {
   aoClicarLinha?: (linha: T) => void;
   /** No celular, sem rodapé de ações: o cartão inteiro já abre a linha (requer aoClicarLinha). */
   ocultarAcoesNoCartao?: boolean;
+  /** Agrupa linhas seguidas com o mesmo rótulo (ex.: o dia), com um cabeçalho antes de cada grupo. */
+  grupo?: (linha: T) => string;
 }
 
 function valorCelula<T>(coluna: Coluna<T>, linha: T): ReactNode {
@@ -48,7 +50,14 @@ export default function DataTable<T>({
   acoes,
   aoClicarLinha,
   ocultarAcoesNoCartao = false,
+  grupo,
 }: DataTableProps<T>) {
+  // Rótulo do grupo só na primeira linha de cada grupo.
+  const inicioDeGrupo = (linha: T, i: number): string | null => {
+    if (!grupo) return null;
+    const atual = grupo(linha);
+    return i === 0 || grupo(linhas[i - 1]) !== atual ? atual : null;
+  };
   const totalColunas = colunas.length + (acoes ? 1 : 0);
   const vazio = linhaVazia || <EmptyState titulo="Nenhum registro encontrado" />;
   const [principal, ...demais] = colunas;
@@ -78,9 +87,18 @@ export default function DataTable<T>({
                 <TableCell colSpan={totalColunas}>{vazio}</TableCell>
               </TableRow>
             ) : (
-              linhas.map((linha) => (
+              linhas.map((linha, i) => {
+                const rotuloGrupo = inicioDeGrupo(linha, i);
+                return (
+                <Fragment key={chaveLinha(linha)}>
+                {rotuloGrupo && (
+                  <TableRow className="bg-muted/40 hover:bg-muted/40">
+                    <TableCell colSpan={totalColunas} className="py-1.5 text-xs font-semibold tracking-wide text-brand-800 uppercase">
+                      {rotuloGrupo}
+                    </TableCell>
+                  </TableRow>
+                )}
                 <TableRow
-                  key={chaveLinha(linha)}
                   className={aoClicarLinha ? "cursor-pointer" : undefined}
                   // O teclado usa o botão de ação da linha; o clique na linha é um atalho do mouse.
                   onClick={aoClicarLinha ? () => aoClicarLinha(linha) : undefined}
@@ -90,7 +108,9 @@ export default function DataTable<T>({
                   ))}
                   {acoes && <TableCell className="text-right">{acoes(linha)}</TableCell>}
                 </TableRow>
-              ))
+                </Fragment>
+                );
+              })
             )}
           </TableBody>
         </Table>
@@ -105,7 +125,8 @@ export default function DataTable<T>({
         ) : linhas.length === 0 ? (
           <div className="rounded-lg border">{vazio}</div>
         ) : (
-          linhas.map((linha) => {
+          linhas.map((linha, i) => {
+            const rotuloGrupo = inicioDeGrupo(linha, i);
             const acoesLinha = ocultarAcoesNoCartao && aoClicarLinha ? null : acoes?.(linha);
             const clicavel = aoClicarLinha
               ? {
@@ -121,8 +142,11 @@ export default function DataTable<T>({
                 }
               : {};
             return (
+              <Fragment key={chaveLinha(linha)}>
+              {rotuloGrupo && (
+                <p className="mt-1 text-xs font-semibold tracking-wide text-brand-800 uppercase first:mt-0">{rotuloGrupo}</p>
+              )}
               <Card
-                key={chaveLinha(linha)}
                 size="sm"
                 className={aoClicarLinha ? "cursor-pointer shadow-xs transition-colors hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none" : "shadow-xs"}
                 {...clicavel}
@@ -144,6 +168,7 @@ export default function DataTable<T>({
                   <CardFooter className="flex-wrap justify-end gap-1 [&>div]:flex-wrap">{acoesLinha}</CardFooter>
                 ) : null}
               </Card>
+              </Fragment>
             );
           })
         )}

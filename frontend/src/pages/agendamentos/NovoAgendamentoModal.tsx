@@ -11,9 +11,10 @@ import { agendamentosApi } from "@/api/agendamentos";
 import { duracoesApi } from "@/api/duracoes";
 import type { ApiError } from "@/api/client";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
+import ComboboxField from "@/components/common/ComboboxField";
 import { useAuth } from "@/context/AuthContext";
-import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
-import { formatarData, formatarHora, hojeISO } from "@/utils/format";
+import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, TIPOS_PARTICIPANTES, rotularEnum } from "@/utils/domain";
+import { formatarData, formatarHora, hojeISO, normalizar } from "@/utils/format";
 import { proximoDiaUtilISO } from "@/utils/reuniao";
 import { horarioDeTermino } from "@/utils/agenda";
 import type { Agendamento, Duracao } from "@/types";
@@ -62,8 +63,6 @@ interface NovoAgendamentoModalProps {
   base?: Agendamento | null;
 }
 
-// RN 03: recepção e administração não participam das reuniões, só agendam para outros.
-const PODEM_PARTICIPAR = ["ALUNO", "PROFESSOR", "COORDENADOR"];
 const DOCENTES = ["PROFESSOR", "COORDENADOR"];
 
 const TITULOS: Record<ModoAgendamento, { titulo: string; botao: string; salvando: string }> = {
@@ -102,11 +101,6 @@ function convidadosReplicados(base: Agendamento, idOrganizador: string): string[
   return [...new Set(ids)].filter((id) => id !== idOrganizador);
 }
 
-/** Compara nomes sem diferenciar maiúsculas e acentos ("romulo" acha "Rômulo"). */
-function normalizar(texto: string): string {
-  return texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-}
-
 export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo = "criar", base }: NovoAgendamentoModalProps) {
   const { perfilVinculado: eu, pode } = useAuth();
   // Na criação (e ao agendar de novo), quem não agenda para outros é sempre o organizador;
@@ -114,7 +108,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
   const escolheOrganizador = (modo === "criar" || modo === "replicar") && pode("agendamentos.organizarPorOutros");
   const organizadorReplicado = base && (escolheOrganizador ? String(base.idOrganizador) : String(eu?.id ?? ""));
   const { usuarios: todos } = useUsuariosOptions();
-  const usuarios = todos.filter((u) => PODEM_PARTICIPAR.includes(u.tipoUsuario));
+  const usuarios = todos.filter((u) => TIPOS_PARTICIPANTES.includes(u.tipoUsuario));
   const [duracoes, setDuracoes] = useState<Duracao[]>([]);
   // O formulário nasce preenchido; a página recria o componente (key) a cada abertura.
   const [form, setForm] = useState(() =>
@@ -305,15 +299,20 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       <form onSubmit={salvar} className="flex flex-col gap-4">
         <FieldGrid>
           {escolheOrganizador ? (
-            <SelectField
+            <ComboboxField
               label="Organizador"
               required
-              placeholder="Selecione…"
-              options={usuarios.map((u) => ({ valor: u.id, rotulo: `${u.nome} (${rotularEnum(u.tipoUsuario)})` }))}
+              placeholder="Buscar pelo nome ou RA…"
+              options={usuarios.map((u) => ({
+                valor: u.id,
+                rotulo: u.nome,
+                busca: u.matriculaRa ?? "",
+                detalhe: <Pill className={CORES_TIPO_USUARIO[u.tipoUsuario]}>{rotularEnum(u.tipoUsuario)}</Pill>,
+              }))}
               value={form.idOrganizador}
-              onChange={(e) => {
-                setForm({ ...form, idOrganizador: e.target.value });
-                setConvidadosSelecionados((atual) => atual.filter((c) => c !== e.target.value));
+              onChange={(valor) => {
+                setForm({ ...form, idOrganizador: valor });
+                setConvidadosSelecionados((atual) => atual.filter((c) => c !== valor));
               }}
             />
           ) : (

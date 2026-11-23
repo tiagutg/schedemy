@@ -372,26 +372,33 @@ class RepositoriosNoBancoTest {
             var todas = List.of(AcaoAuditoria.values());
             var pagina = PageRequest.of(0, 500);
             // Todos os opcionais nulos/vazios: o PostgreSQL precisa aceitar os parametros sem tipo.
-            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "", null, null, null, pagina)
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, null, todas, "", null, null, null, pagina)
                     .getContent()).extracting(LogAuditoria::getId)
                     .contains(doAluno.getId(), doSistema.getId(), login.getId());
             // Por registro: a reuniao, da mais recente para a mais antiga, com o autor ja carregado.
-            var daReuniao = logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+            var daReuniao = logAuditoriaRepository.buscarComFiltros(null, false, null, todas, "agendamento", idReuniao,
                     null, null, pagina).getContent();
             assertThat(daReuniao).extracting(LogAuditoria::getId).containsExactly(doSistema.getId(), doAluno.getId());
             assertThat(daReuniao.get(1).getUsuario().getNome()).isEqualTo("Aluno Teste Banco");
             assertThat(daReuniao.get(0).getUsuario()).isNull();
             // Por autor e por acao.
-            assertThat(logAuditoriaRepository.buscarComFiltros(professor.getId(), false, List.of(AcaoAuditoria.LOGIN), "",
+            assertThat(logAuditoriaRepository.buscarComFiltros(professor.getId(), false, null, List.of(AcaoAuditoria.LOGIN), "",
                     null, null, null, pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(login.getId());
             // So o sistema.
-            assertThat(logAuditoriaRepository.buscarComFiltros(null, true, todas, "agendamento", idReuniao, null, null,
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, true, null, todas, "agendamento", idReuniao, null, null,
                     pagina).getContent()).extracting(LogAuditoria::getId).containsExactly(doSistema.getId());
+            // Por perfil do autor: as acoes automaticas (sem autor) ficam de fora.
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, TipoUsuario.ALUNO, todas, "agendamento",
+                    idReuniao, null, null, pagina).getContent()).extracting(LogAuditoria::getId)
+                    .containsExactly(doAluno.getId());
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, TipoUsuario.PROFESSOR, todas, "",
+                    null, null, null, pagina).getContent()).extracting(LogAuditoria::getId)
+                    .contains(login.getId()).doesNotContain(doAluno.getId(), doSistema.getId());
             // Periodo [desde, ate): hoje entra, amanha em diante nao.
             LocalDateTime hoje = LocalDate.now().atStartOfDay();
-            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, null, todas, "agendamento", idReuniao,
                     hoje, hoje.plusDays(1), pagina).getTotalElements()).isEqualTo(2);
-            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, todas, "agendamento", idReuniao,
+            assertThat(logAuditoriaRepository.buscarComFiltros(null, false, null, todas, "agendamento", idReuniao,
                     hoje.plusDays(1), null, pagina).getTotalElements()).isZero();
 
             assertThat(logAuditoriaRepository.existsByUsuarioId(aluno.getId())).isTrue();

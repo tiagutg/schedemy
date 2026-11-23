@@ -29,10 +29,10 @@ import org.springframework.security.web.access.ExceptionTranslationFilter;
  * - TODOS          os proprios avisos (notificacoes do sistema)
  * - ALUNO          agendamentos (criar/ver/cancelar/responder) e avaliacoes
  * - PROFESSOR      o mesmo do coordenador (os RFs sempre citam "professor ou coordenador")
- * - COORDENADOR    + disponibilidades, bloqueios, duracoes e notificacoes
+ * - COORDENADOR    + disponibilidades, bloqueios e notificacoes
  * - RECEPCIONISTA  agendamentos de todos (criar por terceiros, ver, editar, cancelar),
  *                  sem aceitar/recusar convite (RN 03)
- * - ADMIN          acesso total
+ * - ADMIN          acesso total (inclusive as duracoes de reuniao, definidas pela instituicao - RN 17)
  */
 
 @Configuration
@@ -88,9 +88,11 @@ public class SecurityConfig {
                         .requestMatchers("/api/v1/usuarios", "/api/v1/usuarios/**").hasRole(ADMIN)
 
                         // --- Duracoes de reuniao (RF 01, RN 17) ---
-                        // Todos consultam para montar o agendamento; so a docencia altera.
+                        // Todos consultam para montar o agendamento. A lista vale para o sistema inteiro e e
+                        // "definida pela instituicao" (RN 17; RF 01 fala em duracoes "disponibilizadas pelo
+                        // sistema"): so a administracao altera.
                         .requestMatchers(HttpMethod.GET, "/api/v1/duracoes-reuniao", "/api/v1/duracoes-reuniao/**").authenticated()
-                        .requestMatchers("/api/v1/duracoes-reuniao", "/api/v1/duracoes-reuniao/**").hasAnyRole(DOCENTES)
+                        .requestMatchers("/api/v1/duracoes-reuniao", "/api/v1/duracoes-reuniao/**").hasRole(ADMIN)
 
                         // --- Disponibilidades (RF 01-03, RF 12 e RN 06) ---
                         // RN 06 restringe quem DEFINE os horarios; a consulta e necessaria
