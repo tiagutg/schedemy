@@ -155,9 +155,7 @@ class SecurityConfigTest {
             // Duracoes: todos consultam para montar o agendamento.
             "aluno,         GET,    /api/v1/duracoes-reuniao",
             "recepcionista, GET,    /api/v1/duracoes-reuniao",
-            // Professor e coordenador gerenciam.
-            "professor,     POST,   /api/v1/duracoes-reuniao",
-            "coordenador,   POST,   /api/v1/duracoes-reuniao",
+            "professor,     GET,    /api/v1/duracoes-reuniao",
 
             // Disponibilidades: consulta aberta (RF 14), escrita so da docencia (RN 06).
             "aluno,         GET,    /api/v1/disponibilidades",
@@ -274,10 +272,16 @@ class SecurityConfigTest {
             "aluno,         POST,   /api/v1/bloqueios-periodo/previa",
             "recepcionista, POST,   /api/v1/bloqueios-periodo/1/previa",
 
-            // Duracoes: parametro academico, aluno e recepcao nao alteram.
+            // Duracoes: definidas pela instituicao (RN 17), so a administracao altera.
             "aluno,         POST,   /api/v1/duracoes-reuniao",
             "recepcionista, POST,   /api/v1/duracoes-reuniao",
             "aluno,         DELETE, /api/v1/duracoes-reuniao/1",
+            "professor,     POST,   /api/v1/duracoes-reuniao",
+            "professor,     PUT,    /api/v1/duracoes-reuniao/1",
+            "professor,     DELETE, /api/v1/duracoes-reuniao/1",
+            "coordenador,   POST,   /api/v1/duracoes-reuniao",
+            "coordenador,   PUT,    /api/v1/duracoes-reuniao/1",
+            "coordenador,   DELETE, /api/v1/duracoes-reuniao/1",
 
             // RN 03: a recepcao nao e convidada, entao nao aceita/recusa convites.
             "recepcionista, PATCH,  /api/v1/agendamentos/1/resposta",

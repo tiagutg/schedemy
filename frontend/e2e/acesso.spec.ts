@@ -68,6 +68,11 @@ test("professor gerencia só a própria disponibilidade", async ({ page }) => {
   await page.getByRole("button", { name: "Novo horário" }).click();
   await expect(page.getByLabel("Professor / coordenador")).toHaveValue(CONTAS.professor.nome);
   await expect(page.getByLabel("Professor / coordenador")).toBeDisabled();
+
+  // RN 17: as durações são definidas pela instituição; o professor não vê a tela.
+  await expect(page.getByRole("link", { name: "Durações de reunião" })).toHaveCount(0);
+  await page.goto("/duracoes");
+  await expect(page.getByRole("heading", { name: "Durações de reunião" })).toHaveCount(0);
 });
 
 test("o navegador guarda só o token, nunca a senha", async ({ page }) => {
