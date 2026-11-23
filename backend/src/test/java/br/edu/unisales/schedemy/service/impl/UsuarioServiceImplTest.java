@@ -37,9 +37,10 @@ class UsuarioServiceImplTest {
     private final AgendamentoParticipanteRepository participanteRepository = mock(AgendamentoParticipanteRepository.class);
     private final LogAuditoriaRepository logAuditoriaRepository = mock(LogAuditoriaRepository.class);
     private final Auditoria auditoria = mock(Auditoria.class);
+    private final UsuarioAutenticado usuarioAutenticado = mock(UsuarioAutenticado.class);
     @SuppressWarnings("deprecation")
     private final UsuarioServiceImpl service = new UsuarioServiceImpl(usuarioRepository, participanteRepository,
-            new UsuarioMapper(), NoOpPasswordEncoder.getInstance(), mock(UsuarioAutenticado.class), auditoria,
+            new UsuarioMapper(), NoOpPasswordEncoder.getInstance(), usuarioAutenticado, auditoria,
             logAuditoriaRepository);
 
     private Usuario pedro;
@@ -98,5 +99,30 @@ class UsuarioServiceImplTest {
 
         verify(auditoria).registrar(AcaoAuditoria.USUARIO_REMOVIDO, 2L, "Pedro (ALUNO)");
         verify(usuarioRepository).delete(pedro);
+    }
+
+    @Test
+    @DisplayName("ninguem remove o proprio cadastro")
+    void naoRemoveOProprio() {
+        when(usuarioAutenticado.id()).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.deletar(2L)).isInstanceOf(RegraDeNegocioException.class)
+                .hasMessageContaining("proprio cadastro");
+        verify(usuarioRepository, never()).delete(any());
+    }
+
+    @Test
+    @DisplayName("ninguem desativa o proprio cadastro nem muda o proprio perfil; os demais dados podem mudar")
+    void naoSeTrancaParaFora() {
+        when(usuarioAutenticado.id()).thenReturn(2L);
+
+        assertThatThrownBy(() -> service.atualizar(2L, edicao("pedro@unisales.edu.br", "27999990000", TipoUsuario.ALUNO, null, false)))
+                .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("desativar");
+        pedro.setAtivo(true);
+        assertThatThrownBy(() -> service.atualizar(2L, edicao("pedro@unisales.edu.br", "27999990000", TipoUsuario.ADMIN, null, null)))
+                .isInstanceOf(RegraDeNegocioException.class).hasMessageContaining("perfil");
+        pedro.setTipoUsuario(TipoUsuario.ALUNO);
+        service.atualizar(2L, edicao("pedro.novo@unisales.edu.br", "27999990000", TipoUsuario.ALUNO, null, null));
+        verify(usuarioRepository).save(pedro);
     }
 }

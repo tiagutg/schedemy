@@ -1,4 +1,4 @@
-import { useId, useMemo, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { IconChevronDown, IconX } from "@tabler/icons-react";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,27 @@ interface ComboboxFieldProps {
 }
 
 const MAX_VISIVEIS = 50;
+// Altura máxima da lista (max-h-64) mais a folga, para decidir se cabe abaixo do campo.
+const ALTURA_LISTA = 256 + 8;
+
+/**
+ * Espaço livre abaixo e acima do campo, dentro da área visível: a tela e, num modal,
+ * o contêiner com rolagem que corta o que passa dele.
+ */
+function espacoAoRedor(campo: HTMLElement): { abaixo: number; acima: number } {
+  const r = campo.getBoundingClientRect();
+  let topo = 0;
+  let base = window.innerHeight;
+  for (let el = campo.parentElement; el; el = el.parentElement) {
+    if (/(auto|scroll|hidden)/.test(getComputedStyle(el).overflowY)) {
+      const c = el.getBoundingClientRect();
+      topo = Math.max(topo, c.top);
+      base = Math.min(base, c.bottom);
+      break;
+    }
+  }
+  return { abaixo: base - r.bottom, acima: r.top - topo };
+}
 
 /**
  * Campo de busca e seleção: a pessoa digita e a lista vai sendo filtrada
@@ -55,6 +76,10 @@ export default function ComboboxField({
   // null = não digitou nada desde que abriu: mostra todas as opções.
   const [texto, setTexto] = useState<string | null>(null);
   const [destaque, setDestaque] = useState(0);
+  // Abre para cima quando não cabe embaixo (ex.: campo perto do fim do modal).
+  const [paraCima, setParaCima] = useState(false);
+  const [alturaMaxima, setAlturaMaxima] = useState<number | undefined>(undefined);
+  const caixa = useRef<HTMLDivElement>(null);
 
   const filtradas = useMemo(() => {
     const termo = normalizar((texto ?? "").trim());
@@ -66,6 +91,13 @@ export default function ComboboxField({
 
   function abrir() {
     if (aberto) return;
+    if (caixa.current) {
+      const { abaixo, acima } = espacoAoRedor(caixa.current);
+      const cima = abaixo < ALTURA_LISTA && acima > abaixo;
+      setParaCima(cima);
+      // Nunca menor que ~4 opções, para continuar usável mesmo com pouco espaço.
+      setAlturaMaxima(Math.max(Math.min(ALTURA_LISTA, cima ? acima : abaixo) - 8, 140));
+    }
     setAberto(true);
     setTexto(null);
     const atual = filtradas.findIndex((o) => String(o.valor) === value);
@@ -104,7 +136,7 @@ export default function ComboboxField({
       <Label htmlFor={id}>
         {label} {required && <span className="text-destructive">*</span>}
       </Label>
-      <div className="relative">
+      <div ref={caixa} className="relative">
         <Input
           id={id}
           role="combobox"
@@ -152,7 +184,11 @@ export default function ComboboxField({
           <ul
             id={idLista}
             role="listbox"
-            className="absolute top-full right-0 left-0 z-50 mt-1 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md"
+            className={cn(
+              "absolute right-0 left-0 z-50 max-h-64 overflow-y-auto rounded-lg border bg-popover p-1 text-popover-foreground shadow-md",
+              paraCima ? "bottom-full mb-1" : "top-full mt-1"
+            )}
+            style={{ maxHeight: alturaMaxima }}
           >
             {filtradas.length === 0 ? (
               <li className="px-2 py-1.5 text-sm text-muted-foreground">{semResultado}</li>

@@ -4,6 +4,7 @@ import { usuariosApi } from "@/api/usuarios";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
 import { useToast } from "@/context/ToastContext";
+import { useAuth } from "@/context/AuthContext";
 import PageHeader from "@/components/common/PageHeader";
 import DataTable from "@/components/common/DataTable";
 import Pagination from "@/components/common/Pagination";
@@ -43,6 +44,7 @@ const FORM_VAZIO: FormUsuario = {
 
 export default function UsuariosPage() {
   const toast = useToast();
+  const { perfilVinculado: eu } = useAuth();
   const buscar = useCallback((params: Params) => usuariosApi.listar(params), []);
   const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(
     buscar,
@@ -51,6 +53,8 @@ export default function UsuariosPage() {
 
   const [modalAberto, setModalAberto] = useState(false);
   const [editando, setEditando] = useState<Usuario | null>(null);
+  // Ninguém se tranca para fora: o próprio cadastro não é removido, desativado nem muda de perfil.
+  const editandoOProprio = !!editando && editando.id === eu?.id;
   const [form, setForm] = useState<FormUsuario>(FORM_VAZIO);
   const [erros, setErros] = useState<Record<string, string>>({});
   const [salvando, setSalvando] = useState(false);
@@ -206,10 +210,12 @@ export default function UsuariosPage() {
               <IconPencil />
               Editar
             </Button>
-            <Button variant="destructive" size="sm" onClick={() => setParaRemover(u)}>
-              <IconTrash />
-              Remover
-            </Button>
+            {u.id !== eu?.id && (
+              <Button variant="destructive" size="sm" onClick={() => setParaRemover(u)}>
+                <IconTrash />
+                Remover
+              </Button>
+            )}
           </div>
         )}
       />
@@ -243,6 +249,8 @@ export default function UsuariosPage() {
             <SelectField
               label="Tipo de usuário"
               required
+              disabled={editandoOProprio}
+              title={editandoOProprio ? "Você não pode mudar o próprio perfil." : undefined}
               options={TIPOS_USUARIO}
               value={form.tipoUsuario}
               onChange={(e) => setForm({ ...form, tipoUsuario: e.target.value })}
@@ -272,12 +280,18 @@ export default function UsuariosPage() {
             />
           </FieldGrid>
 
-          <CheckboxField
-            label="Usuário ativo"
-            className="pt-1"
-            checked={form.ativo}
-            onCheckedChange={(ativo) => setForm({ ...form, ativo })}
-          />
+          {editandoOProprio ? (
+            <p className="pt-1 text-xs text-muted-foreground">
+              Este é o seu cadastro: o perfil e a situação (ativo) não podem ser alterados por você.
+            </p>
+          ) : (
+            <CheckboxField
+              label="Usuário ativo"
+              className="pt-1"
+              checked={form.ativo}
+              onCheckedChange={(ativo) => setForm({ ...form, ativo })}
+            />
+          )}
 
           <FormActions>
             <Button type="button" variant="outline" onClick={() => setModalAberto(false)}>
