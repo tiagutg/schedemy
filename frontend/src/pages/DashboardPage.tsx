@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useAvisos } from "@/context/AvisosContext";
 import { Link } from "react-router-dom";
 import {
   IconArrowRight,
@@ -43,6 +44,8 @@ export default function DashboardPage() {
   const [dados, setDados] = useState<DadosPainel | null>(null);
   // Incrementada quando um convite é respondido, para atualizar os números.
   const [versao, setVersao] = useState(0);
+  // Muda quando chega aviso novo ou a pessoa volta para a aba: o painel se atualiza sozinho.
+  const { versaoDados } = useAvisos();
 
   // Quem não acompanha a agenda geral vê os números dos próprios agendamentos.
   const meuId = pode("agendamentos.verTodos") ? null : (eu?.id ?? null);
@@ -86,7 +89,7 @@ export default function DashboardPage() {
     return () => {
       cancelado = true;
     };
-  }, [meuId, versao, ehAluno, eu, pode]);
+  }, [meuId, versao, versaoDados, ehAluno, eu, pode]);
 
   const proximas = dados ? proximasReunioes(dados.reunioes, 5) : [];
 

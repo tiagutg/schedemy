@@ -4,6 +4,7 @@ import { IconCalendarWeek, IconEye, IconList, IconPlus } from "@tabler/icons-rea
 import { agendamentosApi } from "@/api/agendamentos";
 import type { ApiError } from "@/api/client";
 import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { useAoAtualizarDados } from "@/hooks/useAoAtualizarDados";
 import { useUsuariosOptions } from "@/hooks/useUsuariosOptions";
 import { useToast } from "@/context/ToastContext";
 import { useAuth } from "@/context/AuthContext";
@@ -79,7 +80,8 @@ export default function AgendamentosPage() {
     },
     [meuId]
   );
-  const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar } = usePaginatedList(buscar, {
+  const { pagina, linhas, carregando, filtros, aplicarFiltros, setPaginaAtual, recarregar, atualizarEmSilencio } =
+    usePaginatedList(buscar, {
     // Os cartões do painel abrem a lista já filtrada (?status=...).
     filtrosIniciais: {
       periodo: searchParams.get("status") ? "todas" : "proximas",
@@ -204,6 +206,20 @@ export default function AgendamentosPage() {
       })
       .catch((e) => toast.erro((e as ApiError).message));
   }, [idParaReagendar, searchParams, setSearchParams, toast, eu?.id, pode]);
+
+  // Mudanças feitas por outras pessoas (aceites, recusas, cancelamentos…) aparecem sem recarregar a página.
+  useAoAtualizarDados(() => {
+    atualizarEmSilencio();
+    setVersaoSemana((v) => v + 1);
+    const aberto = detalhe?.id;
+    if (aberto == null) return;
+    agendamentosApi
+      .buscarPorId(aberto)
+      .then((novo) => setDetalhe((atual) => (atual?.id === novo.id ? novo : atual)))
+      .catch(() => {
+        /* silencioso: segue mostrando o que já estava na tela */
+      });
+  });
 
   async function recarregarDetalhe() {
     if (!detalhe) return;

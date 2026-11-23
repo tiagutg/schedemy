@@ -424,21 +424,28 @@ class RepositoriosNoBancoTest {
     class DeBloqueio {
 
         @Test
-        @DisplayName("buscarQueImpactamData respeita a recorrencia; buscarComFiltros aceita nulos")
+        @DisplayName("buscarQueImpactamData respeita a recorrencia e o recorrente sem fim; buscarComFiltros aceita nulos")
         void bloqueios() {
             BloqueioPeriodo unico = em.persist(BloqueioPeriodo.builder().usuario(professor)
                     .dataInicio(DIA).dataFim(DIA).motivo("Congresso").build());
             BloqueioPeriodo recorrente = em.persist(BloqueioPeriodo.builder().usuario(professor)
                     .dataInicio(DIA.minusDays(10)).dataFim(DIA.plusDays(10))
                     .eRecorrente(true).diaSemanaRecorrente(3).build());
+            // RF 05 - recorrente sem data de fim (data_fim nula)
+            BloqueioPeriodo semFim = em.persist(BloqueioPeriodo.builder().usuario(professor)
+                    .dataInicio(DIA.minusDays(30)).eRecorrente(true).diaSemanaRecorrente(3).build());
             em.flush();
 
             assertThat(bloqueioPeriodoRepository.buscarQueImpactamData(professor.getId(), DIA, 3))
-                    .containsExactlyInAnyOrder(unico, recorrente);
+                    .containsExactlyInAnyOrder(unico, recorrente, semFim);
+            assertThat(bloqueioPeriodoRepository.buscarQueImpactamData(professor.getId(), DIA.plusYears(3), 3))
+                    .containsExactly(semFim);
             assertThat(bloqueioPeriodoRepository.buscarQueImpactamData(professor.getId(), DIA, 4))
                     .containsExactly(unico);
             assertThat(bloqueioPeriodoRepository.buscarComFiltros(null, null, null, PAGINA)).isNotEmpty();
-            assertThat(bloqueioPeriodoRepository.buscarComFiltros(professor.getId(), DIA, DIA, PAGINA)).hasSize(2);
+            assertThat(bloqueioPeriodoRepository.buscarComFiltros(professor.getId(), DIA, DIA, PAGINA)).hasSize(3);
+            assertThat(bloqueioPeriodoRepository.buscarComFiltros(professor.getId(), DIA.plusYears(3), null, PAGINA))
+                    .containsExactly(semFim);
         }
     }
 

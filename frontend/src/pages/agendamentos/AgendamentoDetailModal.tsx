@@ -19,6 +19,7 @@ import ConfirmDialog from "@/components/common/ConfirmDialog";
 import FormActions from "@/components/common/FormActions";
 import Pill from "@/components/common/Pill";
 import { TextAreaField } from "@/components/common/fields";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { agendamentosApi } from "@/api/agendamentos";
 import { registrosMotivoApi } from "@/api/registrosMotivo";
@@ -478,10 +479,20 @@ export default function AgendamentoDetailModal({ agendamento, onFechar, onAltera
               </Button>
             )}
             {podeRemarcar && onAlterar && (
-              <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
-                <IconCalendarRepeat />
-                Remarcar
-              </Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={() => onAlterar("remarcar", a)}>
+                    <IconCalendarRepeat />
+                    Remarcar
+                  </Button>
+                </TooltipTrigger>
+                {/* RN 14: explica por que não aparece "Editar". */}
+                <TooltipContent>
+                  {a.status === "PENDENTE"
+                    ? "Faltam menos de 24 h: não dá mais para editar, só remarcar."
+                    : "Reunião já confirmada: não dá para editar, só remarcar."}
+                </TooltipContent>
+              </Tooltip>
             )}
             {podeReplicar && onAlterar && (
               <Button variant="outline" onClick={() => onAlterar("replicar", a)}>

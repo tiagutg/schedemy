@@ -4,6 +4,7 @@ import {
   diaSemanaDe,
   encontrarConflito,
   horarioCabe,
+  horarioDeTermino,
   paraHora,
   paraMinutos,
   situacaoLimiteAluno,
@@ -49,6 +50,14 @@ function bloqueio(parcial: Partial<Bloqueio> = {}): Bloqueio {
 }
 
 describe("conversões de hora", () => {
+  it("calcula o horário de término", () => {
+    expect(horarioDeTermino("14:15", 30)).toBe("14:45");
+    expect(horarioDeTermino("23:30", 30)).toBe("00:00");
+    expect(horarioDeTermino("23:45", 30)).toBe("");
+    expect(horarioDeTermino("", 30)).toBe("");
+    expect(horarioDeTermino("10:00", 0)).toBe("");
+  });
+
   it("converte entre texto e minutos", () => {
     expect(paraMinutos("08:30")).toBe(510);
     expect(paraMinutos("08:30:00")).toBe(510);
@@ -143,6 +152,18 @@ describe("calcularAgendaDoDia", () => {
     expect(
       calcularAgendaDoDia({ ...base, duracaoMinutos: 60, disponibilidades, bloqueios: [recorrenteNaSegunda] }).horariosLivres
     ).toEqual([]);
+  });
+
+  it("bloqueio recorrente sem data de fim continua valendo", () => {
+    const disponibilidades = [disponibilidade("08:00", "09:00")];
+    const semFim = bloqueio({ dataInicio: "2026-01-05", dataFim: null, eRecorrente: true, diaSemanaRecorrente: 2 });
+    expect(
+      calcularAgendaDoDia({ ...base, duracaoMinutos: 60, disponibilidades, bloqueios: [semFim] }).horariosLivres
+    ).toEqual([]);
+    const futuro = { ...semFim, dataInicio: "2027-01-04" };
+    expect(
+      calcularAgendaDoDia({ ...base, duracaoMinutos: 60, disponibilidades, bloqueios: [futuro] }).horariosLivres
+    ).toEqual(["08:00"]);
   });
 
   it("no dia de hoje, só sugere horários a partir de agora", () => {

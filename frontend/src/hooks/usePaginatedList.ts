@@ -27,23 +27,33 @@ export function usePaginatedList<T>(
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
-  const recarregar = useCallback(async () => {
-    setCarregando(true);
-    setErro(null);
-    try {
-      const params: Params = { ...filtros, page: paginaAtual, size: tamanhoPagina };
-      if (ordenarPor) params.sort = ordenarPor;
-      const resultado = await buscar(params);
-      setPagina(resultado);
-    } catch (e) {
-      const mensagem = (e as ApiError).message;
-      setErro(mensagem);
-      toast.erro(mensagem);
-    } finally {
-      setCarregando(false);
-    }
+  const carregar = useCallback(
+    async (silencioso: boolean) => {
+      if (!silencioso) {
+        setCarregando(true);
+        setErro(null);
+      }
+      try {
+        const params: Params = { ...filtros, page: paginaAtual, size: tamanhoPagina };
+        if (ordenarPor) params.sort = ordenarPor;
+        const resultado = await buscar(params);
+        setPagina(resultado);
+      } catch (e) {
+        // Na atualização em segundo plano, uma falha não interrompe quem está usando a tela.
+        if (silencioso) return;
+        const mensagem = (e as ApiError).message;
+        setErro(mensagem);
+        toast.erro(mensagem);
+      } finally {
+        if (!silencioso) setCarregando(false);
+      }
+    },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [buscar, filtros, paginaAtual, tamanhoPagina, ordenarPor]);
+    [buscar, filtros, paginaAtual, tamanhoPagina, ordenarPor]
+  );
+  const recarregar = useCallback(() => carregar(false), [carregar]);
+  /** Atualiza os dados sem mostrar carregamento (ex.: chegou aviso novo). */
+  const atualizarEmSilencio = useCallback(() => carregar(true), [carregar]);
 
   useEffect(() => {
     recarregar();
@@ -64,5 +74,6 @@ export function usePaginatedList<T>(
     paginaAtual,
     setPaginaAtual,
     recarregar,
+    atualizarEmSilencio,
   };
 }

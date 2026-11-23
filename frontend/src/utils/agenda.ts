@@ -24,13 +24,21 @@ export function paraHora(minutos: number): string {
   return `${String(Math.floor(minutos / 60)).padStart(2, "0")}:${String(minutos % 60).padStart(2, "0")}`;
 }
 
+/** Fim da reunião: ("14:15", 30) → "14:45"; vazio se não der para calcular ou passar da meia-noite. */
+export function horarioDeTermino(horario: string, duracaoMinutos: number): string {
+  if (!/^\d{2}:\d{2}/.test(horario) || duracaoMinutos <= 0) return "";
+  const fim = paraMinutos(horario) + duracaoMinutos;
+  return fim > 24 * 60 ? "" : paraHora(fim % (24 * 60));
+}
+
 /** Dia da semana no padrão do banco: 1 = domingo … 7 = sábado. */
 export function diaSemanaDe(dataISO: string): number {
   return (paraDataLocal(dataISO)?.getDay() ?? 0) + 1;
 }
 
 function bloqueioAfeta(b: Bloqueio, dataISO: string): boolean {
-  if (dataISO < b.dataInicio || dataISO > b.dataFim) return false;
+  // RF 05: recorrente sem data de fim vale até ser removido.
+  if (dataISO < b.dataInicio || (b.dataFim && dataISO > b.dataFim)) return false;
   return !b.eRecorrente || b.diaSemanaRecorrente === diaSemanaDe(dataISO);
 }
 

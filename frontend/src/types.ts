@@ -118,7 +118,8 @@ export interface Bloqueio {
   idUsuario: number;
   nomeUsuario: string;
   dataInicio: string;
-  dataFim: string;
+  /** RF 05: vazio só no recorrente sem data de fim (vale até ser removido). */
+  dataFim: string | null;
   horarioInicio?: string | null;
   horarioFim?: string | null;
   eRecorrente: boolean;

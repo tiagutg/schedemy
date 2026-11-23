@@ -15,6 +15,7 @@ import { useAuth } from "@/context/AuthContext";
 import { FORMATOS_REUNIAO, CORES_TIPO_USUARIO, rotularEnum } from "@/utils/domain";
 import { formatarData, formatarHora, hojeISO } from "@/utils/format";
 import { proximoDiaUtilISO } from "@/utils/reuniao";
+import { horarioDeTermino } from "@/utils/agenda";
 import type { Agendamento, Duracao } from "@/types";
 import AgendaDocentes from "./AgendaDocentes";
 import AvisosAgendamento from "./AvisosAgendamento";
@@ -138,6 +139,8 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
       : base
       ? base.participantes.filter((p) => p.papel === "CONVIDADO").map((p) => String(p.idUsuario)) : []
   );
+  // Numa reunião nova, data e horário seguem o primeiro horário livre para todos até a pessoa escolher outro.
+  const [seguirSugestao, setSeguirSugestao] = useState(modo === "criar" || modo === "replicar");
   const [motivoRemarcacao, setMotivoRemarcacao] = useState("");
   const [buscaConvidado, setBuscaConvidado] = useState("");
   const [erro, setErro] = useState("");
@@ -208,6 +211,10 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
     ...usuarios.filter((u) => convidadosSelecionados.includes(String(u.id)) && !DOCENTES.includes(u.tipoUsuario)),
   ].map((u) => ({ id: u.id, nome: u.nome }));
   const textos = TITULOS[modo];
+  // A reunião que está sendo alterada não ocupa o próprio horário (na remarcação, a API a cancela
+  // na mesma transação em que cria a nova).
+  const ignorarAgendamentoId = modo === "editar" || modo === "solicitar" || modo === "remarcar" ? base?.id : null;
+  const termino = horarioDeTermino(form.horarioInicio, duracaoMinutos);
 
   async function salvar(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -291,7 +298,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
         ? `A reunião está confirmada: o pedido vai para o professor ou coordenador, que aceita ou recusa. Até a resposta, ela continua em ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)}.`
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
-        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
+        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada. Os convidados precisam responder de novo.`;
 
   return (
     <Modal aberto={aberto} onFechar={onFechar} titulo={textos.titulo} subtitulo={subtitulo} largura="max-w-2xl">
@@ -387,7 +394,10 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
               min={hojeISO()}
               max={dataMaxima()}
               value={form.dataReuniao}
-              onChange={(e) => setForm({ ...form, dataReuniao: e.target.value })}
+              onChange={(e) => {
+                setSeguirSugestao(false);
+                setForm({ ...form, dataReuniao: e.target.value });
+              }}
               required
             />
           </div>
@@ -398,9 +408,13 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
               type="time"
               step={300}
               value={form.horarioInicio}
-              onChange={(e) => setForm({ ...form, horarioInicio: e.target.value })}
+              onChange={(e) => {
+                setSeguirSugestao(false);
+                setForm({ ...form, horarioInicio: e.target.value });
+              }}
               required
             />
+            {termino && <p className="text-xs text-muted-foreground">Termina às {termino}</p>}
           </div>
           <SelectField
             label="Formato"
@@ -419,9 +433,20 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
             dataISO={form.dataReuniao}
             duracaoMinutos={duracaoMinutos}
             horario={form.horarioInicio}
-            ignorarAgendamentoId={modo === "editar" || modo === "solicitar" ? base?.id : null}
-            onEscolherHorario={(horarioInicio) => setForm((atual) => ({ ...atual, horarioInicio }))}
-            onEscolherData={(dataReuniao, horarioInicio) => setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }))}
+            ignorarAgendamentoId={ignorarAgendamentoId}
+            onEscolherHorario={(horarioInicio) => {
+              setSeguirSugestao(false);
+              setForm((atual) => ({ ...atual, horarioInicio }));
+            }}
+            onEscolherData={(dataReuniao, horarioInicio) => {
+              setSeguirSugestao(false);
+              setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }));
+            }}
+            onPrimeiroDiaLivre={
+              seguirSugestao
+                ? (dataReuniao, horarioInicio) => setForm((atual) => ({ ...atual, dataReuniao, horarioInicio }))
+                : undefined
+            }
             idOrganizador={organizadorUsuario?.id ?? null}
             onRemoverConvidado={(id) => setConvidadosSelecionados((atual) => atual.filter((c) => c !== String(id)))}
           />
@@ -443,7 +468,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
           dataISO={form.dataReuniao}
           horario={form.horarioInicio}
           duracaoMinutos={duracaoMinutos}
-          ignorarAgendamentoId={modo === "editar" || modo === "solicitar" ? base?.id : null}
+          ignorarAgendamentoId={ignorarAgendamentoId}
           verificarLimite={modo !== "editar" && modo !== "solicitar"}
         />
 

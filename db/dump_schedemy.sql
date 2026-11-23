@@ -157,7 +157,7 @@ CREATE TABLE `bloqueio_periodo` (
   `id_bloqueio` bigint(20) unsigned NOT NULL AUTO_INCREMENT,
   `id_usuario` bigint(20) unsigned NOT NULL,
   `data_inicio` date NOT NULL,
-  `data_fim` date NOT NULL,
+  `data_fim` date DEFAULT NULL COMMENT 'Vazio = recorrente sem data de fim (RF 05)',
   `horario_inicio` time DEFAULT NULL,
   `horario_fim` time DEFAULT NULL,
   `e_recorrente` tinyint(1) NOT NULL DEFAULT 0,
@@ -169,7 +169,8 @@ CREATE TABLE `bloqueio_periodo` (
   KEY `idx_bloqueio_consulta` (`id_usuario`,`data_inicio`,`data_fim`),
   CONSTRAINT `fk_bloqueio_usuario` FOREIGN KEY (`id_usuario`) REFERENCES `usuario` (`id_usuario`) ON DELETE CASCADE ON UPDATE CASCADE,
   CONSTRAINT `chk_bloqueio_datas` CHECK (`data_fim` >= `data_inicio`),
-  CONSTRAINT `chk_bloqueio_recorrencia` CHECK (`e_recorrente` = 0 and `dia_semana_recorrente` is null or `e_recorrente` = 1 and `dia_semana_recorrente` between 1 and 7)
+  CONSTRAINT `chk_bloqueio_recorrencia` CHECK (`e_recorrente` = 0 and `dia_semana_recorrente` is null or `e_recorrente` = 1 and `dia_semana_recorrente` between 1 and 7),
+  CONSTRAINT `chk_bloqueio_fim` CHECK (`data_fim` is not null or `e_recorrente` = 1)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Períodos de indisponibilidade e impedimentos na agenda do docente';
 /*!40101 SET character_set_client = @saved_cs_client */;
 
