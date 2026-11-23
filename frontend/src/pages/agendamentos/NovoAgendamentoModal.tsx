@@ -298,7 +298,7 @@ export default function NovoAgendamentoModal({ aberto, onFechar, onSalvo, modo =
         ? `A reunião está confirmada: o pedido vai para o professor ou coordenador, que aceita ou recusa. Até a resposta, ela continua em ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)}.`
       : modo === "editar"
         ? "Só agendamentos pendentes podem ser editados, com pelo menos 24 horas de antecedência. Os convidados terão que responder de novo."
-        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada.`;
+        : `A reunião de ${formatarData(base?.dataReuniao)} às ${formatarHora(base?.horarioInicio)} será cancelada e uma nova será criada. Os convidados precisam responder de novo.`;
 
   return (
     <Modal aberto={aberto} onFechar={onFechar} titulo={textos.titulo} subtitulo={subtitulo} largura="max-w-2xl">
